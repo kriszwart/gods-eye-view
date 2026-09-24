@@ -1,5 +1,66 @@
 # Changelog
 
+- Phenomena phase 2a: the product renames itself everywhere it names
+  itself (page title, loader, title bar and its new subtitle "The
+  unexplained, mapped", console error text). The Spectral, Radar and
+  Infrared atlas styles are registered in `STYLES` with command-dock tray
+  buttons and share-link codes (`spectral`, `radar`, `ir`); Infrared now
+  reaches the layer too, an app-level observer on the document's style
+  attribute forwards it to the layer's `setInfrared` so infrared-only craft
+  appear, surviving layer init, enable and the DOM-less unit test
+  environment. A "Phenomena mode" toggle on the chronometer solos the
+  atlas: every other data layer is hidden, keeping only anomalies and
+  ancient sites, and exiting restores exactly the set it hid, including
+  across a shell reconnect while the mode is active. Command-shell panels
+  (control panel, layer panel, context panel, display tray) take the
+  dossier's hairline-plate, registration-corner language in place of GEV's
+  rounded glass cards, standing aside wherever the Cyber HUD theme paints
+  its own frame (the default deployment here runs Cyber HUD, so the stock
+  and stock-vs-atlas screenshots below show its console chrome, not the
+  plates).
+
+  Live-globe tuning pass (screenshots in `qa-shots/phase2a/`): the guided
+  tour (4.5 s flight, 60 km range, -26 degree pitch, 8 s dwell, already
+  tuned in an earlier task against user feedback) frames each hero craft
+  cleanly at its dwell, tested against the Los Angeles 1942 case with the
+  dossier open alongside it; no tour constant needed changing. Arrival
+  pulses stepped across the busy 1947 to 1967 range stay small and legible
+  against the globe, nowhere near the 400-per-year cap. The atlas
+  atmosphere (deeper, cooler sky, void background, lit night side) reads
+  as a clearly different globe from stock GEV at the same zoomed-out
+  framing, and the ground stays legible under it on a close ~5 km pass
+  over Los Angeles; this sandbox carries no Google key, so the close pass
+  used the keyless Esri imagery GEV already boots with rather than Google
+  3D tiles. Every check read fine, so no tour, pulse or atmosphere
+  constant changed. A qa camera-race fix from earlier in this phase is
+  folded into the live-check methodology here too: the boot flight can
+  still be resuming under the render hold when a script first moves the
+  camera, so every camera move in the check scripts calls
+  `camera.cancelFlight()` first, the same fix `scripts/qa-anomalies.mjs`
+  already carries.
+
+  Found during the live-globe pass but out of this task's scope to fix:
+  disabling the anomalies layer and re-enabling it in the same session
+  always fails after the first successful load. The manager's enable
+  transaction calls the module's `update()` as an immediate first step and
+  rejects the whole transaction if it returns `false`
+  (`src/data/lifecycle.js`), but the layer's `update()` short-circuits to
+  `return false` once its `loaded` flag is set, which is permanent for the
+  life of the module instance. The manager then forces the layer back off
+  with an "anomalies could not start cleanly" toast. Reproduced with a
+  throwaway script; every check in this entry used a single enable per
+  browser context to avoid it. Needs a follow-up task to make `update()`
+  re-affirm success on a repeat call instead of relying on the `loaded`
+  guard, the way `src/layers/earthquakes/index.js` does.
+
+  Gates: `npm run format:check`, `npm test` (5,035 of 5,036 passing, 1
+  skipped, 0 failed), `npm run check:boundaries`, `npm run build`, `npm run
+  test:track` against the dev server (109 of 109), `node
+  scripts/qa-anomalies.mjs` (0 failures) and `node scripts/qa-perf.mjs`
+  (24 of 24). Screenshots at 1440 and 390 px against stock GEV (layer off,
+  style normal) are in `qa-shots/phase2a/`; the app remains dark-only, so
+  no light-theme comparison exists yet.
+
 - Anomaly atlas phase 1: the anomalies layer is live with the 24-case
   illustrative sample. The layer registers in the catalogue with share
   token 3 (30 layers, registry at 29), owns its picks through the pick

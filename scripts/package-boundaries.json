@@ -889,6 +889,17 @@
     ],
     "external": ["cesium"]
   },
+  "ancient-sites": {
+    "exports": ["./layers/ancient-sites"],
+    "modules": [
+      "src/layers/ancientSites/index.js",
+      "src/layers/ancientSites/model.js",
+      "src/layers/ancientSites/records.js",
+      "src/layers/ancientSites/source.js",
+      "src/layers/ancientSites/rendering.js"
+    ],
+    "external": ["cesium"]
+  },
   "recent-imagery": {
     "exports": ["./layers/recent-imagery"],
     "modules": [
@@ -1321,6 +1332,12 @@
       "src/layers/anomalies/rendering.js",
       "src/layers/anomalies/atmosphere.js",
       "src/layers/anomalies/chronometer.js",
+      "src/app/layers/ancientSites.js",
+      "src/layers/ancientSites/index.js",
+      "src/layers/ancientSites/model.js",
+      "src/layers/ancientSites/records.js",
+      "src/layers/ancientSites/source.js",
+      "src/layers/ancientSites/rendering.js",
       "src/app/layers/firms.js",
       "src/app/layers/flights.js",
       "src/app/layers/militaryAwareness.js",
@@ -2041,6 +2058,12 @@
       "src/layers/anomalies/rendering.js",
       "src/layers/anomalies/atmosphere.js",
       "src/layers/anomalies/chronometer.js",
+      "src/app/layers/ancientSites.js",
+      "src/layers/ancientSites/index.js",
+      "src/layers/ancientSites/model.js",
+      "src/layers/ancientSites/records.js",
+      "src/layers/ancientSites/source.js",
+      "src/layers/ancientSites/rendering.js",
       "src/app/layers/firms.js",
       "src/app/layers/flights.js",
       "src/app/layers/militaryAwareness.js",
@@ -2719,6 +2742,14 @@
     "modules": [
       "src/layers/anomalies/records.js",
       "src/layers/anomalies/source.js"
+    ],
+    "external": []
+  },
+  "ancient-sites-source": {
+    "exports": ["./layers/ancient-sites/source"],
+    "modules": [
+      "src/layers/ancientSites/records.js",
+      "src/layers/ancientSites/source.js"
     ],
     "external": []
   },

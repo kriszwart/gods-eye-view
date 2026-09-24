@@ -1,9 +1,10 @@
-# Anomaly atlas (fork of God's Eye View)
+# Phenomena (fork of God's Eye View)
 
-We are turning God's Eye View into a futurist atlas of UAP and UFO reports: every public case on the globe, a radial time dial around the Earth, animated craft for hero cases, and case dossiers with honest sourcing.
+We are turning God's Eye View into Phenomena, a futurist atlas of the unexplained with three registers: sky events (every public UAP and UFO case on the globe, a radial time dial around the Earth, animated craft for hero cases, case dossiers with honest sourcing), ancient sites (documented enigmatic places, megaliths and worldwide ancient anomalies) and a spotter (a live sky-check instrument over the layers GEV already tracks).
 
 Read before planning:
 @anomaly-atlas-kit/docs/BUILD_PLAN.md
+@anomaly-atlas-kit/docs/PHENOMENA_DESIGN.md
 @anomaly-atlas-kit/docs/INTEGRATION_NOTES.md
 @anomaly-atlas-kit/docs/DESIGN_SYSTEM.md
 @anomaly-atlas-kit/docs/DATA_PIPELINE.md

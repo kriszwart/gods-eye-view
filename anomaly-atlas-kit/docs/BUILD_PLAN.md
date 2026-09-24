@@ -25,14 +25,28 @@ Acceptance:
 - A share link with token 3 restores the layer.
 - All gates green; screenshots at 1440 and 390 px.
 
-## Phase 2: futurist shell
+## Phase 2a: Phenomena shell (see PHENOMENA_DESIGN.md)
+- Rebrand product-facing strings to Phenomena: title, header wordmark, boot loader, welcome copy. Tagline "The unexplained, mapped". Internal ids do not move.
 - Tune the overlay's globe upgrades on the live globe: atlas atmosphere and night side, arrival pulses, the hero-case tour and the legend. Screenshot each against stock GEV.
 - Register Spectral, Radar and Infrared in STYLES with presets. Spectral is the atlas default. Infrared calls `layer.setInfrared(true)` so infrared-only craft appear.
-- Apply DESIGN_SYSTEM.md across panels: hairline plates with registration corners instead of rounded glass, one accent, sentence case.
-- A "UAP mode" preset that hides unrelated layers by default without removing them.
+- Apply DESIGN_SYSTEM.md across panels: hairline plates with registration corners instead of rounded glass, one accent per register, sentence case. Add the gold deep-time token.
+- A "Phenomena mode" preset that hides unrelated layers by default without removing them.
 - A legend explaining brightness, hue, the ion ring on hero cases and amber for contested claims.
 
-Acceptance: side-by-side screenshots against stock GEV read as a different product; text contrast meets WCAG AA; reduced motion respected; focus always visible.
+Acceptance: the name appears in title, header and loader; side-by-side screenshots against stock GEV read as a different product; text contrast meets WCAG AA; reduced motion respected; focus always visible.
+
+## Phase 2b: ancient sites sample (see PHENOMENA_DESIGN.md)
+- New `ancient-sites` layer, share token 4, standard contract, portable modules, curated sample of about 20 documented sites in `public/ancient-sites/`.
+- Gold register: static grounded markers and stone glyphs, no craft, no pulses, unaffected by the year dial. Dossier carries the debated line and a source link.
+- Boundary declarations, registry test bumps, pick registry ownership (`ancient:` ids), overlay host labels.
+
+Acceptance: sites toggle on and off; the year dial does not affect them; dossiers show debate and source; a token 4 share link restores the layer; gates green; the qa gate covers it.
+
+## Phase 2c: spotter MVP (see PHENOMENA_DESIGN.md)
+- Portable core `src/spotter/` (bearing, distance, ranking; unit tested) and app wiring `src/app/spotter.js` with the Spotter panel.
+- Now-mode only: candidates from flights, military, satellites and Starlink, launches and lightning. Read-only over layer data. Honest fallback when nothing matches.
+
+Acceptance: with fixture feeds a known aircraft ranks first with correct bearing and distance; an empty sky yields the honest fallback; gates green; qa-spotter passes.
 
 ## Phase 3: real data, structured sources
 - GEIPAN: download the CSVs, run `node src/adapters/geipan.mjs --inspect`, correct `config/geipan-columns.json`, download GeoNames cities1000 (CC BY 4.0) into `pipeline/local_data/geonames/`, run the adapter, add the GEIPAN case URL pattern.
@@ -51,6 +65,10 @@ Acceptance: at least 95% field accuracy on a random 100 Blue Book cards; review 
 ## Phase 5: coverage
 - UK MoD files: split PDFs into page ranges, extract, link duplicates across sources.
 - Further national archives only where reuse terms are clear. NUFORC only with a written licence.
+
+## Phase 5b: ancient sites sweep (see PHENOMENA_DESIGN.md)
+- Full ancient-sites dataset from Wikidata (CC0) and UNESCO through the pipeline, replacing the curated sample.
+- Deep-time dial mode for the chronometer.
 
 ## Phase 6: performance and release
 - If frame time suffers, move points to a GPU point cloud (glTF POINTS with year attributes and a CustomShader) and pick with a CPU spatial index.

@@ -20,6 +20,7 @@ God's Eye View reads as a military console ("Apple meets Blade Runner": cyan acc
 | Violet | #7B5CFF | #5B3FE0 |
 | Ion | #3FE0FF | #0A93B8 |
 | Amber (contested) | #FFB547 | #B7700A |
+| Gold (deep time, ancient sites) | #D8B36A | #8A6A2F |
 
 Type: Martian Mono (variable width: extended for titles and years, condensed for data) and IBM Plex Sans for dossier text. Sentence case throughout.
 

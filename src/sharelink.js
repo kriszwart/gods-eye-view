@@ -29,6 +29,9 @@ const STYLE_TO_URL = {
   anime: 'anime',
   noir: 'noir',
   snow: 'snow',
+  spectral: 'spectral',
+  radar: 'radar',
+  infrared: 'ir',
 };
 
 const SHARE_UI_STATE_PARAM = 'ui';

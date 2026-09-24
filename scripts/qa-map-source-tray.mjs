@@ -519,9 +519,10 @@ try {
   await page.keyboard.press('Enter');
   await waitTray('true', keyboardSource);
 
-  // Visual Styles precede the five Map Source tiles. Keep the existing opening
-  // handoff to selected OSM, then use the user's real Shift+Tab path into styles.
-  await pressTabs(5, true);
+  // Visual Styles precede the five Map Source tiles, with Spectral, Radar and
+  // Infrared trailing Snow. Keep the existing opening handoff to selected OSM,
+  // then use the user's real Shift+Tab path into styles.
+  await pressTabs(8, true);
   const snowFocus = await styleFocusMetrics();
   check('Shift+Tab reaches Snow with a visible ring while Normal and OSM stay selected',
     hasVisibleStyleFocus(snowFocus, 'snow') && !snowFocus.selected

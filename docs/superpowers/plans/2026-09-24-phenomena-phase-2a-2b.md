@@ -20,6 +20,125 @@
 
 ---
 
+### Task 0: UAP visibility, status filter and tour pacing
+
+User-directed tune of the live phase 1 layer: points bigger and brighter, a status filter so the interesting reports stand out, and a slower, closer tour.
+
+**Files:**
+- Modify: `src/layers/anomalies/model.js:59-68` (pointSize, pointAlpha)
+- Modify: `src/layers/anomalies/rendering.js` (status on primitive ids; per-status show in apply)
+- Modify: `src/layers/anomalies/index.js` (status filter toggles, filtered counts and pulses, tour pacing)
+- Modify: `scripts/qa-anomalies.mjs` (filter check)
+
+**Interfaces:**
+- Consumes: existing `pointColor/pointSize/pointAlpha` from model.js; `renderer.apply(next)` state object in rendering.js; `chrono.addAction(label, fn)` and `refreshTime()` in index.js. Statuses in the data are exactly: `explained`, `insufficient`, `unresolved`, `contested`.
+- Produces: `renderer.apply({ statuses })` accepting a `Set` of status strings or `null` (all); four toggle buttons in the chronometer panel.
+
+- [ ] **Step 1: bigger, brighter points** in model.js:
+
+```js
+/** Pixel size: the current year reads loud, the past recedes. */
+export function pointSize(row, { current = true } = {}) {
+  const u = row.unexplained ?? 0.5;
+  return current ? 7 + 6 * u + (row.hero ? 3 : 0) : 3.5 + 3 * u;
+}
+
+export function pointAlpha(row, { current = true } = {}) {
+  const u = row.unexplained ?? 0.5;
+  return current ? 0.95 : 0.3 + 0.4 * u;
+}
+```
+
+- [ ] **Step 2: status carried on primitive ids and filtered in apply** (rendering.js). Point creation gains status: `id: { id: `anomaly:${r.id}`, anomalyId: r.id, status: r.status }` (both the points site and the hero model site). `state` gains `statuses: null`. In `apply()`, after the collection show loops, filter per point and per hero:
+
+```js
+    const passes = (status) => !state.statuses || state.statuses.has(status);
+    for (const map of [bright, faded])
+      for (const [, c] of map)
+        for (let i = 0; i < c.length; i++) {
+          const p = c.get(i);
+          p.show = passes(p.id.status);
+        }
+```
+
+and extend the hero show expression with `&& passes(h.row.status)`.
+
+- [ ] **Step 3: filter toggles and filtered counts** (index.js). Track `let activeStatuses = null;` beside the other state. After the tour button is created in `init()`, add four toggles:
+
+```js
+      const STATUS_FILTERS = [
+        ['explained', 'Explained'],
+        ['insufficient', 'Too little data'],
+        ['unresolved', 'Unresolved'],
+        ['contested', 'Contested'],
+      ];
+      const enabledStatuses = new Set(STATUS_FILTERS.map(([k]) => k));
+      for (const [key, label] of STATUS_FILTERS) {
+        const btn = chrono.addAction(label, () => {
+          enabledStatuses.has(key)
+            ? enabledStatuses.delete(key)
+            : enabledStatuses.add(key);
+          btn.setAttribute('aria-pressed', String(enabledStatuses.has(key)));
+          activeStatuses =
+            enabledStatuses.size === STATUS_FILTERS.length
+              ? null
+              : new Set(enabledStatuses);
+          refreshTime();
+        });
+        btn.setAttribute('aria-pressed', 'true');
+      }
+```
+
+In `refreshTime()`: pass the filter through and filter the pulses,
+
+```js
+    renderer.apply({ visible: enabled, year: chrono.year, mode: chrono.mode, statuses: activeStatuses });
+    if (chrono.mode !== 'all' && lastYear != null && chrono.year !== lastYear)
+      renderer.pulse(
+        rows.filter(
+          (r) => r.year === chrono.year && (!activeStatuses || activeStatuses.has(r.status)),
+        ),
+      );
+```
+
+and `visibleCount` gains the same status condition.
+
+- [ ] **Step 4: tour pacing** (index.js playTour): flight `duration: 4.5`, range `60000` (was 120000), pitch `Cesium.Math.toRadians(-26)`, dwell `await wait(8000)` (was 4500). Everything else unchanged.
+
+- [ ] **Step 5: qa check** in scripts/qa-anomalies.mjs, after the play check: read the readout, toggle "Unresolved" off, assert the readout count drops, toggle it back on:
+
+```js
+  const filter = await page.evaluate(async () => {
+    const readout = () => document.querySelector('.uap-readout').textContent;
+    const before = readout();
+    const btn = [...document.querySelectorAll('.uap-chrono-panel button')].find(
+      (b) => b.textContent === 'Unresolved',
+    );
+    btn.click();
+    await new Promise((r) => setTimeout(r, 300));
+    const filtered = readout();
+    btn.click();
+    await new Promise((r) => setTimeout(r, 300));
+    return { before, filtered, restored: readout() };
+  });
+  check(
+    'status filter changes the visible count',
+    filter.before !== filter.filtered && filter.before === filter.restored,
+    JSON.stringify(filter),
+  );
+```
+
+- [ ] **Step 6: gates** — `npm run format:check`, `npm test`, `npm run check:boundaries` green; dev server up, `node scripts/qa-anomalies.mjs` 0 failures including the new check; eyeball the tour once (slower, closer) and the bigger points.
+
+- [ ] **Step 7: commit**
+
+```bash
+git add src/layers/anomalies/model.js src/layers/anomalies/rendering.js src/layers/anomalies/index.js scripts/qa-anomalies.mjs
+git commit -m "feat(anomalies): status filter, larger points and a calmer tour"
+```
+
+---
+
 ### Task 1: rebrand strings to Phenomena
 
 **Files:**

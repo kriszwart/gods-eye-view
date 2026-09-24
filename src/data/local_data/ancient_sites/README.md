@@ -36,10 +36,12 @@ and Ggantija) come from `anomaly-atlas-kit/pipeline/local_data/normalised/tma-si
 itself built by `src/adapters/tma-kml.mjs` from a TMA KML export held only
 in `local_data/raw` (git-ignored, never shipped). TMA grants no bulk
 redistribution licence for its site database. Per the adapter's own
-comment: only per-site reference links, i.e. the individual TMA page a
-record's `source_url` may point to, are allowed to leave `local_data`;
-nothing else about a site (descriptions, visitor notes, imagery) may be
-derived from TMA. Where a site marked "Coordinates: The Modern
+comment: only two things are allowed to leave `local_data`: coordinates
+for these six individually curated sites, with attribution, and each
+site's own per-site reference link, i.e. the individual TMA page a
+record's `source_url` may point to. Nothing else about a site
+(descriptions, visitor notes, imagery) may be derived from TMA. Where a
+site marked "Coordinates: The Modern
 Antiquarian" also carries a UNESCO listing, `source_url` and `unesco`
 point at the UNESCO page rather than TMA, because it is the stronger
 primary source; the TMA attribution stays because the coordinates

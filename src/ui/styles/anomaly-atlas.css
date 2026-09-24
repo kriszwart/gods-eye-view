@@ -349,12 +349,6 @@
 }
 
 /* Gold register: the ancient sites dossier variant. */
-.anomaly-atlas .uap-dossier.ancient {
-  --uap-accent: #d8b36a;
-}
-.anomaly-atlas .uap-dossier.ancient .uap-code {
-  color: #d8b36a;
-}
 .anomaly-atlas .uap-dossier.ancient .uap-debated {
   border-left: 2px solid rgba(216, 179, 106, 0.6);
   padding-left: 8px;

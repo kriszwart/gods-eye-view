@@ -318,7 +318,6 @@ export function createAnomaliesLayer({
       clickHandler?.destroy();
       clickHandler = null;
       renderer?.apply({ visible: false });
-      overlayHost?.clearSource?.(ANOMALY_LAYER_ID);
       overlayHost?.setVisible?.(ANOMALY_LAYER_ID, false);
     },
 
@@ -369,6 +368,7 @@ export function createAnomaliesLayer({
 
     destroy() {
       layer.disable();
+      overlayHost?.clearSource?.(ANOMALY_LAYER_ID);
       renderer?.destroy();
       chrono?.destroy();
       dossier?.remove();

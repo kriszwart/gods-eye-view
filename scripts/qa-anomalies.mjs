@@ -2,8 +2,9 @@
 /**
  * Browser proof of the anomalies layer acceptance: registration, sample data,
  * chronometer ring and band layouts, keyboard year control, dossier open and
- * close, and share-link restore via token 3. Needs the dev server on :4173
- * (QA_BASE_URL overrides).
+ * close, an off/on re-enable with hero overlay labels surviving, and
+ * share-link restore via token 3. Needs the dev server on :4173 (QA_BASE_URL
+ * overrides).
  */
 import puppeteer from 'puppeteer';
 const base = process.env.QA_BASE_URL || 'http://localhost:4173';
@@ -157,14 +158,23 @@ try {
     const m = window.__godsEyeView.dataManager;
     await m.setEnabled('anomalies', false, { origin: 'user' });
     await m.setEnabled('anomalies', true, { origin: 'user' });
+    const { getWorldOverlayDiagnostics } =
+      await import('/src/overlays/worldOverlay.js');
     return {
       enabled: m.isEnabled('anomalies'),
       count: m.layers.get('anomalies')?.module?.getStats?.().count,
+      overlayEntries:
+        getWorldOverlayDiagnostics().entriesBySource?.anomalies || 0,
     };
   });
   check(
     'layer re-enables cleanly after first load',
     reenable.enabled === true && reenable.count === 24,
+    JSON.stringify(reenable),
+  );
+  check(
+    'hero overlay labels survive an off/on toggle',
+    reenable.overlayEntries === 24,
     JSON.stringify(reenable),
   );
 
@@ -209,9 +219,6 @@ try {
   check('Escape closes the dossier', dossier.closed === true);
 
   const ir = await page.evaluate(async () => {
-    const { application } = await import(
-      document.querySelector('script[type="module"][src*="/src/main.js"]').src
-    );
     window.__godsEyeView.styleManager.setStyle('infrared');
     await new Promise((r) => setTimeout(r, 600));
     const on = document.documentElement.dataset.gevStyle === 'infrared';

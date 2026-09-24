@@ -2,7 +2,9 @@
 //   node src/adapters/tma-kml.mjs path/to/modern-antiquarian-sites.kml
 // TMA grants no bulk redistribution licence: the raw KML and this adapter's
 // output stay in local_data, feeding curation and cross-checking only. Only
-// per-site reference links (the source url) may ever leave local_data.
+// two things may ever leave local_data: coordinates for the individually
+// curated sites this feeds, with attribution, and each site's own per-site
+// reference link (the source url).
 
 import { readFile } from 'node:fs/promises';
 import { writeJsonl } from '../lib/records.mjs';

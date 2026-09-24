@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
  * Browser proof of the ancient sites layer acceptance: registration, the
- * curated 20-site register, decoupling from the anomalies year dial,
- * dossier open with a debated line and record link, Escape close, and
- * share-link restore via token 4, solo and alongside anomalies. Needs the
- * dev server on :4173 (QA_BASE_URL overrides).
+ * curated 20-site register, an off/on re-enable with overlay labels
+ * surviving, decoupling from the anomalies year dial, dossier open with a
+ * debated line and record link, Escape close, and share-link restore via
+ * token 4, solo and alongside anomalies. Needs the dev server on :4173
+ * (QA_BASE_URL overrides).
  */
 import puppeteer from 'puppeteer';
 const base = process.env.QA_BASE_URL || 'http://localhost:4173';
@@ -61,6 +62,30 @@ try {
     { timeout: 30000 },
   );
   check('20 curated sites loaded after toggle on', true);
+
+  const reenable = await page.evaluate(async () => {
+    const m = window.__godsEyeView.dataManager;
+    await m.setEnabled('ancient-sites', false, { origin: 'user' });
+    await m.setEnabled('ancient-sites', true, { origin: 'user' });
+    const { getWorldOverlayDiagnostics } =
+      await import('/src/overlays/worldOverlay.js');
+    return {
+      enabled: m.isEnabled('ancient-sites'),
+      count: m.layers.get('ancient-sites')?.module?.getStats?.().count,
+      overlayEntries:
+        getWorldOverlayDiagnostics().entriesBySource?.['ancient-sites'] || 0,
+    };
+  });
+  check(
+    'layer re-enables cleanly after first load',
+    reenable.enabled === true && reenable.count === 20,
+    JSON.stringify(reenable),
+  );
+  check(
+    'site overlay labels survive an off/on toggle',
+    reenable.overlayEntries === 20,
+    JSON.stringify(reenable),
+  );
 
   // Year-dial decoupling: bring the anomalies chronometer up alongside the
   // static register, step its year, and prove the ancient count never moves

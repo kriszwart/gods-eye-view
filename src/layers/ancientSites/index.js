@@ -118,7 +118,6 @@ export function createAncientSitesLayer({
       clickHandler?.destroy();
       clickHandler = null;
       renderer?.apply({ visible: false });
-      overlayHost?.clearSource?.(ANCIENT_LAYER_ID);
       overlayHost?.setVisible?.(ANCIENT_LAYER_ID, false);
     },
 
@@ -164,6 +163,7 @@ export function createAncientSitesLayer({
 
     destroy() {
       layer.disable();
+      overlayHost?.clearSource?.(ANCIENT_LAYER_ID);
       renderer?.destroy();
       dossier?.remove();
       renderer = null;

@@ -853,5 +853,9 @@
   "src/ui/styles/anomaly-atlas.css",
   "scripts/qa-anomalies.mjs",
   "src/app/phenomenaMode.js",
-  "src/app/phenomenaMode.test.mjs"
+  "src/app/phenomenaMode.test.mjs",
+  "src/layers/ancientSites/model.js",
+  "src/layers/ancientSites/records.js",
+  "src/layers/ancientSites/source.js",
+  "src/layers/ancientSites/records.test.mjs"
 ]

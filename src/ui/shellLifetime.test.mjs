@@ -153,3 +153,55 @@ test('weather shell supplies live imagery hosts to wind and observations and rel
   owner.disconnect();
   for (const id of ids) assert.equal(attached.get(id), null);
 });
+
+function anomaliesManager(tag, layerIds) {
+  const enabledSet = new Set(layerIds);
+  const setCalls = [];
+  let services;
+  const manager = {
+    layers: new Map(layerIds.map(id => [id, { module: id === 'anomalies' ? {
+      attachShellServices(value) { services = value; },
+    } : {} }])),
+    isEnabled: id => enabledSet.has(id),
+    setEnabled: (id, on) => {
+      setCalls.push([tag, id, on]);
+      on ? enabledSet.add(id) : enabledSet.delete(id);
+    },
+    subscribe: () => () => {},
+  };
+  return { manager, setCalls, toggle: () => services.togglePhenomenaMode() };
+}
+
+test('a manager reconnect while Phenomena mode is active restores the layers it hid', (t) => {
+  const { owner } = bindings(t);
+  const old = anomaliesManager('old', ['anomalies', 'flights', 'weather-radar']);
+  owner.attachDataManager(old.manager);
+  old.toggle();
+  assert.deepEqual(old.setCalls, [
+    ['old', 'flights', false],
+    ['old', 'weather-radar', false],
+  ]);
+
+  const next = anomaliesManager('new', ['anomalies']);
+  owner.attachDataManager(next.manager);
+
+  // The reconnect must restore what the OLD mode had hidden, on the OLD
+  // manager, before its snapshot is ever discarded.
+  assert.deepEqual(old.setCalls.slice(-2), [
+    ['old', 'flights', true],
+    ['old', 'weather-radar', true],
+  ]);
+});
+
+test('disconnecting while Phenomena mode is active restores the layers it hid', (t) => {
+  const { owner } = bindings(t);
+  const stub = anomaliesManager('shell', ['anomalies', 'flights']);
+  owner.attachDataManager(stub.manager);
+  stub.toggle();
+  assert.deepEqual(stub.setCalls, [['shell', 'flights', false]]);
+
+  owner.stop();
+  owner.disconnect();
+
+  assert.deepEqual(stub.setCalls.at(-1), ['shell', 'flights', true]);
+});

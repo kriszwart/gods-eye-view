@@ -36,6 +36,7 @@ export class LayerBindings {
     this._directionsShellModule = null;
     this._weatherShellModules = [];
     this._anomaliesShellModule = null;
+    this._anomaliesMode = null;
     this._cctvRequestFocusHandler = null;
     this._removeCctvRequestFocusListener = null;
     this._worldRequestFocusHandler = null;
@@ -145,8 +146,15 @@ export class LayerBindings {
    * Give the anomalies layer a Phenomena mode toggle. The mode itself is
    * built here, against the data manager; the layer only wires a button to
    * the callback so it never reaches across a package boundary for it.
+   *
+   * A live mode is exited before it is ever discarded (teardown, a changed
+   * anomalies module, or a fresh mode for a reconnected manager), so a
+   * manager swap while Phenomena mode is active restores the layers it had
+   * hidden instead of stranding them off.
    */
   _connectAnomaliesShell() {
+    this._anomaliesMode?.exit?.();
+    this._anomaliesMode = null;
     if (!this._dataManager) {
       this._anomaliesShellModule?.attachShellServices?.(null);
       this._anomaliesShellModule = null;
@@ -166,6 +174,7 @@ export class LayerBindings {
       setEnabled: (id, on) => manager.setEnabled(id, on, { origin: 'user' }),
       keep: ['anomalies', 'ancient-sites'],
     });
+    this._anomaliesMode = mode;
     anomalies.attachShellServices({
       togglePhenomenaMode: () => {
         mode.active ? mode.exit() : mode.enter();

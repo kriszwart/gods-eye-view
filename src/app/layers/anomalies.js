@@ -5,6 +5,11 @@ import {
   registerPickOwner,
   unregisterPickOwner,
 } from '../../data/pickRegistry.js';
+import {
+  holdContinuousRender,
+  releaseContinuousRender,
+  governorRequestRender,
+} from '../../renderGovernor.js';
 
 /** Wire the bundled anomaly dataset to the application overlay host. */
 export function createApplicationAnomalies(options = {}) {
@@ -14,6 +19,11 @@ export function createApplicationAnomalies(options = {}) {
     source: options.source || createAnomalySource({ baseUrl: base }),
     overlayHost,
     picking: { registerPickOwner, unregisterPickOwner },
+    render: {
+      holdContinuousRender,
+      releaseContinuousRender,
+      governorRequestRender,
+    },
     assetBase: base,
     ...options,
   });

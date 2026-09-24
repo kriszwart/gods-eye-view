@@ -51,6 +51,7 @@ export function createAnomaliesLayer({
   source,
   overlayHost,
   picking,
+  render,
   assetBase = '/anomalies/',
   container,
   atmosphere = true,
@@ -179,7 +180,7 @@ export function createAnomaliesLayer({
     init(v) {
       if (viewer) throw new Error('Anomaly layer is already initialized');
       viewer = v;
-      renderer = createAnomalyRenderer(viewer, { assetBase });
+      renderer = createAnomalyRenderer(viewer, { assetBase, render });
       const host = container || viewer.container;
       chrono = createChronometer({
         container: host,

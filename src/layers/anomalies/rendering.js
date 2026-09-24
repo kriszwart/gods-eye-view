@@ -1,5 +1,11 @@
 import * as Cesium from 'cesium';
-import { pointColor, pointSize, pointAlpha, PALETTE } from './model.js';
+import {
+  pointColor,
+  pointSize,
+  pointAlpha,
+  PALETTE,
+  ANOMALY_LAYER_ID,
+} from './model.js';
 
 // Thin-film sheen for hero craft: strongest at grazing angles, drifting slowly.
 const SPECTRAL_FS = /* glsl */ `
@@ -34,7 +40,7 @@ const hashDeg = (s) =>
  */
 export function createAnomalyRenderer(
   viewer,
-  { assetBase = '/anomalies/' } = {},
+  { assetBase = '/anomalies/', render } = {},
 ) {
   const scene = viewer.scene;
   const bright = new Map();
@@ -47,6 +53,18 @@ export function createAnomalyRenderer(
     span: 2,
     infrared: false,
   };
+  // Continuous frames only while something animates: hero loops or pulses.
+  let holding = false;
+  const syncHold = () => {
+    if (!render) return;
+    const want = state.visible && (heroes.length > 0 || live.length > 0);
+    if (want === holding) return;
+    holding = want;
+    if (want) render.holdContinuousRender(ANOMALY_LAYER_ID);
+    else render.releaseContinuousRender(ANOMALY_LAYER_ID);
+  };
+  const requestFrame = (reason) =>
+    render ? render.governorRequestRender(reason) : scene.requestRender();
   const uniforms = () => ({
     u_time: { type: Cesium.UniformType.FLOAT, value: 0 },
     u_strength: { type: Cesium.UniformType.FLOAT, value: 0.85 },
@@ -66,8 +84,8 @@ export function createAnomalyRenderer(
     const t = (performance.now() - t0) / 1000;
     spectral.setUniform('u_time', t);
     infrared.setUniform('u_time', t);
-    // Hero loops need frames; GEV's render governor may be in request mode.
-    scene.requestRender();
+    // Hero loops need frames; the governor hold covers this when injected.
+    if (!render) scene.requestRender();
   };
   // Arrival pulses: a ring blooms at each report as its year arrives.
   const pulses = scene.primitives.add(
@@ -90,7 +108,8 @@ export function createAnomalyRenderer(
       p.point.outlineColor = p.color.withAlpha(0.9 * (1 - t) * (1 - t));
       return true;
     });
-    scene.requestRender();
+    if (!render) scene.requestRender();
+    syncHold();
   };
   const removeTick = viewer.clock.onTick.addEventListener(() => {
     tick();
@@ -111,7 +130,8 @@ export function createAnomalyRenderer(
       });
       live.push({ point, start, color });
     }
-    scene.requestRender();
+    syncHold();
+    requestFrame('anomalies-pulse');
   }
 
   function collection(map, year) {
@@ -220,7 +240,8 @@ export function createAnomalyRenderer(
             : h.row.year <= year));
       h.model.customShader = state.infrared ? infrared : spectral;
     }
-    scene.requestRender();
+    syncHold();
+    requestFrame('anomalies-apply');
   }
 
   function pick(windowPosition) {
@@ -240,6 +261,7 @@ export function createAnomalyRenderer(
     clearPoints();
     for (const h of heroes) scene.primitives.remove(h.model);
     heroes = [];
+    syncHold();
   }
 
   return { setRows, setHeroes, apply, pick, heroPosition, pulse, destroy };

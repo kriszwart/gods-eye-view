@@ -860,5 +860,6 @@
   "src/layers/ancientSites/records.test.mjs",
   "src/layers/ancientSites/rendering.js",
   "src/layers/ancientSites/index.js",
+  "scripts/qa-ancient-sites.mjs",
   "src/app/layers/ancientSites.js"
 ]

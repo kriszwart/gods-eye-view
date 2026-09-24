@@ -1,5 +1,47 @@
 # Changelog
 
+- Phenomena phase 2b: a second register, ancient sites, joins the atlas
+  live behind share token 4 (twenty curated sites: temples, circles,
+  mounds, a megalith alignment, a geoglyph, settlements, an underwater
+  site and rock art). It renders as a static gold register with no
+  year-dial coupling, proven by enabling both layers together, stepping
+  the anomalies chronometer's slider, and confirming the register's
+  `getStats().count` (20) never moves. Each site's dossier
+  (`.uap-dossier.ancient`) carries the gold-accented plate, a "Debated:"
+  line naming the genuine scholarly question at that site rather than an
+  "ancient alien" framing, and an "Open record" link to its primary
+  source. An earlier build had the dossier sitting at z-index 40, low
+  enough that the DISPLAY, CCTV and CONTEXT rail plates (z-index 110)
+  punched through an open dossier; fixed by raising it to 140, above the
+  whole rail, alongside correcting the link's own copy from "Open
+  source" to "Open record". Screenshots at 1440 and 390 px are in
+  `qa-shots/ancient-dossier/`.
+
+  The Modern Antiquarian (TMA) supplies coordinates for six of the
+  twenty sites (Stonehenge, Avebury, Newgrange, Callanish, the Menec
+  alignment at Carnac and Ggantija). TMA grants no bulk redistribution
+  licence for its 17,392-site database, so its KML export is parsed
+  entirely locally by
+  `anomaly-atlas-kit/pipeline/src/adapters/tma-kml.mjs`, reading a raw
+  file held only in `local_data/raw` (git-ignored, never shipped), and
+  feeding curation and cross-checking only; only a per-site reference
+  link may ever leave local_data. Where a TMA-sourced site also carries
+  a UNESCO listing, the dossier's own source link points at UNESCO
+  instead, the stronger primary source, and the TMA attribution stays
+  because the coordinates themselves came from its survey.
+
+  Acceptance proven by `node scripts/qa-ancient-sites.mjs` (registration
+  off by default, the 20-site load, year-dial decoupling from the
+  anomalies chronometer, the Gobekli Tepe dossier's debated line and
+  "Open record" link, Escape close, and share restore via token 4 alone
+  and combined with anomalies as `l=3.4`), run three consecutive times,
+  0 failures each time. Gates: `npm run format:check`, `npm run build`,
+  `npm test` (5,038 tests, 5,037 passing, 1 skipped, 0 failed), `npm run
+  check:boundaries`, `npm run test:track` against the dev server (109 of
+  109), `node scripts/qa-anomalies.mjs` (0 failures) and `node
+  scripts/qa-perf.mjs` (24 of 24). The full 17,392-site TMA sweep and a
+  deep-time dial spanning both registers wait for phase 5b.
+
 - Phenomena phase 2a: the product renames itself everywhere it names
   itself (page title, loader, title bar and its new subtitle "The
   unexplained, mapped", console error text). The Spectral, Radar and

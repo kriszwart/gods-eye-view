@@ -16,7 +16,10 @@
   --uap-mono: 'Martian Mono', 'IBM Plex Mono', ui-monospace, monospace;
   --uap-sans: 'IBM Plex Sans', system-ui, sans-serif;
 
-  /* Re-point GEV's own tokens so existing panels follow the atlas. */
+  /* Re-point GEV's own tokens so existing panels follow the atlas.
+     --panel-radius squares every rounded glass card GEV builds from it
+     (control panel, layer panel, display tray, cockpit, weather, scenes,
+     recent imagery, CCTV, context) into a hairline plate in one place. */
   --bg-dark: var(--uap-void);
   --glass-bg: rgba(7, 8, 18, 0.88);
   --glass-border: var(--uap-hair);
@@ -30,7 +33,7 @@
   --menu-bg: #0d0f1c;
   --font-mono: var(--uap-mono);
   --font-sans: var(--uap-sans);
-  --panel-radius: 2px;
+  --panel-radius: 0;
   --btn-radius: 2px;
 }
 
@@ -109,6 +112,69 @@
   color: var(--uap-dim);
   font: 400 12px var(--uap-mono);
   cursor: pointer;
+}
+
+/* Command shell plates: the control panel, layer panel, context panel and
+   display tray take the dossier's registration-corner language instead of
+   GEV's rounded glass cards; --panel-radius above already squares them.
+   Cyber HUD paints its own calibrated frame on these same elements, so
+   these rules stand aside wherever [data-ui-theme='cyber'] is set. */
+.anomaly-atlas:not([data-ui-theme='cyber'])
+  :is(
+    .panel-inner,
+    .data-panel-inner,
+    .global-context-panel-inner,
+    #pp-toggles:not(.collapsed),
+    #pp-toggles.collapsed .pp-header-row
+  ) {
+  position: relative;
+}
+.anomaly-atlas:not([data-ui-theme='cyber'])
+  :is(
+    .panel-inner,
+    .data-panel-inner,
+    .global-context-panel-inner,
+    #pp-toggles:not(.collapsed),
+    #pp-toggles.collapsed .pp-header-row
+  )::before,
+.anomaly-atlas:not([data-ui-theme='cyber'])
+  :is(
+    .panel-inner,
+    .data-panel-inner,
+    .global-context-panel-inner,
+    #pp-toggles:not(.collapsed),
+    #pp-toggles.collapsed .pp-header-row
+  )::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  border: solid var(--uap-hair-strong);
+}
+.anomaly-atlas:not([data-ui-theme='cyber'])
+  :is(
+    .panel-inner,
+    .data-panel-inner,
+    .global-context-panel-inner,
+    #pp-toggles:not(.collapsed),
+    #pp-toggles.collapsed .pp-header-row
+  )::before {
+  top: 0;
+  left: 0;
+  border-width: 1px 0 0 1px;
+}
+.anomaly-atlas:not([data-ui-theme='cyber'])
+  :is(
+    .panel-inner,
+    .data-panel-inner,
+    .global-context-panel-inner,
+    #pp-toggles:not(.collapsed),
+    #pp-toggles.collapsed .pp-header-row
+  )::after {
+  bottom: 0;
+  right: 0;
+  border-width: 0 1px 1px 0;
 }
 
 /* Corona chronometer */

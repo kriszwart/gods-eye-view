@@ -25,6 +25,27 @@ const rgb = (hex) =>
   [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
 const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 
+/** Overlay label entry for a hero case, on the shared ambient-label lane. */
+export function createAnomalyOverlayEntry({ id, position, title, year }) {
+  return {
+    id: `anomaly:${id}`,
+    position,
+    variant: 'label',
+    title: String(title || 'Report'),
+    accent: PALETTE.ion,
+    priority: Math.round(Number(year) || 0),
+    collisionGroup: 'ambient-label',
+    paintLane: 'ambient-label',
+    interactive: false,
+    edgeFade: 'keyhole',
+    horizonCull: true,
+    terrainOcclusion: false,
+    gapPx: 15,
+    verticalOnly: true,
+    placement: 'above',
+  };
+}
+
 /** RGB (0 to 1) for a row. */
 export function pointColor(row) {
   if (row.status === 'contested') return rgb(PALETTE.amber);

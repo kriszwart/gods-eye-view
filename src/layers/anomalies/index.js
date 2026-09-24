@@ -6,6 +6,7 @@ import {
   inWindow,
   mapAnalystRecord,
   describeYear,
+  createAnomalyOverlayEntry,
 } from './model.js';
 import { yearHistogram } from './records.js';
 import { createAnomalyRenderer } from './rendering.js';
@@ -226,6 +227,7 @@ export function createAnomaliesLayer({
     enable() {
       enabled = true;
       chrono?.setVisible(true);
+      overlayHost?.setVisible?.(ANOMALY_LAYER_ID, true);
       if (legend) legend.hidden = false;
       if (atmosphere && !restoreAtmosphere)
         restoreAtmosphere = applyAtlasAtmosphere(viewer);
@@ -266,6 +268,7 @@ export function createAnomaliesLayer({
       clickHandler = null;
       renderer?.apply({ visible: false });
       overlayHost?.clearSource?.(ANOMALY_LAYER_ID);
+      overlayHost?.setVisible?.(ANOMALY_LAYER_ID, false);
     },
 
     async update() {
@@ -280,7 +283,20 @@ export function createAnomaliesLayer({
         rows = next;
         renderer.setRows(rows);
         chrono.setHistogram(yearHistogram(rows, YEAR_MIN, YEAR_MAX));
-        await renderer.setHeroes(rows.filter((r) => r.hero));
+        const heroRows = rows.filter((r) => r.hero);
+        await renderer.setHeroes(heroRows);
+        overlayHost?.setEntries?.(
+          ANOMALY_LAYER_ID,
+          heroRows.map((r) =>
+            createAnomalyOverlayEntry({
+              id: r.id,
+              position: Cesium.Cartesian3.fromDegrees(r.lon, r.lat, 650),
+              title: r.title,
+              year: r.year,
+            }),
+          ),
+          { moving: false },
+        );
         loaded = true;
         lastUpdate = Date.now();
         lastError = null;

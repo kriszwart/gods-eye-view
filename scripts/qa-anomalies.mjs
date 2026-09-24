@@ -63,9 +63,10 @@ try {
 
   await page.evaluate(() => {
     const cam = window.__godsEyeView.viewer.camera;
+    cam.cancelFlight?.();
     const p = cam.positionWC;
     const k = 26.0e6 / Math.hypot(p.x, p.y, p.z);
-    cam.position = new p.constructor(p.x * k, p.y * k, p.z * k);
+    cam.setView({ destination: new p.constructor(p.x * k, p.y * k, p.z * k) });
     window.__godsEyeView.viewer.scene.requestRender();
   });
   await page
@@ -154,9 +155,10 @@ try {
 
   await page.evaluate(() => {
     const cam = window.__godsEyeView.viewer.camera;
+    cam.cancelFlight?.();
     const p = cam.positionWC;
     const k = (6378137 + 4000) / Math.hypot(p.x, p.y, p.z);
-    cam.position = new p.constructor(p.x * k, p.y * k, p.z * k);
+    cam.setView({ destination: new p.constructor(p.x * k, p.y * k, p.z * k) });
     window.__godsEyeView.viewer.scene.requestRender();
   });
   await page

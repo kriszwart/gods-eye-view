@@ -10,6 +10,7 @@ Raw files stay local (`pipeline/local_data/raw`, git-ignored). Only the built ou
 | PURSUE (war.gov/UFO) | 6 releases, about 447 files | Manual browser download (site blocks bots) | PDF extraction |
 | UK MoD files (TNA) | about 209 files, 52,000 pages | PDF download | PDF extraction, page ranges |
 | NUFORC | | Only with written permission | Licensed parser, no narratives |
+| The Modern Antiquarian | 17,392 sites | KML export, local only | no redistribution licence; curation and cross-checking only; per-site reference links allowed |
 
 Kaggle, Maven Analytics and CORGIS UFO sets all derive from the same 2014 NUFORC scrape and are excluded.
 

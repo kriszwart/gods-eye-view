@@ -18,6 +18,7 @@
     "ukmod:requests": "node src/adapters/ukmod.mjs requests",
     "ukmod:ingest": "node src/adapters/ukmod.mjs ingest",
     "nuforc": "node src/adapters/nuforc-licensed.mjs",
+    "ancient:tma": "node src/adapters/tma-kml.mjs",
     "batch": "node src/extract/batch.mjs"
   }
 }

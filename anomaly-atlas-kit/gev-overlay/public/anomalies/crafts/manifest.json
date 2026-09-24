@@ -1,0 +1,1412 @@
+{
+  "schema": "anomaly-craft-manifest/1",
+  "loopSeconds": 12,
+  "generatedAt": "2026-09-24T06:21:29.846Z",
+  "crafts": [
+    {
+      "id": "domed-disc",
+      "name": "Domed disc",
+      "family": "revolved",
+      "nominalSizeM": 14,
+      "metresPerUnit": 6.96517413400051,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "disk",
+        "disc",
+        "saucer",
+        "circle"
+      ],
+      "glyphView": "side",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "hull",
+          "type": "lathe",
+          "material": "hull-silver"
+        },
+        {
+          "name": "dome",
+          "type": "lathe",
+          "material": "glass"
+        },
+        {
+          "name": "rim",
+          "type": "ring-lights",
+          "material": "light-magenta"
+        }
+      ],
+      "motions": [
+        "spin",
+        "bob",
+        "precess",
+        "pulse"
+      ],
+      "glb": "glb/domed-disc.glb",
+      "glyph": "glyphs/domed-disc.svg",
+      "bytes": 93872,
+      "sha256": "86dcb10e88060f7d97abf8d0f198fcb56e58dd39aa0c64f2a479a960d08aa644",
+      "triangles": 6720,
+      "nodes": 23,
+      "channels": 18,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "lens-disc",
+      "name": "Lens",
+      "family": "revolved",
+      "nominalSizeM": 18,
+      "metresPerUnit": 9,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "disk",
+        "oval",
+        "lens",
+        "double saucer"
+      ],
+      "glyphView": "side",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "hull",
+          "type": "lathe",
+          "material": "hull-dark"
+        },
+        {
+          "name": "rim-band",
+          "type": "torus",
+          "material": "light-ion"
+        }
+      ],
+      "motions": [
+        "spin",
+        "precess",
+        "bob",
+        "pulse"
+      ],
+      "glb": "glb/lens-disc.glb",
+      "glyph": "glyphs/lens-disc.svg",
+      "bytes": 124256,
+      "sha256": "9f2c187e93b453a014068eb7102e046daacf0e24319579b1ffb32be5dcdaf7cf",
+      "triangles": 6144,
+      "nodes": 6,
+      "channels": 3,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "ringed-disc",
+      "name": "Ringed disc",
+      "family": "revolved",
+      "nominalSizeM": 16,
+      "metresPerUnit": 6.956521883353397,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "saturn",
+        "sphere with ring",
+        "disk"
+      ],
+      "glyphView": "side",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "core",
+          "type": "lathe",
+          "material": "hull-silver"
+        },
+        {
+          "name": "ring",
+          "type": "lathe",
+          "material": "hull-dark"
+        },
+        {
+          "name": "ring-lights",
+          "type": "ring-lights",
+          "material": "light-violet"
+        }
+      ],
+      "motions": [
+        "spin",
+        "bob",
+        "counter",
+        "pulse"
+      ],
+      "glb": "glb/ringed-disc.glb",
+      "glyph": "glyphs/ringed-disc.svg",
+      "bytes": 103028,
+      "sha256": "c70847b064787de298eea033d162d7fd48137632ca90ad0e7d3fe13a5bc77fe5",
+      "triangles": 8352,
+      "nodes": 31,
+      "channels": 27,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "bell",
+      "name": "Bell on three orbs",
+      "family": "revolved",
+      "nominalSizeM": 10,
+      "metresPerUnit": 5.154639023221232,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "bell",
+        "saucer with landing gear",
+        "disk"
+      ],
+      "glyphView": "side",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "hull",
+          "type": "lathe",
+          "material": "hull-silver"
+        },
+        {
+          "name": "portholes",
+          "type": "ring-lights",
+          "material": "light-amber"
+        },
+        {
+          "name": "gear",
+          "type": "spheres",
+          "material": "hull-silver"
+        }
+      ],
+      "motions": [
+        "spin",
+        "bob",
+        "pulse"
+      ],
+      "glb": "glb/bell.glb",
+      "glyph": "glyphs/bell.svg",
+      "bytes": 86048,
+      "sha256": "1106efd8b44358d2752bea037f71f7ae08a5de2e031b738275ee386906143eeb",
+      "triangles": 6984,
+      "nodes": 17,
+      "channels": 10,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "hat",
+      "name": "Brimmed hat",
+      "family": "revolved",
+      "nominalSizeM": 12,
+      "metresPerUnit": 5.88235305117351,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "hat",
+        "disk",
+        "cone"
+      ],
+      "glyphView": "side",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "hull",
+          "type": "lathe",
+          "material": "hull-dark"
+        },
+        {
+          "name": "core",
+          "type": "spheres",
+          "material": "light-magenta"
+        }
+      ],
+      "motions": [
+        "bob",
+        "rock",
+        "pulse"
+      ],
+      "glb": "glb/hat.glb",
+      "glyph": "glyphs/hat.svg",
+      "bytes": 57388,
+      "sha256": "c3bebb7946a957df261a529162a6986a8a79282aa27994686e232e3b69159c8e",
+      "triangles": 2488,
+      "nodes": 6,
+      "channels": 3,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "spinning-top",
+      "name": "Spinning top",
+      "family": "revolved",
+      "nominalSizeM": 8,
+      "metresPerUnit": 3.9215687007823403,
+      "loopSeconds": 12,
+      "samples": 145,
+      "reportedShapes": [
+        "top",
+        "diamond",
+        "cone"
+      ],
+      "glyphView": "side",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "hull",
+          "type": "lathe",
+          "material": "hull-dark"
+        },
+        {
+          "name": "tip",
+          "type": "spheres",
+          "material": "light-ion"
+        }
+      ],
+      "motions": [
+        "spin",
+        "precess",
+        "bob",
+        "pulse"
+      ],
+      "glb": "glb/spinning-top.glb",
+      "glyph": "glyphs/spinning-top.svg",
+      "bytes": 58496,
+      "sha256": "d8876d86c983c3ca27e6ee2b9a544542edb927b5bcabfc1390ce11fdcb97d043",
+      "triangles": 2488,
+      "nodes": 6,
+      "channels": 3,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "pyramid",
+      "name": "Four-sided cone",
+      "family": "revolved",
+      "nominalSizeM": 20,
+      "metresPerUnit": 10,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "cone",
+        "pyramid",
+        "triangle"
+      ],
+      "glyphView": "side",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "hull",
+          "type": "lathe",
+          "material": "hull-dark"
+        },
+        {
+          "name": "corners",
+          "type": "point-lights",
+          "material": "light-magenta"
+        }
+      ],
+      "motions": [
+        "spin",
+        "bob",
+        "pulse"
+      ],
+      "glb": "glb/pyramid.glb",
+      "glyph": "glyphs/pyramid.svg",
+      "bytes": 19860,
+      "sha256": "e8fc3b0a1356565be94b532f2d96e6b8865f82259f29564fca9769e7cb6718ba",
+      "triangles": 1024,
+      "nodes": 9,
+      "channels": 6,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "cigar",
+      "name": "Cigar with plume",
+      "family": "revolved",
+      "nominalSizeM": 60,
+      "metresPerUnit": 28.63961809768367,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "cigar",
+        "cylinder",
+        "rocket",
+        "ghost rocket"
+      ],
+      "glyphView": "side",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "hull",
+          "type": "lathe",
+          "material": "hull-silver"
+        },
+        {
+          "name": "portholes",
+          "type": "point-lights",
+          "material": "light-amber"
+        },
+        {
+          "name": "plume",
+          "type": "plume",
+          "material": "plasma"
+        }
+      ],
+      "motions": [
+        "drift",
+        "bob",
+        "plume",
+        "pulse"
+      ],
+      "glb": "glb/cigar.glb",
+      "glyph": "glyphs/cigar.svg",
+      "bytes": 109216,
+      "sha256": "8095ffd72b1bb06e6e89b2188d4a02d6e08861a50002e79a194a1bd7c2d4b3d8",
+      "triangles": 5736,
+      "nodes": 28,
+      "channels": 39,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "tic-tac",
+      "name": "Tic Tac",
+      "family": "revolved",
+      "nominalSizeM": 12,
+      "metresPerUnit": 6,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "tic tac",
+        "capsule",
+        "cylinder",
+        "oval"
+      ],
+      "glyphView": "side",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "hull",
+          "type": "lathe",
+          "material": "ceramic"
+        }
+      ],
+      "motions": [
+        "stretch",
+        "bob",
+        "rock"
+      ],
+      "glb": "glb/tic-tac.glb",
+      "glyph": "glyphs/tic-tac.svg",
+      "bytes": 41072,
+      "sha256": "8eb24c49673310a53190d1e0665abfafe09ef7039c74121ec5791410b03bf182",
+      "triangles": 1728,
+      "nodes": 4,
+      "channels": 3,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "egg",
+      "name": "Egg",
+      "family": "revolved",
+      "nominalSizeM": 5,
+      "metresPerUnit": 2.5,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "egg",
+        "oval",
+        "teardrop"
+      ],
+      "glyphView": "side",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "hull",
+          "type": "lathe",
+          "material": "pearl"
+        }
+      ],
+      "motions": [
+        "spin",
+        "rock",
+        "bob"
+      ],
+      "glb": "glb/egg.glb",
+      "glyph": "glyphs/egg.svg",
+      "bytes": 39416,
+      "sha256": "ca195530b066eb50bb1bffbf7e3368c8a4f86ed3992a7303b48e3042b84503a0",
+      "triangles": 1728,
+      "nodes": 4,
+      "channels": 2,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "torus",
+      "name": "Ring",
+      "family": "primitive",
+      "nominalSizeM": 10,
+      "metresPerUnit": 5,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "ring",
+        "donut",
+        "circle"
+      ],
+      "glyphView": "side",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "hull",
+          "type": "torus",
+          "material": "hull-dark"
+        },
+        {
+          "name": "inner",
+          "type": "ring-lights",
+          "material": "light-ion"
+        }
+      ],
+      "motions": [
+        "tumble",
+        "pulse"
+      ],
+      "glb": "glb/torus.glb",
+      "glyph": "glyphs/torus.svg",
+      "bytes": 116784,
+      "sha256": "4cb4d88a79a5eeb4473baf85b664ab0cf36cd4122bfd0f0bdb16fcdc13258b9f",
+      "triangles": 7632,
+      "nodes": 17,
+      "channels": 13,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "orb",
+      "name": "Orb",
+      "family": "light",
+      "nominalSizeM": 2,
+      "metresPerUnit": 1.0395010261044797,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "light",
+        "orb",
+        "sphere",
+        "ball",
+        "star",
+        "flash",
+        "circle"
+      ],
+      "glyphView": "side",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "core",
+          "type": "spheres",
+          "material": "light-ion"
+        },
+        {
+          "name": "halo",
+          "type": "torus",
+          "material": "light-violet"
+        }
+      ],
+      "motions": [
+        "bob",
+        "precess",
+        "pulse"
+      ],
+      "glb": "glb/orb.glb",
+      "glyph": "glyphs/orb.svg",
+      "bytes": 113120,
+      "sha256": "1cb4a6a9498492414c00d899a3f59bd74bbf2a5401399e677cbefd64f9103c38",
+      "triangles": 5560,
+      "nodes": 6,
+      "channels": 3,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "orb-trio",
+      "name": "Orb trio",
+      "family": "light",
+      "nominalSizeM": 12,
+      "metresPerUnit": 7.310815086930026,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "foo fighter",
+        "orbs",
+        "lights"
+      ],
+      "glyphView": "plan",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "orbit",
+          "type": "group",
+          "material": null
+        },
+        {
+          "name": "orbs",
+          "type": "ring-lights",
+          "material": "light-amber"
+        }
+      ],
+      "motions": [
+        "counter",
+        "rock",
+        "bob",
+        "pulse"
+      ],
+      "glb": "glb/orb-trio.glb",
+      "glyph": "glyphs/orb-trio.svg",
+      "bytes": 18608,
+      "sha256": "23bd3e4eb8ddbe942d864a31ed6e25cad21e51227ae979e6f2664b4c6c576bd9",
+      "triangles": 756,
+      "nodes": 7,
+      "channels": 6,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "orb-swarm",
+      "name": "Orb swarm",
+      "family": "light",
+      "nominalSizeM": 30,
+      "metresPerUnit": 22.156848702729153,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "formation",
+        "cluster",
+        "lights"
+      ],
+      "glyphView": "side",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "swarm",
+          "type": "scatter-lights",
+          "material": "light-white"
+        }
+      ],
+      "motions": [
+        "wander",
+        "pulse"
+      ],
+      "glb": "glb/orb-swarm.glb",
+      "glyph": "glyphs/orb-swarm.svg",
+      "bytes": 44744,
+      "sha256": "d52af0c4143978d9249f95b7a3698c09718d8822ef9c0e9b348ae9e175124816",
+      "triangles": 2772,
+      "nodes": 14,
+      "channels": 22,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "flaring-orb",
+      "name": "Flaring orb",
+      "family": "light",
+      "nominalSizeM": 4,
+      "metresPerUnit": 2.4999999627470975,
+      "loopSeconds": 12,
+      "samples": 193,
+      "reportedShapes": [
+        "changing",
+        "fireball",
+        "orb",
+        "light"
+      ],
+      "glyphView": "side",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "core",
+          "type": "spheres",
+          "material": "light-magenta"
+        },
+        {
+          "name": "shell",
+          "type": "spheres",
+          "material": "plasma"
+        }
+      ],
+      "motions": [
+        "jump",
+        "vibrate",
+        "pulse"
+      ],
+      "glb": "glb/flaring-orb.glb",
+      "glyph": "glyphs/flaring-orb.svg",
+      "bytes": 49008,
+      "sha256": "0349f611fe78c719e7f99ecc125121b986233030b565bbde2d53ae8cdec2c62c",
+      "triangles": 1904,
+      "nodes": 7,
+      "channels": 4,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "cold-pair",
+      "name": "Cold pair (infrared only)",
+      "family": "light",
+      "nominalSizeM": 3,
+      "metresPerUnit": 1.578947378327642,
+      "loopSeconds": 12,
+      "samples": 289,
+      "reportedShapes": [
+        "infrared",
+        "radar only",
+        "invisible"
+      ],
+      "glyphView": "side",
+      "irOnly": true,
+      "parts": [
+        {
+          "name": "pair",
+          "type": "spheres",
+          "material": "ir-only"
+        }
+      ],
+      "motions": [
+        "vibrate",
+        "bob"
+      ],
+      "glb": "glb/cold-pair.glb",
+      "glyph": "glyphs/cold-pair.svg",
+      "bytes": 25464,
+      "sha256": "a5ddfce288f0499368557cfe01fc88d6626f316d6aea9b05835621ac02674bf0",
+      "triangles": 1904,
+      "nodes": 5,
+      "channels": 1,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "triangle",
+      "name": "Black triangle",
+      "family": "extruded",
+      "nominalSizeM": 100,
+      "metresPerUnit": 51.30611635528146,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "triangle",
+        "chevron",
+        "delta"
+      ],
+      "glyphView": "plan",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "hull",
+          "type": "extrude",
+          "material": "matte-black"
+        },
+        {
+          "name": "corner",
+          "type": "point-lights",
+          "material": "light-white"
+        },
+        {
+          "name": "centre",
+          "type": "point-lights",
+          "material": "light-magenta"
+        }
+      ],
+      "motions": [
+        "spin",
+        "bob",
+        "pulse"
+      ],
+      "glb": "glb/triangle.glb",
+      "glyph": "glyphs/triangle.svg",
+      "bytes": 27312,
+      "sha256": "512b09cdf337a431f34e6519b41ed41b7e27bd94ab5df2f93f5d8bb6dc0a283d",
+      "triangles": 1040,
+      "nodes": 10,
+      "channels": 6,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "boomerang",
+      "name": "Boomerang",
+      "family": "extruded",
+      "nominalSizeM": 70,
+      "metresPerUnit": 32.673709363503114,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "boomerang",
+        "chevron",
+        "v-shape",
+        "v"
+      ],
+      "glyphView": "plan",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "hull",
+          "type": "extrude",
+          "material": "hull-dark"
+        },
+        {
+          "name": "edge",
+          "type": "point-lights",
+          "material": "light-amber"
+        }
+      ],
+      "motions": [
+        "drift",
+        "rock",
+        "pulse"
+      ],
+      "glb": "glb/boomerang.glb",
+      "glyph": "glyphs/boomerang.svg",
+      "bytes": 32448,
+      "sha256": "abdeb4f4ae0cdaff957ca05335f64d3b808ddf3fd1fd59fbd4373bfc5036a01b",
+      "triangles": 2336,
+      "nodes": 14,
+      "channels": 11,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "crescent",
+      "name": "Crescent",
+      "family": "extruded",
+      "nominalSizeM": 15,
+      "metresPerUnit": 7.411812189267776,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "crescent",
+        "half-moon",
+        "boomerang"
+      ],
+      "glyphView": "plan",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "hull",
+          "type": "extrude",
+          "material": "hull-silver"
+        }
+      ],
+      "motions": [
+        "skip",
+        "rock"
+      ],
+      "glb": "glb/crescent.glb",
+      "glyph": "glyphs/crescent.svg",
+      "bytes": 74540,
+      "sha256": "0fd92d91bfeab13470e85bdb8c149dd33ff866af635c10beba5f8d1c686bdf80",
+      "triangles": 956,
+      "nodes": 4,
+      "channels": 2,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "tetrahedron",
+      "name": "Tumbling tetrahedron",
+      "family": "primitive",
+      "nominalSizeM": 2,
+      "metresPerUnit": 0.9044545450206111,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "tetrahedron",
+        "pyramid",
+        "triangle"
+      ],
+      "glyphView": "side",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "frame",
+          "type": "group",
+          "material": null
+        },
+        {
+          "name": "hull",
+          "type": "tetra",
+          "material": "matte-black"
+        },
+        {
+          "name": "strobe",
+          "type": "point-lights",
+          "material": "light-white"
+        }
+      ],
+      "motions": [
+        "tumble",
+        "pulse"
+      ],
+      "glb": "glb/tetrahedron.glb",
+      "glyph": "glyphs/tetrahedron.svg",
+      "bytes": 14416,
+      "sha256": "fb06ff5d935b0c817a4e0ecc27ad1071f6b96f111ad3da5c0afd55eeb40054b1",
+      "triangles": 1012,
+      "nodes": 10,
+      "channels": 5,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "diamond",
+      "name": "Diamond",
+      "family": "primitive",
+      "nominalSizeM": 20,
+      "metresPerUnit": 9.433962276086726,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "diamond",
+        "rhombus"
+      ],
+      "glyphView": "side",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "hull",
+          "type": "octa",
+          "material": "hull-dark"
+        },
+        {
+          "name": "corners",
+          "type": "point-lights",
+          "material": "light-magenta"
+        }
+      ],
+      "motions": [
+        "spin",
+        "bob",
+        "pulse"
+      ],
+      "glb": "glb/diamond.glb",
+      "glyph": "glyphs/diamond.svg",
+      "bytes": 19272,
+      "sha256": "63d53d184d72be2845081570263d59af29c755b33f1816ddd958a1fde8dea6f3",
+      "triangles": 1016,
+      "nodes": 9,
+      "channels": 6,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "slab",
+      "name": "Slab",
+      "family": "primitive",
+      "nominalSizeM": 30,
+      "metresPerUnit": 18.404907972095035,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "rectangle",
+        "square",
+        "box",
+        "slab"
+      ],
+      "glyphView": "plan",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "hull",
+          "type": "box",
+          "material": "matte-black"
+        },
+        {
+          "name": "edge",
+          "type": "point-lights",
+          "material": "light-ion"
+        }
+      ],
+      "motions": [
+        "drift",
+        "rock",
+        "pulse"
+      ],
+      "glb": "glb/slab.glb",
+      "glyph": "glyphs/slab.svg",
+      "bytes": 22848,
+      "sha256": "36f0ebaeb5a51f7c3e67cb1ba4b14e045853bb8f24a93d5ae770ec6fbbcf3133",
+      "triangles": 1524,
+      "nodes": 11,
+      "channels": 8,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "wedge",
+      "name": "Wedge",
+      "family": "extruded",
+      "nominalSizeM": 25,
+      "metresPerUnit": 11.933174301582108,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "wedge",
+        "triangle",
+        "doorstop"
+      ],
+      "glyphView": "side",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "hull",
+          "type": "side-extrude",
+          "material": "hull-dark"
+        },
+        {
+          "name": "rear",
+          "type": "point-lights",
+          "material": "light-magenta"
+        }
+      ],
+      "motions": [
+        "spin",
+        "bob",
+        "pulse"
+      ],
+      "glb": "glb/wedge.glb",
+      "glyph": "glyphs/wedge.svg",
+      "bytes": 19396,
+      "sha256": "805339f7743bcbd7246fc96ec275f5e90b0ad5ce5af0863363471d01519db73a",
+      "triangles": 560,
+      "nodes": 7,
+      "channels": 4,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "light-v",
+      "name": "Lights in a V",
+      "family": "formation",
+      "nominalSizeM": 300,
+      "metresPerUnit": 144.92753621101846,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "formation",
+        "v-shape",
+        "lights"
+      ],
+      "glyphView": "plan",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "v",
+          "type": "point-lights",
+          "material": "light-amber"
+        }
+      ],
+      "motions": [
+        "drift",
+        "rock",
+        "pulse"
+      ],
+      "glb": "glb/light-v.glb",
+      "glyph": "glyphs/light-v.svg",
+      "bytes": 23212,
+      "sha256": "c0022d66307141ae6401a9271ac82de22f992a8e8af005593a107d7c83b3dbb3",
+      "triangles": 1764,
+      "nodes": 10,
+      "channels": 9,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "light-arc",
+      "name": "Arc of lights",
+      "family": "formation",
+      "nominalSizeM": 200,
+      "metresPerUnit": 103.12546256988513,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "formation",
+        "arc",
+        "lights",
+        "string of lights"
+      ],
+      "glyphView": "plan",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "arc",
+          "type": "arc-lights",
+          "material": "light-white"
+        }
+      ],
+      "motions": [
+        "drift",
+        "bob",
+        "pulse"
+      ],
+      "glb": "glb/light-arc.glb",
+      "glyph": "glyphs/light-arc.svg",
+      "bytes": 28260,
+      "sha256": "60399a61ac8f3b4cfe4a92df7ba75684f6386bac7228efda4743a5aa37df7b47",
+      "triangles": 2772,
+      "nodes": 14,
+      "channels": 12,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "fireball",
+      "name": "Fireball",
+      "family": "light",
+      "nominalSizeM": 5,
+      "metresPerUnit": 6.329113967027864,
+      "loopSeconds": 12,
+      "samples": 129,
+      "reportedShapes": [
+        "fireball",
+        "meteor",
+        "green fireball"
+      ],
+      "glyphView": "side",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "core",
+          "type": "spheres",
+          "material": "light-verdant"
+        },
+        {
+          "name": "trail",
+          "type": "plume",
+          "material": "flame"
+        }
+      ],
+      "motions": [
+        "drift",
+        "plume",
+        "pulse"
+      ],
+      "glb": "glb/fireball.glb",
+      "glyph": "glyphs/fireball.svg",
+      "bytes": 93532,
+      "sha256": "07508ccf02ff136d7db0310a554719aae8521ec61c709f72f2d26e8795a4a407",
+      "triangles": 3976,
+      "nodes": 23,
+      "channels": 38,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "spiral",
+      "name": "Spiral",
+      "family": "light",
+      "nominalSizeM": 40,
+      "metresPerUnit": 19.340068919578595,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "spiral",
+        "vortex",
+        "pinwheel"
+      ],
+      "glyphView": "plan",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "eye",
+          "type": "spheres",
+          "material": "light-white"
+        },
+        {
+          "name": "arm",
+          "type": "spiral-lights",
+          "material": "light-ion"
+        }
+      ],
+      "motions": [
+        "spin",
+        "pulse"
+      ],
+      "glb": "glb/spiral.glb",
+      "glyph": "glyphs/spiral.svg",
+      "bytes": 91768,
+      "sha256": "9b17e0a88e9fc46ca6ad75dc7f056eba958b1e825c217149d5f70527394dde4e",
+      "triangles": 10024,
+      "nodes": 41,
+      "channels": 37,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "jellyfish",
+      "name": "Jellyfish",
+      "family": "organic",
+      "nominalSizeM": 5,
+      "metresPerUnit": 3.014772419213004,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "jellyfish",
+        "tentacles"
+      ],
+      "glyphView": "side",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "head",
+          "type": "lathe",
+          "material": "ceramic"
+        },
+        {
+          "name": "tentacle",
+          "type": "tentacles",
+          "material": "ceramic"
+        }
+      ],
+      "motions": [
+        "sway",
+        "drift",
+        "bob",
+        "rock"
+      ],
+      "glb": "glb/jellyfish.glb",
+      "glyph": "glyphs/jellyfish.svg",
+      "bytes": 127864,
+      "sha256": "75d37fc02c2393200c746e3e6edcbc61115fa7050e7bc395e684bde8b051f530",
+      "triangles": 8800,
+      "nodes": 69,
+      "channels": 58,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "lander",
+      "name": "Lander on legs",
+      "family": "compound",
+      "nominalSizeM": 8,
+      "metresPerUnit": 4,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "landed",
+        "saucer with legs",
+        "disk"
+      ],
+      "glyphView": "side",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "hull",
+          "type": "lathe",
+          "material": "hull-silver"
+        },
+        {
+          "name": "dome",
+          "type": "lathe",
+          "material": "glass"
+        },
+        {
+          "name": "legs",
+          "type": "legs",
+          "material": "hull-silver"
+        },
+        {
+          "name": "mast",
+          "type": "cylinder",
+          "material": "hull-silver"
+        },
+        {
+          "name": "beacon",
+          "type": "point-lights",
+          "material": "light-magenta"
+        }
+      ],
+      "motions": [
+        "bob",
+        "pulse"
+      ],
+      "glb": "glb/lander.glb",
+      "glyph": "glyphs/lander.svg",
+      "bytes": 96076,
+      "sha256": "3c90239ea4c190a7ffa5c3a372ff8b483fbed617569542a9d3a81908b14967e8",
+      "triangles": 3988,
+      "nodes": 17,
+      "channels": 2,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    },
+    {
+      "id": "manta",
+      "name": "Manta",
+      "family": "extruded",
+      "nominalSizeM": 6,
+      "metresPerUnit": 2.950041427001965,
+      "loopSeconds": 12,
+      "samples": 121,
+      "reportedShapes": [
+        "manta",
+        "flying wing",
+        "bat"
+      ],
+      "glyphView": "plan",
+      "irOnly": false,
+      "parts": [
+        {
+          "name": "hull",
+          "type": "extrude",
+          "material": "matte-black"
+        },
+        {
+          "name": "vent",
+          "type": "point-lights",
+          "material": "light-magenta"
+        },
+        {
+          "name": "vent-ion",
+          "type": "point-lights",
+          "material": "light-ion"
+        }
+      ],
+      "motions": [
+        "rock",
+        "bob",
+        "pulse"
+      ],
+      "glb": "glb/manta.glb",
+      "glyph": "glyphs/manta.svg",
+      "bytes": 34192,
+      "sha256": "cc3219c45e59c558b655f95fb1312e978b4b243db679c5ee0bd21b70614f5e4f",
+      "triangles": 1136,
+      "nodes": 10,
+      "channels": 6,
+      "validation": {
+        "errors": 0,
+        "warnings": 0,
+        "infos": 0,
+        "hints": 0
+      }
+    }
+  ]
+}

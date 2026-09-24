@@ -1,0 +1,32 @@
+diff --git a/src/app/constructCatalog.js b/src/app/constructCatalog.js
+index 40ea465..045d432 100644
+--- a/src/app/constructCatalog.js
++++ b/src/app/constructCatalog.js
+@@ -23,6 +23,7 @@ import { createApplicationLocalAdsb } from './layers/localAdsb.js';
+ import { createApplicationAwareness } from './layers/militaryAwareness.js';
+ import { createApplicationFirms } from './layers/firms.js';
+ import { createApplicationEarthquakes } from './layers/earthquakes.js';
++import { createApplicationAnomalies } from './layers/anomalies.js';
+ import { createApplicationFirePerimeters } from './layers/perimeters.js';
+ import { createApplicationCables } from './layers/submarineCables.js';
+ import { createInfrastructureLayers } from '../data/infrastructure.js';
+@@ -144,6 +145,7 @@ export function createApplicationCatalog({
+           ...(resolveAsset ? { resolveAsset } : {}),
+         }),
+         createApplicationEarthquakes({ source: sources.earthquakes }),
++        createApplicationAnomalies(),
+         createApplicationFirePerimeters({
+           source: sources['fire-perimeters'],
+         }),
+diff --git a/src/data/layerState.js b/src/data/layerState.js
+index e559a4c..b74e91c 100644
+--- a/src/data/layerState.js
++++ b/src/data/layerState.js
+@@ -461,6 +461,7 @@ export const LAYER_STATE_REGISTRY = Object.freeze([
+     token: 'p',
+     disposition: 'enabled-only',
+   }),
++  Object.freeze({ id: 'anomalies', token: '3', disposition: 'enabled-only' }),
+   Object.freeze({
+     id: 'bhote-koshi-2026',
+     token: 'h',

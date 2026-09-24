@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "anomaly.v1",
+  "title": "Normalised UAP or UFO record",
+  "type": "object",
+  "required": ["id", "source", "date", "location", "craft_id", "grade", "licence", "attribution"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9-]{6,120}$" },
+    "source": { "enum": ["bluebook", "geipan", "pursue", "ukmod", "nuforc", "sample"] },
+    "source_ref": { "type": ["string", "null"], "description": "Archive identifier: NARA NAID, GEIPAN case number, PURSUE file id" },
+    "source_url": { "type": ["string", "null"] },
+    "licence": { "type": "string" },
+    "attribution": { "type": "string" },
+    "title": { "type": ["string", "null"], "maxLength": 120 },
+    "date": { "type": "object", "required": ["iso", "precision", "days"], "properties": {
+      "iso": { "type": "string" }, "precision": { "enum": ["day", "month", "year"] },
+      "days": { "type": "integer", "description": "Days since 1970-01-01, negative before 1970" } } },
+    "location": { "type": "object", "required": ["lat", "lon", "precision_km"], "properties": {
+      "lat": { "type": "number", "minimum": -90, "maximum": 90 }, "lon": { "type": "number", "minimum": -180, "maximum": 180 },
+      "precision_km": { "type": "number", "minimum": 0 }, "place": { "type": ["string", "null"] },
+      "country": { "type": ["string", "null"], "description": "ISO 3166-1 alpha-2" }, "geocoder": { "type": ["string", "null"] } } },
+    "shape_raw": { "type": ["string", "null"] },
+    "craft_id": { "type": "string" },
+    "duration_s": { "type": ["number", "null"] },
+    "objects": { "type": ["integer", "null"] },
+    "grade": { "type": "object", "required": ["status", "score"], "properties": {
+      "scheme": { "type": ["string", "null"] }, "value": { "type": ["string", "null"] },
+      "status": { "enum": ["explained", "insufficient", "contested", "unresolved"] },
+      "score": { "type": "number", "minimum": 0, "maximum": 1, "description": "How unexplained, 0 to 1; drives brightness" } } },
+    "explanation": { "type": ["string", "null"], "maxLength": 200 },
+    "summary": { "type": ["string", "null"], "maxLength": 400, "description": "Neutral summary in our own words; never copied narrative, never names" },
+    "media": { "type": "array", "items": { "type": "object", "required": ["type", "url"], "properties": {
+      "type": { "enum": ["video", "image", "document", "audio"] }, "url": { "type": "string" }, "title": { "type": ["string", "null"] } } } },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "hero": { "type": "boolean" },
+    "review": { "type": "boolean", "description": "Needs a human check before publication" },
+    "extraction": { "type": ["object", "null"], "properties": {
+      "method": { "enum": ["parser", "llm", "manual", "sample"] }, "model": { "type": ["string", "null"] }, "confidence": { "type": ["number", "null"] } } }
+  }
+}

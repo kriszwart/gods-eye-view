@@ -1,0 +1,23 @@
+{
+  "note": "Reported shape vocabulary (English and French) mapped to craft ids in the craft library. Longer phrases win. Unmatched reports fall back to the default.",
+  "default": "orb",
+  "terms": {
+    "flying saucer": "domed-disc", "flying disc": "domed-disc", "saucer": "domed-disc", "disk": "domed-disc", "disc": "domed-disc",
+    "double saucer": "lens-disc", "lens": "lens-disc", "oval": "lens-disc", "ellipse": "lens-disc",
+    "saturn": "ringed-disc", "ring": "torus", "donut": "torus", "doughnut": "torus",
+    "bell": "bell", "hat": "hat", "spinning top": "spinning-top", "top": "spinning-top",
+    "cone": "pyramid", "pyramid": "pyramid", "cigar": "cigar", "cylinder": "cigar", "rocket": "cigar", "ghost rocket": "cigar",
+    "tic tac": "tic-tac", "capsule": "tic-tac", "egg": "egg", "teardrop": "egg",
+    "light": "orb", "lights": "orb-swarm", "orb": "orb", "orbs": "orb-trio", "sphere": "orb", "ball": "orb", "circle": "orb", "star": "orb", "flash": "orb",
+    "fireball": "fireball", "meteor": "fireball", "green fireball": "fireball",
+    "triangle": "triangle", "delta": "triangle", "chevron": "boomerang", "boomerang": "boomerang", "v shape": "boomerang", "v shaped": "boomerang",
+    "crescent": "crescent", "half moon": "crescent", "tetrahedron": "tetrahedron", "diamond": "diamond", "rhombus": "diamond",
+    "rectangle": "slab", "rectangular": "slab", "square": "slab", "wedge": "wedge",
+    "formation": "light-v", "cluster": "orb-swarm", "swarm": "orb-swarm", "changing": "flaring-orb", "shape shifting": "flaring-orb",
+    "spiral": "spiral", "vortex": "spiral", "jellyfish": "jellyfish", "tentacles": "jellyfish", "manta": "manta", "flying wing": "manta",
+    "infrared only": "cold-pair", "landed": "lander", "legs": "lander",
+    "boule": "orb", "boule lumineuse": "orb", "sphere lumineuse": "orb", "lumiere": "orb", "point lumineux": "orb", "etoile": "orb",
+    "disque": "domed-disc", "soucoupe": "domed-disc", "ovale": "lens-disc", "cigare": "cigar", "boule de feu": "fireball",
+    "losange": "diamond", "rectangulaire": "slab", "anneau": "torus", "spirale": "spiral"
+  }
+}

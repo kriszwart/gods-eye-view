@@ -1,0 +1,123 @@
+/* Anomaly atlas: a calm, post-human observatory skin for God's Eye View.
+   Monochrome instruments on a void; colour is reserved for anomalies.
+   Load after foundation.css and add class="anomaly-atlas" to <html>.
+   Fonts: Martian Mono and IBM Plex Sans (add the Google Fonts link in index.html). */
+
+:root.anomaly-atlas {
+  --uap-void: #070812;
+  --uap-ink: #d9dce6;
+  --uap-dim: #7c8195;
+  --uap-hair: rgba(217, 220, 230, 0.16);
+  --uap-hair-strong: rgba(217, 220, 230, 0.32);
+  --uap-magenta: #ff2e9a;
+  --uap-violet: #7b5cff;
+  --uap-ion: #3fe0ff;
+  --uap-amber: #ffb547;
+  --uap-mono: 'Martian Mono', 'IBM Plex Mono', ui-monospace, monospace;
+  --uap-sans: 'IBM Plex Sans', system-ui, sans-serif;
+
+  /* Re-point GEV's own tokens so existing panels follow the atlas. */
+  --bg-dark: var(--uap-void);
+  --glass-bg: rgba(7, 8, 18, 0.88);
+  --glass-border: var(--uap-hair);
+  --glass-border-hover: var(--uap-hair-strong);
+  --accent: var(--uap-magenta);
+  --accent-dim: rgba(255, 46, 154, 0.14);
+  --accent-glow: rgba(255, 46, 154, 0.32);
+  --text-primary: var(--uap-ink);
+  --text-secondary: rgba(217, 220, 230, 0.62);
+  --text-dim: rgba(217, 220, 230, 0.36);
+  --menu-bg: #0d0f1c;
+  --font-mono: var(--uap-mono);
+  --font-sans: var(--uap-sans);
+  --panel-radius: 2px;
+  --btn-radius: 2px;
+}
+
+/* Hairline plates with registration corners instead of rounded glass cards. */
+.anomaly-atlas .uap-dossier {
+  position: absolute;
+  right: calc(24px + env(safe-area-inset-right, 0px));
+  top: calc(96px + env(safe-area-inset-top, 0px));
+  width: min(340px, calc(100vw - 48px));
+  padding: 20px;
+  background: var(--glass-bg);
+  color: var(--uap-ink);
+  font: 400 14px/1.55 var(--uap-sans);
+  z-index: 40;
+}
+.anomaly-atlas .uap-dossier::before,
+.anomaly-atlas .uap-dossier::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: solid var(--uap-hair-strong);
+}
+.anomaly-atlas .uap-dossier::before { top: 0; left: 0; border-width: 1px 0 0 1px; }
+.anomaly-atlas .uap-dossier::after { bottom: 0; right: 0; border-width: 0 1px 1px 0; }
+.anomaly-atlas .uap-dossier h2 { margin: 6px 0 12px; font: 400 21px/1.2 var(--uap-mono); letter-spacing: -0.01em; }
+.anomaly-atlas .uap-dossier .uap-code { margin: 0; font: 400 11px/1 var(--uap-mono); color: var(--uap-magenta); }
+.anomaly-atlas .uap-dossier .uap-glyph { width: 72px; height: 72px; color: var(--uap-ink); opacity: 0.9; }
+.anomaly-atlas .uap-dossier dl { display: grid; grid-template-columns: 92px 1fr; gap: 6px 12px; margin: 12px 0; }
+.anomaly-atlas .uap-dossier dt { color: var(--uap-dim); font: 400 11px/1.9 var(--uap-mono); }
+.anomaly-atlas .uap-dossier dd { margin: 0; }
+.anomaly-atlas .uap-dossier a { color: var(--uap-ion); }
+.anomaly-atlas .uap-dossier .uap-summary { color: rgba(217, 220, 230, 0.8); margin: 0; }
+.anomaly-atlas .uap-close { position: absolute; top: 12px; right: 14px; background: none; border: 0; color: var(--uap-dim); font: 400 12px var(--uap-mono); cursor: pointer; }
+
+/* Corona chronometer */
+.uap-chrono { position: absolute; inset: 0; pointer-events: none; z-index: 30; }
+.uap-chrono-svg { position: absolute; inset: 0; overflow: visible; }
+.uap-chrono .ring { fill: none; stroke: rgba(217, 220, 230, 0.28); stroke-width: 1; }
+.uap-chrono .tick { stroke: rgba(217, 220, 230, 0.28); stroke-width: 1; }
+.uap-chrono .tick.major { stroke: var(--uap-ink, #d9dce6); }
+.uap-chrono .label { fill: var(--uap-dim, #7c8195); font: 400 10px var(--uap-mono, monospace); }
+.uap-chrono .bar { stroke: rgba(123, 92, 255, 0.35); stroke-width: 2; }
+.uap-chrono .bar.on { stroke: url(#uap-spectrum); }
+.uap-chrono .needle line { stroke: var(--uap-ion, #3fe0ff); stroke-width: 1.5; }
+.uap-chrono .needle text { fill: var(--uap-ink, #d9dce6); font: 400 13px var(--uap-mono, monospace); }
+.uap-chrono .hit { fill: none; stroke: transparent; stroke-width: 44; pointer-events: stroke; cursor: grab; }
+.uap-chrono[data-layout='band'] .hit { fill: transparent; stroke: none; pointer-events: fill; }
+.uap-chrono-panel {
+  position: absolute;
+  left: calc(24px + env(safe-area-inset-left, 0px));
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  pointer-events: auto;
+  font: 400 12px var(--uap-mono, monospace);
+  color: var(--uap-dim, #7c8195);
+}
+.uap-chrono[data-layout='band'] .uap-chrono-panel { bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
+.uap-chrono-panel button { background: none; border: 0; border-bottom: 1px solid transparent; padding: 6px 0; color: inherit; font: inherit; cursor: pointer; }
+.uap-chrono-panel button:hover, .uap-chrono-panel [aria-checked='true'], .uap-chrono-panel [aria-pressed='true'] { color: var(--uap-ink, #d9dce6); }
+.uap-chrono-panel [aria-checked='true'] { border-image: linear-gradient(90deg, var(--uap-magenta), var(--uap-violet) 55%, var(--uap-ion)) 1; border-bottom-width: 2px; }
+.uap-slider { width: 1px; height: 1px; overflow: hidden; }
+.uap-slider:focus-visible { width: auto; height: auto; outline: 2px solid var(--uap-ink, #d9dce6); outline-offset: 4px; }
+.uap-slider:focus-visible::after { content: attr(aria-valuenow); }
+.uap-modes { display: flex; gap: 14px; }
+.uap-readout { margin: 0; color: var(--uap-ink, #d9dce6); }
+.uap-chrono :focus-visible { outline: 2px solid var(--uap-ink, #d9dce6); outline-offset: 3px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .uap-chrono * { transition: none !important; }
+}
+
+/* Legend: what brightness and hue mean */
+.anomaly-atlas .uap-legend {
+  position: absolute;
+  left: calc(24px + env(safe-area-inset-left, 0px));
+  top: calc(96px + env(safe-area-inset-top, 0px));
+  z-index: 35;
+  font: 400 12px/1.5 var(--uap-sans);
+  color: var(--uap-ink);
+  background: rgba(7, 8, 18, 0.72);
+  padding: 12px 14px;
+}
+.anomaly-atlas .uap-legend p { margin: 0 0 6px; color: var(--uap-dim); font: 400 11px var(--uap-mono); }
+.anomaly-atlas .uap-legend ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.anomaly-atlas .uap-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--c); margin-right: 8px; }
+.anomaly-atlas .uap-legend i.ring { background: none; border: 1.5px solid var(--uap-ion); width: 9px; height: 9px; }

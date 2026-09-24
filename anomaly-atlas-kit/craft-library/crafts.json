@@ -1,0 +1,2724 @@
+{
+  "schema": "anomaly-craft/1",
+  "notes": "Original, generic archetypes authored in normalised units (largest horizontal radius close to 1, Y up). The generator scales each craft to nominalSizeM, bakes a seamless idle loop and writes GLB, SVG glyph and manifest entries. None of these are traced from third-party artwork.",
+  "loopSeconds": 12,
+  "materials": {
+    "hull-silver": {
+      "baseColor": [
+        0.62,
+        0.64,
+        0.68,
+        1
+      ],
+      "metallic": 1.0,
+      "roughness": 0.3
+    },
+    "hull-dark": {
+      "baseColor": [
+        0.055,
+        0.06,
+        0.075,
+        1
+      ],
+      "metallic": 0.95,
+      "roughness": 0.28
+    },
+    "matte-black": {
+      "baseColor": [
+        0.018,
+        0.018,
+        0.022,
+        1
+      ],
+      "metallic": 0.2,
+      "roughness": 0.62
+    },
+    "ceramic": {
+      "baseColor": [
+        0.92,
+        0.93,
+        0.95,
+        1
+      ],
+      "metallic": 0.0,
+      "roughness": 0.3
+    },
+    "pearl": {
+      "baseColor": [
+        0.84,
+        0.83,
+        0.79,
+        1
+      ],
+      "metallic": 0.6,
+      "roughness": 0.24
+    },
+    "glass": {
+      "baseColor": [
+        0.6,
+        0.75,
+        1.0,
+        0.28
+      ],
+      "metallic": 0.0,
+      "roughness": 0.05,
+      "alpha": "BLEND",
+      "doubleSided": true
+    },
+    "light-magenta": {
+      "baseColor": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "emissive": [
+        1.0,
+        0.18,
+        0.6
+      ],
+      "metallic": 0,
+      "roughness": 1
+    },
+    "light-ion": {
+      "baseColor": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "emissive": [
+        0.25,
+        0.88,
+        1.0
+      ],
+      "metallic": 0,
+      "roughness": 1
+    },
+    "light-violet": {
+      "baseColor": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "emissive": [
+        0.48,
+        0.36,
+        1.0
+      ],
+      "metallic": 0,
+      "roughness": 1
+    },
+    "light-amber": {
+      "baseColor": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "emissive": [
+        1.0,
+        0.71,
+        0.28
+      ],
+      "metallic": 0,
+      "roughness": 1
+    },
+    "light-white": {
+      "baseColor": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "emissive": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "metallic": 0,
+      "roughness": 1
+    },
+    "light-verdant": {
+      "baseColor": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "emissive": [
+        0.42,
+        1.0,
+        0.58
+      ],
+      "metallic": 0,
+      "roughness": 1
+    },
+    "plasma": {
+      "baseColor": [
+        0,
+        0,
+        0,
+        0.55
+      ],
+      "emissive": [
+        0.48,
+        0.36,
+        1.0
+      ],
+      "metallic": 0,
+      "roughness": 1,
+      "alpha": "BLEND"
+    },
+    "flame": {
+      "baseColor": [
+        0,
+        0,
+        0,
+        0.7
+      ],
+      "emissive": [
+        1.0,
+        0.55,
+        0.2
+      ],
+      "metallic": 0,
+      "roughness": 1,
+      "alpha": "BLEND"
+    },
+    "ir-only": {
+      "baseColor": [
+        0.2,
+        0.2,
+        0.2,
+        0.0
+      ],
+      "metallic": 0,
+      "roughness": 1,
+      "alpha": "BLEND",
+      "irOnly": true
+    }
+  },
+  "crafts": [
+    {
+      "id": "domed-disc",
+      "name": "Domed disc",
+      "family": "revolved",
+      "nominalSizeM": 14,
+      "reportedShapes": [
+        "disk",
+        "disc",
+        "saucer",
+        "circle"
+      ],
+      "glyphView": "side",
+      "parts": [
+        {
+          "name": "hull",
+          "type": "lathe",
+          "material": "hull-silver",
+          "profile": [
+            [
+              0,
+              -0.16
+            ],
+            [
+              0.35,
+              -0.155
+            ],
+            [
+              0.7,
+              -0.12
+            ],
+            [
+              0.95,
+              -0.05
+            ],
+            [
+              1.0,
+              0
+            ],
+            [
+              0.95,
+              0.045
+            ],
+            [
+              0.62,
+              0.1
+            ],
+            [
+              0.45,
+              0.12
+            ],
+            [
+              0,
+              0.125
+            ]
+          ]
+        },
+        {
+          "name": "dome",
+          "type": "lathe",
+          "material": "glass",
+          "profile": [
+            [
+              0,
+              0.12
+            ],
+            [
+              0.44,
+              0.12
+            ],
+            [
+              0.42,
+              0.2
+            ],
+            [
+              0.36,
+              0.3
+            ],
+            [
+              0.25,
+              0.37
+            ],
+            [
+              0.12,
+              0.4
+            ],
+            [
+              0,
+              0.41
+            ]
+          ]
+        },
+        {
+          "name": "rim",
+          "type": "ring-lights",
+          "material": "light-magenta",
+          "count": 16,
+          "radius": 0.975,
+          "y": 0,
+          "size": 0.03
+        }
+      ],
+      "motion": {
+        "spin": {
+          "rev": 1
+        },
+        "bob": {
+          "amp": 0.04,
+          "cycles": 2
+        },
+        "precess": {
+          "deg": 4,
+          "cycles": 1
+        },
+        "pulse": [
+          {
+            "target": "rim",
+            "mode": "chase",
+            "cycles": 4,
+            "amount": 0.8
+          }
+        ]
+      }
+    },
+    {
+      "id": "lens-disc",
+      "name": "Lens",
+      "family": "revolved",
+      "nominalSizeM": 18,
+      "reportedShapes": [
+        "disk",
+        "oval",
+        "lens",
+        "double saucer"
+      ],
+      "glyphView": "side",
+      "parts": [
+        {
+          "name": "hull",
+          "type": "lathe",
+          "material": "hull-dark",
+          "profile": [
+            [
+              0,
+              -0.2
+            ],
+            [
+              0.4,
+              -0.17
+            ],
+            [
+              0.75,
+              -0.1
+            ],
+            [
+              0.98,
+              -0.02
+            ],
+            [
+              1.0,
+              0
+            ],
+            [
+              0.98,
+              0.02
+            ],
+            [
+              0.75,
+              0.1
+            ],
+            [
+              0.4,
+              0.17
+            ],
+            [
+              0,
+              0.2
+            ]
+          ]
+        },
+        {
+          "name": "rim-band",
+          "type": "torus",
+          "material": "light-ion",
+          "radius": 0.985,
+          "tube": 0.014,
+          "rotation": [
+            90,
+            0,
+            0
+          ]
+        }
+      ],
+      "motion": {
+        "spin": {
+          "rev": 2
+        },
+        "precess": {
+          "deg": 7,
+          "cycles": 1
+        },
+        "bob": {
+          "amp": 0.03,
+          "cycles": 3
+        },
+        "pulse": [
+          {
+            "target": "rim-band",
+            "mode": "sync",
+            "cycles": 6,
+            "amount": 0.2
+          }
+        ]
+      }
+    },
+    {
+      "id": "ringed-disc",
+      "name": "Ringed disc",
+      "family": "revolved",
+      "nominalSizeM": 16,
+      "reportedShapes": [
+        "saturn",
+        "sphere with ring",
+        "disk"
+      ],
+      "glyphView": "side",
+      "parts": [
+        {
+          "name": "core",
+          "type": "lathe",
+          "material": "hull-silver",
+          "profile": [
+            [
+              0,
+              -0.42
+            ],
+            [
+              0.2,
+              -0.4
+            ],
+            [
+              0.36,
+              -0.3
+            ],
+            [
+              0.46,
+              -0.14
+            ],
+            [
+              0.5,
+              0
+            ],
+            [
+              0.46,
+              0.14
+            ],
+            [
+              0.36,
+              0.3
+            ],
+            [
+              0.2,
+              0.4
+            ],
+            [
+              0,
+              0.42
+            ]
+          ]
+        },
+        {
+          "name": "ring",
+          "type": "lathe",
+          "material": "hull-dark",
+          "profile": [
+            [
+              0.45,
+              -0.025
+            ],
+            [
+              1.1,
+              -0.012
+            ],
+            [
+              1.15,
+              0
+            ],
+            [
+              1.1,
+              0.012
+            ],
+            [
+              0.45,
+              0.025
+            ]
+          ]
+        },
+        {
+          "name": "ring-lights",
+          "parent": "ring",
+          "type": "ring-lights",
+          "material": "light-violet",
+          "count": 24,
+          "radius": 1.1,
+          "y": 0,
+          "size": 0.022
+        }
+      ],
+      "motion": {
+        "spin": {
+          "rev": 1
+        },
+        "bob": {
+          "amp": 0.035,
+          "cycles": 2
+        },
+        "counter": [
+          {
+            "target": "ring",
+            "rev": -3
+          }
+        ],
+        "pulse": [
+          {
+            "target": "ring-lights",
+            "mode": "chase",
+            "cycles": 6,
+            "amount": 0.7
+          }
+        ]
+      }
+    },
+    {
+      "id": "bell",
+      "name": "Bell on three orbs",
+      "family": "revolved",
+      "nominalSizeM": 10,
+      "reportedShapes": [
+        "bell",
+        "saucer with landing gear",
+        "disk"
+      ],
+      "glyphView": "side",
+      "parts": [
+        {
+          "name": "hull",
+          "type": "lathe",
+          "material": "hull-silver",
+          "profile": [
+            [
+              0,
+              -0.1
+            ],
+            [
+              0.85,
+              -0.1
+            ],
+            [
+              0.95,
+              -0.06
+            ],
+            [
+              0.97,
+              -0.02
+            ],
+            [
+              0.9,
+              0.02
+            ],
+            [
+              0.62,
+              0.08
+            ],
+            [
+              0.56,
+              0.3
+            ],
+            [
+              0.48,
+              0.45
+            ],
+            [
+              0.3,
+              0.55
+            ],
+            [
+              0.32,
+              0.62
+            ],
+            [
+              0.18,
+              0.7
+            ],
+            [
+              0,
+              0.72
+            ]
+          ]
+        },
+        {
+          "name": "portholes",
+          "type": "ring-lights",
+          "material": "light-amber",
+          "count": 8,
+          "radius": 0.555,
+          "y": 0.2,
+          "size": 0.05
+        },
+        {
+          "name": "gear",
+          "type": "spheres",
+          "material": "hull-silver",
+          "size": 0.15,
+          "positions": [
+            [
+              0.45,
+              -0.22,
+              0
+            ],
+            [
+              -0.225,
+              -0.22,
+              0.39
+            ],
+            [
+              -0.225,
+              -0.22,
+              -0.39
+            ]
+          ]
+        }
+      ],
+      "motion": {
+        "spin": {
+          "rev": 1
+        },
+        "bob": {
+          "amp": 0.03,
+          "cycles": 2
+        },
+        "pulse": [
+          {
+            "target": "portholes",
+            "mode": "sync",
+            "cycles": 3,
+            "amount": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "id": "hat",
+      "name": "Brimmed hat",
+      "family": "revolved",
+      "nominalSizeM": 12,
+      "reportedShapes": [
+        "hat",
+        "disk",
+        "cone"
+      ],
+      "glyphView": "side",
+      "parts": [
+        {
+          "name": "hull",
+          "type": "lathe",
+          "material": "hull-dark",
+          "profile": [
+            [
+              0,
+              -0.08
+            ],
+            [
+              1.0,
+              -0.08
+            ],
+            [
+              1.02,
+              -0.05
+            ],
+            [
+              1.0,
+              -0.02
+            ],
+            [
+              0.55,
+              0
+            ],
+            [
+              0.5,
+              0.05
+            ],
+            [
+              0.45,
+              0.35
+            ],
+            [
+              0.42,
+              0.4
+            ],
+            [
+              0,
+              0.42
+            ]
+          ]
+        },
+        {
+          "name": "core",
+          "type": "spheres",
+          "material": "light-magenta",
+          "size": 0.12,
+          "positions": [
+            [
+              0,
+              -0.09,
+              0
+            ]
+          ]
+        }
+      ],
+      "motion": {
+        "bob": {
+          "amp": 0.05,
+          "cycles": 1
+        },
+        "rock": [
+          {
+            "axis": "x",
+            "deg": 5,
+            "cycles": 2
+          }
+        ],
+        "pulse": [
+          {
+            "target": "core",
+            "mode": "sync",
+            "cycles": 2,
+            "amount": 0.5
+          }
+        ]
+      }
+    },
+    {
+      "id": "spinning-top",
+      "name": "Spinning top",
+      "family": "revolved",
+      "nominalSizeM": 8,
+      "reportedShapes": [
+        "top",
+        "diamond",
+        "cone"
+      ],
+      "glyphView": "side",
+      "parts": [
+        {
+          "name": "hull",
+          "type": "lathe",
+          "material": "hull-dark",
+          "profile": [
+            [
+              0,
+              -0.9
+            ],
+            [
+              0.1,
+              -0.75
+            ],
+            [
+              0.45,
+              -0.25
+            ],
+            [
+              1.0,
+              -0.02
+            ],
+            [
+              1.02,
+              0
+            ],
+            [
+              1.0,
+              0.02
+            ],
+            [
+              0.45,
+              0.25
+            ],
+            [
+              0.1,
+              0.75
+            ],
+            [
+              0,
+              0.9
+            ]
+          ]
+        },
+        {
+          "name": "tip",
+          "type": "spheres",
+          "material": "light-ion",
+          "size": 0.06,
+          "positions": [
+            [
+              0,
+              0.93,
+              0
+            ]
+          ]
+        }
+      ],
+      "motion": {
+        "spin": {
+          "rev": 6
+        },
+        "precess": {
+          "deg": 12,
+          "cycles": 2
+        },
+        "bob": {
+          "amp": 0.05,
+          "cycles": 1
+        },
+        "pulse": [
+          {
+            "target": "tip",
+            "mode": "sync",
+            "cycles": 6,
+            "amount": 0.5
+          }
+        ]
+      }
+    },
+    {
+      "id": "pyramid",
+      "name": "Four-sided cone",
+      "family": "revolved",
+      "nominalSizeM": 20,
+      "reportedShapes": [
+        "cone",
+        "pyramid",
+        "triangle"
+      ],
+      "glyphView": "side",
+      "parts": [
+        {
+          "name": "hull",
+          "type": "lathe",
+          "material": "hull-dark",
+          "segments": 4,
+          "flat": true,
+          "profile": [
+            [
+              0,
+              -0.5
+            ],
+            [
+              1.0,
+              -0.5
+            ],
+            [
+              0.02,
+              0.9
+            ],
+            [
+              0,
+              0.9
+            ]
+          ]
+        },
+        {
+          "name": "corners",
+          "type": "point-lights",
+          "material": "light-magenta",
+          "size": 0.05,
+          "positions": [
+            [
+              0,
+              -0.53,
+              0.94
+            ],
+            [
+              0.94,
+              -0.53,
+              0
+            ],
+            [
+              0,
+              -0.53,
+              -0.94
+            ],
+            [
+              -0.94,
+              -0.53,
+              0
+            ]
+          ]
+        }
+      ],
+      "motion": {
+        "spin": {
+          "rev": 1
+        },
+        "bob": {
+          "amp": 0.03,
+          "cycles": 1
+        },
+        "pulse": [
+          {
+            "target": "corners",
+            "mode": "chase",
+            "cycles": 3,
+            "amount": 0.7
+          }
+        ]
+      }
+    },
+    {
+      "id": "cigar",
+      "name": "Cigar with plume",
+      "family": "revolved",
+      "nominalSizeM": 60,
+      "reportedShapes": [
+        "cigar",
+        "cylinder",
+        "rocket",
+        "ghost rocket"
+      ],
+      "glyphView": "side",
+      "parts": [
+        {
+          "name": "hull",
+          "type": "lathe",
+          "material": "hull-silver",
+          "rotation": [
+            0,
+            0,
+            -90
+          ],
+          "profile": [
+            [
+              0,
+              -1.0
+            ],
+            [
+              0.08,
+              -0.97
+            ],
+            [
+              0.14,
+              -0.88
+            ],
+            [
+              0.17,
+              -0.6
+            ],
+            [
+              0.18,
+              0
+            ],
+            [
+              0.17,
+              0.6
+            ],
+            [
+              0.14,
+              0.88
+            ],
+            [
+              0.08,
+              0.97
+            ],
+            [
+              0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "name": "portholes",
+          "type": "point-lights",
+          "material": "light-amber",
+          "size": 0.025,
+          "positions": [
+            [
+              -0.5,
+              0.02,
+              0.172
+            ],
+            [
+              -0.3,
+              0.02,
+              0.176
+            ],
+            [
+              -0.1,
+              0.02,
+              0.179
+            ],
+            [
+              0.1,
+              0.02,
+              0.179
+            ],
+            [
+              0.3,
+              0.02,
+              0.176
+            ],
+            [
+              0.5,
+              0.02,
+              0.172
+            ]
+          ]
+        },
+        {
+          "name": "plume",
+          "type": "plume",
+          "material": "plasma",
+          "count": 16,
+          "origin": [
+            -1.02,
+            0,
+            0
+          ],
+          "direction": [
+            -1,
+            0,
+            0
+          ],
+          "length": 0.9,
+          "size": 0.075,
+          "spread": 0.04
+        }
+      ],
+      "motion": {
+        "drift": {
+          "axis": "x",
+          "amp": 0.06,
+          "cycles": 1
+        },
+        "bob": {
+          "amp": 0.02,
+          "cycles": 2
+        },
+        "plume": [
+          {
+            "target": "plume",
+            "speed": 6
+          }
+        ],
+        "pulse": [
+          {
+            "target": "portholes",
+            "mode": "chase",
+            "cycles": 2,
+            "amount": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "id": "tic-tac",
+      "name": "Tic Tac",
+      "family": "revolved",
+      "nominalSizeM": 12,
+      "reportedShapes": [
+        "tic tac",
+        "capsule",
+        "cylinder",
+        "oval"
+      ],
+      "glyphView": "side",
+      "parts": [
+        {
+          "name": "hull",
+          "type": "lathe",
+          "material": "ceramic",
+          "rotation": [
+            0,
+            0,
+            -90
+          ],
+          "profile": [
+            [
+              0,
+              -1.0
+            ],
+            [
+              0.12,
+              -0.97
+            ],
+            [
+              0.22,
+              -0.9
+            ],
+            [
+              0.3,
+              -0.75
+            ],
+            [
+              0.32,
+              -0.5
+            ],
+            [
+              0.32,
+              0.5
+            ],
+            [
+              0.3,
+              0.75
+            ],
+            [
+              0.22,
+              0.9
+            ],
+            [
+              0.12,
+              0.97
+            ],
+            [
+              0,
+              1.0
+            ]
+          ]
+        }
+      ],
+      "motion": {
+        "stretch": {
+          "axis": "x",
+          "amount": 0.25,
+          "cycles": 2
+        },
+        "bob": {
+          "amp": 0.05,
+          "cycles": 1
+        },
+        "rock": [
+          {
+            "axis": "y",
+            "deg": 8,
+            "cycles": 3
+          }
+        ]
+      }
+    },
+    {
+      "id": "egg",
+      "name": "Egg",
+      "family": "revolved",
+      "nominalSizeM": 5,
+      "reportedShapes": [
+        "egg",
+        "oval",
+        "teardrop"
+      ],
+      "glyphView": "side",
+      "parts": [
+        {
+          "name": "hull",
+          "type": "lathe",
+          "material": "pearl",
+          "profile": [
+            [
+              0,
+              -1.0
+            ],
+            [
+              0.3,
+              -0.95
+            ],
+            [
+              0.52,
+              -0.8
+            ],
+            [
+              0.66,
+              -0.55
+            ],
+            [
+              0.72,
+              -0.2
+            ],
+            [
+              0.7,
+              0.15
+            ],
+            [
+              0.6,
+              0.5
+            ],
+            [
+              0.42,
+              0.8
+            ],
+            [
+              0.22,
+              0.96
+            ],
+            [
+              0,
+              1.0
+            ]
+          ]
+        }
+      ],
+      "motion": {
+        "spin": {
+          "rev": 1
+        },
+        "rock": [
+          {
+            "axis": "z",
+            "deg": 12,
+            "cycles": 1
+          }
+        ],
+        "bob": {
+          "amp": 0.04,
+          "cycles": 1
+        }
+      }
+    },
+    {
+      "id": "torus",
+      "name": "Ring",
+      "family": "primitive",
+      "nominalSizeM": 10,
+      "reportedShapes": [
+        "ring",
+        "donut",
+        "circle"
+      ],
+      "glyphView": "side",
+      "parts": [
+        {
+          "name": "hull",
+          "type": "torus",
+          "material": "hull-dark",
+          "radius": 0.75,
+          "tube": 0.25,
+          "rotation": [
+            90,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "inner",
+          "type": "ring-lights",
+          "material": "light-ion",
+          "count": 12,
+          "radius": 0.49,
+          "y": 0,
+          "size": 0.035
+        }
+      ],
+      "motion": {
+        "tumble": {
+          "x": 1,
+          "y": 2,
+          "z": 0
+        },
+        "pulse": [
+          {
+            "target": "inner",
+            "mode": "chase",
+            "cycles": 4,
+            "amount": 0.6
+          }
+        ]
+      }
+    },
+    {
+      "id": "orb",
+      "name": "Orb",
+      "family": "light",
+      "nominalSizeM": 2,
+      "reportedShapes": [
+        "light",
+        "orb",
+        "sphere",
+        "ball",
+        "star",
+        "flash",
+        "circle"
+      ],
+      "glyphView": "side",
+      "parts": [
+        {
+          "name": "core",
+          "type": "spheres",
+          "material": "light-ion",
+          "size": 0.6,
+          "positions": [
+            [
+              0,
+              0,
+              0
+            ]
+          ]
+        },
+        {
+          "name": "halo",
+          "type": "torus",
+          "material": "light-violet",
+          "radius": 0.95,
+          "tube": 0.012,
+          "rotation": [
+            90,
+            0,
+            0
+          ]
+        }
+      ],
+      "motion": {
+        "bob": {
+          "amp": 0.1,
+          "cycles": 2
+        },
+        "precess": {
+          "deg": 25,
+          "cycles": 1
+        },
+        "pulse": [
+          {
+            "target": "core",
+            "mode": "sync",
+            "cycles": 4,
+            "amount": 0.18
+          }
+        ]
+      }
+    },
+    {
+      "id": "orb-trio",
+      "name": "Orb trio",
+      "family": "light",
+      "nominalSizeM": 12,
+      "reportedShapes": [
+        "foo fighter",
+        "orbs",
+        "lights"
+      ],
+      "glyphView": "plan",
+      "parts": [
+        {
+          "name": "orbit",
+          "type": "group"
+        },
+        {
+          "name": "orbs",
+          "parent": "orbit",
+          "type": "ring-lights",
+          "material": "light-amber",
+          "count": 3,
+          "radius": 0.7,
+          "y": 0,
+          "size": 0.22
+        }
+      ],
+      "motion": {
+        "counter": [
+          {
+            "target": "orbit",
+            "rev": 1
+          }
+        ],
+        "rock": [
+          {
+            "axis": "x",
+            "deg": 25,
+            "cycles": 1
+          }
+        ],
+        "bob": {
+          "amp": 0.05,
+          "cycles": 2
+        },
+        "pulse": [
+          {
+            "target": "orbs",
+            "mode": "chase",
+            "cycles": 6,
+            "amount": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "id": "orb-swarm",
+      "name": "Orb swarm",
+      "family": "light",
+      "nominalSizeM": 30,
+      "reportedShapes": [
+        "formation",
+        "cluster",
+        "lights"
+      ],
+      "glyphView": "side",
+      "parts": [
+        {
+          "name": "swarm",
+          "type": "scatter-lights",
+          "material": "light-white",
+          "count": 11,
+          "radius": 0.85,
+          "size": 0.07,
+          "seed": 7
+        }
+      ],
+      "motion": {
+        "wander": [
+          {
+            "target": "swarm",
+            "amp": 0.14
+          }
+        ],
+        "pulse": [
+          {
+            "target": "swarm",
+            "mode": "chase",
+            "cycles": 3,
+            "amount": 0.4
+          }
+        ]
+      }
+    },
+    {
+      "id": "flaring-orb",
+      "name": "Flaring orb",
+      "family": "light",
+      "nominalSizeM": 4,
+      "reportedShapes": [
+        "changing",
+        "fireball",
+        "orb",
+        "light"
+      ],
+      "glyphView": "side",
+      "parts": [
+        {
+          "name": "core",
+          "type": "spheres",
+          "material": "light-magenta",
+          "size": 0.35,
+          "positions": [
+            [
+              0,
+              0,
+              0
+            ]
+          ]
+        },
+        {
+          "name": "shell",
+          "type": "spheres",
+          "material": "plasma",
+          "size": 0.8,
+          "positions": [
+            [
+              0,
+              0,
+              0
+            ]
+          ]
+        }
+      ],
+      "motion": {
+        "jump": {
+          "count": 6,
+          "radius": 0.6,
+          "seed": 3
+        },
+        "vibrate": {
+          "axis": "x",
+          "amp": 0.04,
+          "cycles": 24
+        },
+        "pulse": [
+          {
+            "target": "shell",
+            "mode": "sync",
+            "cycles": 6,
+            "amount": 0.6
+          },
+          {
+            "target": "core",
+            "mode": "sync",
+            "cycles": 12,
+            "amount": 0.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "cold-pair",
+      "name": "Cold pair (infrared only)",
+      "family": "light",
+      "nominalSizeM": 3,
+      "reportedShapes": [
+        "infrared",
+        "radar only",
+        "invisible"
+      ],
+      "glyphView": "side",
+      "irOnly": true,
+      "parts": [
+        {
+          "name": "pair",
+          "type": "spheres",
+          "material": "ir-only",
+          "size": 0.35,
+          "positions": [
+            [
+              -0.6,
+              0,
+              0
+            ],
+            [
+              0.6,
+              0,
+              0
+            ]
+          ]
+        }
+      ],
+      "motion": {
+        "vibrate": {
+          "axis": "x",
+          "amp": 0.03,
+          "cycles": 36
+        },
+        "bob": {
+          "amp": 0.02,
+          "cycles": 1
+        }
+      }
+    },
+    {
+      "id": "triangle",
+      "name": "Black triangle",
+      "family": "extruded",
+      "nominalSizeM": 100,
+      "reportedShapes": [
+        "triangle",
+        "chevron",
+        "delta"
+      ],
+      "glyphView": "plan",
+      "parts": [
+        {
+          "name": "hull",
+          "type": "extrude",
+          "material": "matte-black",
+          "outline": [
+            [
+              0,
+              -1.0
+            ],
+            [
+              -0.95,
+              0.62
+            ],
+            [
+              0.95,
+              0.62
+            ]
+          ],
+          "depth": 0.1,
+          "bevel": 0.02
+        },
+        {
+          "name": "corner",
+          "type": "point-lights",
+          "material": "light-white",
+          "size": 0.07,
+          "positions": [
+            [
+              0,
+              -0.075,
+              -0.8
+            ],
+            [
+              -0.76,
+              -0.075,
+              0.5
+            ],
+            [
+              0.76,
+              -0.075,
+              0.5
+            ]
+          ]
+        },
+        {
+          "name": "centre",
+          "type": "point-lights",
+          "material": "light-magenta",
+          "size": 0.11,
+          "positions": [
+            [
+              0,
+              -0.075,
+              0.08
+            ]
+          ]
+        }
+      ],
+      "motion": {
+        "spin": {
+          "rev": 1
+        },
+        "bob": {
+          "amp": 0.02,
+          "cycles": 1
+        },
+        "pulse": [
+          {
+            "target": "corner",
+            "mode": "sync",
+            "cycles": 3,
+            "amount": 0.3
+          },
+          {
+            "target": "centre",
+            "mode": "sync",
+            "cycles": 1,
+            "amount": 0.5
+          }
+        ]
+      }
+    },
+    {
+      "id": "boomerang",
+      "name": "Boomerang",
+      "family": "extruded",
+      "nominalSizeM": 70,
+      "reportedShapes": [
+        "boomerang",
+        "chevron",
+        "v-shape",
+        "v"
+      ],
+      "glyphView": "plan",
+      "parts": [
+        {
+          "name": "hull",
+          "type": "extrude",
+          "material": "hull-dark",
+          "outline": [
+            [
+              0,
+              -0.55
+            ],
+            [
+              1.05,
+              0.35
+            ],
+            [
+              0.9,
+              0.5
+            ],
+            [
+              0,
+              -0.2
+            ],
+            [
+              -0.9,
+              0.5
+            ],
+            [
+              -1.05,
+              0.35
+            ]
+          ],
+          "depth": 0.08,
+          "bevel": 0.015
+        },
+        {
+          "name": "edge",
+          "type": "point-lights",
+          "material": "light-amber",
+          "size": 0.04,
+          "positions": [
+            [
+              0,
+              -0.05,
+              -0.5
+            ],
+            [
+              0.24,
+              -0.05,
+              -0.29
+            ],
+            [
+              0.48,
+              -0.05,
+              -0.08
+            ],
+            [
+              0.72,
+              -0.05,
+              0.13
+            ],
+            [
+              0.96,
+              -0.05,
+              0.34
+            ],
+            [
+              -0.24,
+              -0.05,
+              -0.29
+            ],
+            [
+              -0.48,
+              -0.05,
+              -0.08
+            ],
+            [
+              -0.72,
+              -0.05,
+              0.13
+            ],
+            [
+              -0.96,
+              -0.05,
+              0.34
+            ]
+          ],
+          "order": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            1,
+            2,
+            3,
+            4
+          ]
+        }
+      ],
+      "motion": {
+        "drift": {
+          "axis": "z",
+          "amp": 0.05,
+          "cycles": 1
+        },
+        "rock": [
+          {
+            "axis": "z",
+            "deg": 6,
+            "cycles": 2
+          }
+        ],
+        "pulse": [
+          {
+            "target": "edge",
+            "mode": "chase",
+            "cycles": 3,
+            "amount": 0.6
+          }
+        ]
+      }
+    },
+    {
+      "id": "crescent",
+      "name": "Crescent",
+      "family": "extruded",
+      "nominalSizeM": 15,
+      "reportedShapes": [
+        "crescent",
+        "half-moon",
+        "boomerang"
+      ],
+      "glyphView": "plan",
+      "parts": [
+        {
+          "name": "hull",
+          "type": "extrude",
+          "material": "hull-silver",
+          "outline": {
+            "crescent": 0.38,
+            "steps": 40
+          },
+          "depth": 0.07,
+          "bevel": 0.012
+        }
+      ],
+      "motion": {
+        "skip": {
+          "amp": 0.12,
+          "cycles": 3
+        },
+        "rock": [
+          {
+            "axis": "z",
+            "deg": 10,
+            "cycles": 3
+          }
+        ]
+      }
+    },
+    {
+      "id": "tetrahedron",
+      "name": "Tumbling tetrahedron",
+      "family": "primitive",
+      "nominalSizeM": 2,
+      "reportedShapes": [
+        "tetrahedron",
+        "pyramid",
+        "triangle"
+      ],
+      "glyphView": "side",
+      "parts": [
+        {
+          "name": "frame",
+          "type": "group",
+          "rotation": [
+            -54.7356,
+            -45,
+            0
+          ]
+        },
+        {
+          "name": "hull",
+          "parent": "frame",
+          "type": "tetra",
+          "material": "matte-black",
+          "radius": 1.0
+        },
+        {
+          "name": "strobe",
+          "parent": "frame",
+          "type": "point-lights",
+          "material": "light-white",
+          "size": 0.08,
+          "positions": [
+            [
+              0.62,
+              0.62,
+              0.62
+            ],
+            [
+              -0.62,
+              -0.62,
+              0.62
+            ],
+            [
+              -0.62,
+              0.62,
+              -0.62
+            ],
+            [
+              0.62,
+              -0.62,
+              -0.62
+            ]
+          ]
+        }
+      ],
+      "motion": {
+        "tumble": {
+          "x": 2,
+          "y": 3,
+          "z": 1
+        },
+        "pulse": [
+          {
+            "target": "strobe",
+            "mode": "strobe",
+            "cycles": 24,
+            "duty": 0.15
+          }
+        ]
+      }
+    },
+    {
+      "id": "diamond",
+      "name": "Diamond",
+      "family": "primitive",
+      "nominalSizeM": 20,
+      "reportedShapes": [
+        "diamond",
+        "rhombus"
+      ],
+      "glyphView": "side",
+      "parts": [
+        {
+          "name": "hull",
+          "type": "octa",
+          "material": "hull-dark",
+          "radius": 1.0,
+          "scale": [
+            1,
+            0.45,
+            1
+          ]
+        },
+        {
+          "name": "corners",
+          "type": "point-lights",
+          "material": "light-magenta",
+          "size": 0.06,
+          "positions": [
+            [
+              1.0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              1.0
+            ],
+            [
+              -1.0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              -1.0
+            ]
+          ]
+        }
+      ],
+      "motion": {
+        "spin": {
+          "rev": 1
+        },
+        "bob": {
+          "amp": 0.04,
+          "cycles": 2
+        },
+        "pulse": [
+          {
+            "target": "corners",
+            "mode": "chase",
+            "cycles": 4,
+            "amount": 0.6
+          }
+        ]
+      }
+    },
+    {
+      "id": "slab",
+      "name": "Slab",
+      "family": "primitive",
+      "nominalSizeM": 30,
+      "reportedShapes": [
+        "rectangle",
+        "square",
+        "box",
+        "slab"
+      ],
+      "glyphView": "plan",
+      "parts": [
+        {
+          "name": "hull",
+          "type": "box",
+          "material": "matte-black",
+          "size": [
+            1.6,
+            0.14,
+            1.0
+          ]
+        },
+        {
+          "name": "edge",
+          "type": "point-lights",
+          "material": "light-ion",
+          "size": 0.035,
+          "positions": [
+            [
+              0.78,
+              -0.085,
+              0.48
+            ],
+            [
+              0,
+              -0.085,
+              0.48
+            ],
+            [
+              -0.78,
+              -0.085,
+              0.48
+            ],
+            [
+              0.78,
+              -0.085,
+              -0.48
+            ],
+            [
+              0,
+              -0.085,
+              -0.48
+            ],
+            [
+              -0.78,
+              -0.085,
+              -0.48
+            ]
+          ]
+        }
+      ],
+      "motion": {
+        "drift": {
+          "axis": "z",
+          "amp": 0.05,
+          "cycles": 1
+        },
+        "rock": [
+          {
+            "axis": "x",
+            "deg": 3,
+            "cycles": 1
+          }
+        ],
+        "pulse": [
+          {
+            "target": "edge",
+            "mode": "sync",
+            "cycles": 2,
+            "amount": 0.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "wedge",
+      "name": "Wedge",
+      "family": "extruded",
+      "nominalSizeM": 25,
+      "reportedShapes": [
+        "wedge",
+        "triangle",
+        "doorstop"
+      ],
+      "glyphView": "side",
+      "parts": [
+        {
+          "name": "hull",
+          "type": "side-extrude",
+          "material": "hull-dark",
+          "profile": [
+            [
+              -1.0,
+              -0.12
+            ],
+            [
+              1.0,
+              -0.12
+            ],
+            [
+              1.0,
+              -0.05
+            ],
+            [
+              -0.6,
+              0.28
+            ],
+            [
+              -1.0,
+              0.28
+            ]
+          ],
+          "width": 1.1,
+          "bevel": 0.015
+        },
+        {
+          "name": "rear",
+          "type": "point-lights",
+          "material": "light-magenta",
+          "size": 0.05,
+          "positions": [
+            [
+              -1.03,
+              0.1,
+              0.3
+            ],
+            [
+              -1.03,
+              0.1,
+              -0.3
+            ]
+          ]
+        }
+      ],
+      "motion": {
+        "spin": {
+          "rev": 1
+        },
+        "bob": {
+          "amp": 0.02,
+          "cycles": 2
+        },
+        "pulse": [
+          {
+            "target": "rear",
+            "mode": "sync",
+            "cycles": 4,
+            "amount": 0.4
+          }
+        ]
+      }
+    },
+    {
+      "id": "light-v",
+      "name": "Lights in a V",
+      "family": "formation",
+      "nominalSizeM": 300,
+      "reportedShapes": [
+        "formation",
+        "v-shape",
+        "lights"
+      ],
+      "glyphView": "plan",
+      "parts": [
+        {
+          "name": "v",
+          "type": "point-lights",
+          "material": "light-amber",
+          "size": 0.035,
+          "positions": [
+            [
+              0,
+              0,
+              -0.5
+            ],
+            [
+              0.33,
+              0,
+              -0.17
+            ],
+            [
+              0.66,
+              0,
+              0.17
+            ],
+            [
+              1.0,
+              0,
+              0.5
+            ],
+            [
+              -0.33,
+              0,
+              -0.17
+            ],
+            [
+              -0.66,
+              0,
+              0.17
+            ],
+            [
+              -1.0,
+              0,
+              0.5
+            ]
+          ],
+          "order": [
+            0,
+            1,
+            2,
+            3,
+            1,
+            2,
+            3
+          ]
+        }
+      ],
+      "motion": {
+        "drift": {
+          "axis": "z",
+          "amp": 0.04,
+          "cycles": 1
+        },
+        "rock": [
+          {
+            "axis": "y",
+            "deg": 5,
+            "cycles": 1
+          }
+        ],
+        "pulse": [
+          {
+            "target": "v",
+            "mode": "chase",
+            "cycles": 2,
+            "amount": 0.5
+          }
+        ]
+      }
+    },
+    {
+      "id": "light-arc",
+      "name": "Arc of lights",
+      "family": "formation",
+      "nominalSizeM": 200,
+      "reportedShapes": [
+        "formation",
+        "arc",
+        "lights",
+        "string of lights"
+      ],
+      "glyphView": "plan",
+      "parts": [
+        {
+          "name": "arc",
+          "type": "arc-lights",
+          "material": "light-white",
+          "count": 11,
+          "radius": 1.0,
+          "startDeg": 200,
+          "endDeg": 340,
+          "size": 0.03
+        }
+      ],
+      "motion": {
+        "drift": {
+          "axis": "x",
+          "amp": 0.06,
+          "cycles": 1
+        },
+        "bob": {
+          "amp": 0.02,
+          "cycles": 2
+        },
+        "pulse": [
+          {
+            "target": "arc",
+            "mode": "chase",
+            "cycles": 3,
+            "amount": 0.4
+          }
+        ]
+      }
+    },
+    {
+      "id": "fireball",
+      "name": "Fireball",
+      "family": "light",
+      "nominalSizeM": 5,
+      "reportedShapes": [
+        "fireball",
+        "meteor",
+        "green fireball"
+      ],
+      "glyphView": "side",
+      "parts": [
+        {
+          "name": "core",
+          "type": "spheres",
+          "material": "light-verdant",
+          "size": 0.35,
+          "positions": [
+            [
+              -0.4,
+              0,
+              0
+            ]
+          ]
+        },
+        {
+          "name": "trail",
+          "type": "plume",
+          "material": "flame",
+          "count": 18,
+          "origin": [
+            -0.1,
+            0,
+            0
+          ],
+          "direction": [
+            1,
+            0,
+            0
+          ],
+          "length": 1.4,
+          "size": 0.14,
+          "spread": 0.06
+        }
+      ],
+      "motion": {
+        "drift": {
+          "axis": "x",
+          "amp": 0.08,
+          "cycles": 1
+        },
+        "plume": [
+          {
+            "target": "trail",
+            "speed": 8
+          }
+        ],
+        "pulse": [
+          {
+            "target": "core",
+            "mode": "sync",
+            "cycles": 12,
+            "amount": 0.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "spiral",
+      "name": "Spiral",
+      "family": "light",
+      "nominalSizeM": 40,
+      "reportedShapes": [
+        "spiral",
+        "vortex",
+        "pinwheel"
+      ],
+      "glyphView": "plan",
+      "parts": [
+        {
+          "name": "eye",
+          "type": "spheres",
+          "material": "light-white",
+          "size": 0.1,
+          "positions": [
+            [
+              0,
+              0,
+              0
+            ]
+          ]
+        },
+        {
+          "name": "arm",
+          "type": "spiral-lights",
+          "material": "light-ion",
+          "arms": 2,
+          "perArm": 18,
+          "turns": 1.25,
+          "radius": 1.0,
+          "size": 0.035
+        }
+      ],
+      "motion": {
+        "spin": {
+          "rev": 3
+        },
+        "pulse": [
+          {
+            "target": "arm",
+            "mode": "chase",
+            "cycles": 6,
+            "amount": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "id": "jellyfish",
+      "name": "Jellyfish",
+      "family": "organic",
+      "nominalSizeM": 5,
+      "reportedShapes": [
+        "jellyfish",
+        "tentacles"
+      ],
+      "glyphView": "side",
+      "parts": [
+        {
+          "name": "head",
+          "type": "lathe",
+          "material": "ceramic",
+          "profile": [
+            [
+              0,
+              -0.05
+            ],
+            [
+              0.5,
+              -0.05
+            ],
+            [
+              0.52,
+              0.05
+            ],
+            [
+              0.45,
+              0.3
+            ],
+            [
+              0.3,
+              0.45
+            ],
+            [
+              0,
+              0.52
+            ]
+          ]
+        },
+        {
+          "name": "tentacle",
+          "type": "tentacles",
+          "material": "ceramic",
+          "count": 8,
+          "radius": 0.36,
+          "y": -0.07,
+          "segments": 7,
+          "segLength": 0.15,
+          "size": 0.035
+        }
+      ],
+      "motion": {
+        "sway": [
+          {
+            "target": "tentacle",
+            "amp": 0.09,
+            "cycles": 2,
+            "wave": 1.1
+          }
+        ],
+        "drift": {
+          "axis": "x",
+          "amp": 0.1,
+          "cycles": 1
+        },
+        "bob": {
+          "amp": 0.06,
+          "cycles": 2
+        },
+        "rock": [
+          {
+            "axis": "z",
+            "deg": 6,
+            "cycles": 2
+          }
+        ]
+      }
+    },
+    {
+      "id": "lander",
+      "name": "Lander on legs",
+      "family": "compound",
+      "nominalSizeM": 8,
+      "reportedShapes": [
+        "landed",
+        "saucer with legs",
+        "disk"
+      ],
+      "glyphView": "side",
+      "parts": [
+        {
+          "name": "hull",
+          "type": "lathe",
+          "material": "hull-silver",
+          "profile": [
+            [
+              0,
+              -0.16
+            ],
+            [
+              0.35,
+              -0.155
+            ],
+            [
+              0.7,
+              -0.12
+            ],
+            [
+              0.95,
+              -0.05
+            ],
+            [
+              1.0,
+              0
+            ],
+            [
+              0.95,
+              0.045
+            ],
+            [
+              0.62,
+              0.1
+            ],
+            [
+              0.45,
+              0.12
+            ],
+            [
+              0,
+              0.125
+            ]
+          ]
+        },
+        {
+          "name": "dome",
+          "type": "lathe",
+          "material": "glass",
+          "profile": [
+            [
+              0,
+              0.12
+            ],
+            [
+              0.44,
+              0.12
+            ],
+            [
+              0.42,
+              0.2
+            ],
+            [
+              0.36,
+              0.3
+            ],
+            [
+              0.25,
+              0.37
+            ],
+            [
+              0.12,
+              0.4
+            ],
+            [
+              0,
+              0.41
+            ]
+          ]
+        },
+        {
+          "name": "legs",
+          "type": "legs",
+          "material": "hull-silver",
+          "count": 3,
+          "radius": 0.5,
+          "top": -0.12,
+          "bottom": -0.62,
+          "splay": 0.25,
+          "thickness": 0.03,
+          "foot": 0.06
+        },
+        {
+          "name": "mast",
+          "type": "cylinder",
+          "material": "hull-silver",
+          "radiusTop": 0.012,
+          "radiusBottom": 0.012,
+          "height": 0.22,
+          "position": [
+            0,
+            0.52,
+            0
+          ]
+        },
+        {
+          "name": "beacon",
+          "type": "point-lights",
+          "material": "light-magenta",
+          "size": 0.04,
+          "positions": [
+            [
+              0,
+              0.65,
+              0
+            ]
+          ]
+        }
+      ],
+      "motion": {
+        "bob": {
+          "amp": 0.015,
+          "cycles": 1
+        },
+        "pulse": [
+          {
+            "target": "beacon",
+            "mode": "strobe",
+            "cycles": 6,
+            "duty": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "id": "manta",
+      "name": "Manta",
+      "family": "extruded",
+      "nominalSizeM": 6,
+      "reportedShapes": [
+        "manta",
+        "flying wing",
+        "bat"
+      ],
+      "glyphView": "plan",
+      "parts": [
+        {
+          "name": "hull",
+          "type": "extrude",
+          "material": "matte-black",
+          "outline": [
+            [
+              0,
+              -0.55
+            ],
+            [
+              0.35,
+              -0.35
+            ],
+            [
+              1.0,
+              0.15
+            ],
+            [
+              0.85,
+              0.3
+            ],
+            [
+              0.25,
+              0.2
+            ],
+            [
+              0.12,
+              0.55
+            ],
+            [
+              -0.12,
+              0.55
+            ],
+            [
+              -0.25,
+              0.2
+            ],
+            [
+              -0.85,
+              0.3
+            ],
+            [
+              -1.0,
+              0.15
+            ],
+            [
+              -0.35,
+              -0.35
+            ]
+          ],
+          "depth": 0.06,
+          "bevel": 0.012
+        },
+        {
+          "name": "vent",
+          "type": "point-lights",
+          "material": "light-magenta",
+          "size": 0.04,
+          "positions": [
+            [
+              0.62,
+              0.0,
+              0.25
+            ],
+            [
+              -0.62,
+              0.0,
+              0.25
+            ]
+          ]
+        },
+        {
+          "name": "vent-ion",
+          "type": "point-lights",
+          "material": "light-ion",
+          "size": 0.035,
+          "positions": [
+            [
+              0.3,
+              0.0,
+              0.2
+            ],
+            [
+              -0.3,
+              0.0,
+              0.2
+            ]
+          ]
+        }
+      ],
+      "motion": {
+        "rock": [
+          {
+            "axis": "x",
+            "deg": 25,
+            "cycles": 1
+          },
+          {
+            "axis": "z",
+            "deg": 20,
+            "cycles": 2
+          }
+        ],
+        "bob": {
+          "amp": 0.06,
+          "cycles": 1
+        },
+        "pulse": [
+          {
+            "target": "vent",
+            "mode": "sync",
+            "cycles": 4,
+            "amount": 0.5
+          },
+          {
+            "target": "vent-ion",
+            "mode": "sync",
+            "cycles": 6,
+            "amount": 0.5
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "anomaly-craft-library",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Procedural UFO and UAP archetype library: JSON definitions compiled to animated glTF (.glb) models, SVG glyphs and a manifest.",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "node generate.mjs",
+    "validate": "node validate.mjs",
+    "preview": "node build-preview.mjs"
+  },
+  "dependencies": {
+    "@gltf-transform/core": "^4.1.0",
+    "d3-contour": "^4.0.2",
+    "d3-geo": "^3.1.1",
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "gltf-validator": "^2.0.0-dev.3.10"
+  }
+}

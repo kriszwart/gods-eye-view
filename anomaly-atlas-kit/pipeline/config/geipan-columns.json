@@ -1,0 +1,9 @@
+{
+  "note": "Guesses until someone inspects the real export. Run: node src/adapters/geipan.mjs --inspect, then list the true header names first in each array.",
+  "id": ["cas_numero", "numero", "id_cas", "numero_cas"],
+  "date": ["cas_date", "date_observation", "date_obs", "date"],
+  "commune": ["cas_commune", "commune", "lieu"],
+  "departement": ["cas_dpt", "departement", "dpt", "code_departement"],
+  "classification": ["cas_classification", "classification", "classe"],
+  "summary": ["cas_resume", "resume", "description"]
+}

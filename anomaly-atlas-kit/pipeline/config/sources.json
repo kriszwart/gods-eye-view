@@ -1,0 +1,48 @@
+{
+  "note": "Checked 24 September 2026. Re-check terms before each public release.",
+  "bluebook": {
+    "label": "Project Blue Book",
+    "publisher": "US National Archives (NARA)",
+    "series": "Sanitized Version of Project Blue Book Case Files on Sightings of Unidentified Flying Objects, 1947 to 1969 (NAID 597821)",
+    "metadata": "https://catalog.archives.gov/medialz/bulk-downloads/uaps/JSON/catalog-export-597821.json",
+    "access": "Download the JSON metadata only. It lists every digital object; fetch just the first page (the record card) of each case file. The full image zips run to hundreds of gigabytes, so avoid them.",
+    "licence": "US federal record, generally public domain. Attribute NARA.",
+    "attribution": "Project Blue Book case files, US National Archives (NAID 597821)",
+    "scale": "12,618 sightings, 701 concluded unidentified",
+    "quirks": "Scans are online out of chronological order. Witness names are already removed in the sanitised series."
+  },
+  "geipan": {
+    "label": "GEIPAN",
+    "publisher": "CNES (French space agency)",
+    "access": "CSV downloads from geipan.fr (cases and testimonies). Download by hand into local_data/raw/geipan/ and read the data dictionary before mapping columns.",
+    "licence": "Published open data; confirm the reuse notice on geipan.fr before redistribution and attribute GEIPAN/CNES.",
+    "attribution": "GEIPAN, CNES",
+    "scale": "3,208 cases at 22 April 2025: A 860, B 1,245, C 1,000, D 102",
+    "grades": "A identified, B probably identified, C insufficient data, D unidentified after investigation"
+  },
+  "pursue": {
+    "label": "PURSUE (US Department of War)",
+    "publisher": "US Department of War, war.gov/UFO",
+    "access": "Six releases so far (8 May, 22 May, 12 June, 10 July, 7 August, 18 September 2026), roughly 447 files. The site blocks automated clients, so download release bundles in a normal browser into local_data/raw/pursue/<release>/.",
+    "licence": "US government work, generally public domain. Check each file for third-party material before republishing media.",
+    "attribution": "PURSUE release files, US Department of War"
+  },
+  "ukmod": {
+    "label": "UK Ministry of Defence UFO files",
+    "publisher": "The National Archives (UK)",
+    "access": "Files in the DEFE 24 and DEFE 31 series; about 209 files, 52,000 pages and 11,000 reports up to 2009. Download PDFs from TNA Discovery into local_data/raw/ukmod/.",
+    "licence": "Crown copyright; reuse under the Open Government Licence where TNA marks it so. Attribute The National Archives.",
+    "attribution": "Ministry of Defence UFO files, The National Archives (UK)"
+  },
+  "nuforc": {
+    "label": "NUFORC",
+    "enabled": false,
+    "access": "Only with written permission from NUFORC (support@nuforc.org). Their terms, updated 19 August 2026, forbid redistribution in any format and forbid downloading third-party copies, which covers the Kaggle, Maven Analytics and CORGIS sets (all derived from the same 2014 scrape).",
+    "licence": "Proprietary. Use only under the licence NUFORC grants, and store that licence alongside the data."
+  },
+  "sample": {
+    "label": "Illustrative sample",
+    "attribution": "Kit sample cases; verify against primary sources",
+    "licence": "Kit sample, not for publication until verified"
+  }
+}

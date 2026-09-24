@@ -1,0 +1,23 @@
+{
+  "name": "anomaly-atlas-pipeline",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Builds the UAP and UFO dataset for the Anomaly atlas globe from public archives: normalise, geocode, redact, extract, merge.",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "sample": "node src/build-dataset.mjs --sample --out out",
+    "build": "node src/build-dataset.mjs --out out",
+    "geipan": "node src/adapters/geipan.mjs",
+    "bluebook:index": "node src/adapters/bluebook.mjs index",
+    "bluebook:requests": "node src/adapters/bluebook.mjs requests",
+    "bluebook:ingest": "node src/adapters/bluebook.mjs ingest",
+    "pursue:requests": "node src/adapters/pursue.mjs requests",
+    "pursue:ingest": "node src/adapters/pursue.mjs ingest",
+    "ukmod:requests": "node src/adapters/ukmod.mjs requests",
+    "ukmod:ingest": "node src/adapters/ukmod.mjs ingest",
+    "nuforc": "node src/adapters/nuforc-licensed.mjs",
+    "batch": "node src/extract/batch.mjs"
+  }
+}

@@ -1,5 +1,15 @@
 # Changelog
 
+- Anomaly atlas phase 0 baseline at ce671ce (24 September 2026, Node
+  24.14.0, npm 10.9.8, keyless): `npm run doctor` reports ready with the
+  keyless map, flight and terrain paths; the app boots at
+  http://localhost:4173 with Esri imagery and no keys in `.env`;
+  `npm run build` passes in 3.7 s (chunk-size warnings only);
+  `npm test` passes 5,043 of 5,044 with 1 skipped and 0 failures;
+  `npm run check:boundaries` passes; `npm run test:track` against the dev
+  server passes 109 of 109. No known failures. The anomaly atlas kit and
+  project CLAUDE.md are committed unchanged.
+
 - Region scopes in voice analyst queries ("in the Gulf of Mexico", "over
   the Alps") work again in the dev server: the bundled Natural Earth and
   neighborhood packs are fetched as JSON in the browser

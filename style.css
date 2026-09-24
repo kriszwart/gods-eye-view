@@ -22,4 +22,5 @@
 @import './src/ui/styles/provider-settings.css';
 
 @import './src/ui/styles/weather.css';
+@import './src/ui/styles/anomaly-atlas.css';
 @import './src/ui/styles/cyber.css';

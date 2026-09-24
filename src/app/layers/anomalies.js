@@ -15,7 +15,7 @@ import {
 export function createApplicationAnomalies(options = {}) {
   const base =
     options.assetBase || `${import.meta.env?.BASE_URL ?? '/'}anomalies/`;
-  return createAnomaliesLayer({
+  const layer = createAnomaliesLayer({
     source: options.source || createAnomalySource({ baseUrl: base }),
     overlayHost,
     picking: { registerPickOwner, unregisterPickOwner },
@@ -27,4 +27,34 @@ export function createApplicationAnomalies(options = {}) {
     assetBase: base,
     ...options,
   });
+  // The infrared style is a document-level attribute, not layer state, so
+  // watch it and forward it to the layer's infrared-only craft. Guarded for
+  // the unit test environment, which constructs the catalogue without a DOM.
+  const hasDom =
+    typeof document !== 'undefined' && typeof MutationObserver !== 'undefined';
+  const syncInfrared = () =>
+    layer.setInfrared(document.documentElement.dataset.gevStyle === 'infrared');
+  const observer = hasDom ? new MutationObserver(syncInfrared) : null;
+  if (observer) {
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-gev-style'],
+    });
+    syncInfrared();
+    // The style can change while the layer is off, so re-apply on init and enable.
+    for (const method of ['init', 'enable']) {
+      const original = layer[method];
+      layer[method] = (...args) => {
+        const result = original.apply(layer, args);
+        syncInfrared();
+        return result;
+      };
+    }
+  }
+  const destroy = layer.destroy;
+  layer.destroy = (...args) => {
+    observer?.disconnect();
+    return destroy.apply(layer, args);
+  };
+  return layer;
 }

@@ -191,6 +191,18 @@ try {
   check('focusCase opens the dossier', dossier.open === true);
   check('Escape closes the dossier', dossier.closed === true);
 
+  const ir = await page.evaluate(async () => {
+    const { application } = await import(
+      document.querySelector('script[type="module"][src*="/src/main.js"]').src
+    );
+    window.__godsEyeView.styleManager.setStyle('infrared');
+    await new Promise((r) => setTimeout(r, 600));
+    const on = document.documentElement.dataset.gevStyle === 'infrared';
+    window.__godsEyeView.styleManager.setStyle('normal');
+    return on;
+  });
+  check('infrared style reaches the layer', ir === true);
+
   check(
     'no page errors during the interactive pass',
     pageErrors.length === 0,

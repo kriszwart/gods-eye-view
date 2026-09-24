@@ -850,5 +850,6 @@
   "src/styles/spectral.js",
   "src/styles/radar.js",
   "src/styles/infrared.js",
-  "src/ui/styles/anomaly-atlas.css"
+  "src/ui/styles/anomaly-atlas.css",
+  "scripts/qa-anomalies.mjs"
 ]

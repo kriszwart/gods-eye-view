@@ -1,5 +1,27 @@
 # Changelog
 
+- Anomaly atlas phase 1: the anomalies layer is live with the 24-case
+  illustrative sample. The layer registers in the catalogue with share
+  token 3 (30 layers, registry at 29), owns its picks through the pick
+  registry so anomaly clicks no longer read as empty space to the
+  tracking layers, and holds continuous rendering through the render
+  governor only while hero craft or arrival pulses animate. Hero cases
+  carry ambient labels on the shared world overlay. The atlas stylesheet
+  loads ahead of the Cyber skin, Martian Mono and IBM Plex Sans join the
+  font link and the document root carries the anomaly-atlas class.
+  Acceptance proven by `node scripts/qa-anomalies.mjs` (registration,
+  24 points, chronometer ring and band layouts, arrow keys and Play,
+  dossier open and Escape close, token 3 share restore), plus
+  qa-layer-panel, qa-perf, qa-cockpit-plates, qa-visual-input,
+  qa-label-readability, qa-map-source-tray, test:track (109 passing)
+  and the standard build, unit and boundary gates. Screenshots at 1440
+  and 390 px in `qa-shots/anomalies/`. Known follow-ups for phase 2:
+  the app is dark-only so no light-theme screenshots exist yet, the
+  chronometer band overlaps the attribution and command dock on narrow
+  screens, every sample row is hero-flagged (so the render hold is
+  active whenever the layer is on) and tour and pulse density still
+  need a live-globe pass.
+
 - Anomaly atlas phase 0 baseline at ce671ce (24 September 2026, Node
   24.14.0, npm 10.9.8, keyless): `npm run doctor` reports ready with the
   keyless map, flight and terrain paths; the app boots at

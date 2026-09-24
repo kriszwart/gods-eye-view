@@ -857,5 +857,8 @@
   "src/layers/ancientSites/model.js",
   "src/layers/ancientSites/records.js",
   "src/layers/ancientSites/source.js",
-  "src/layers/ancientSites/records.test.mjs"
+  "src/layers/ancientSites/records.test.mjs",
+  "src/layers/ancientSites/rendering.js",
+  "src/layers/ancientSites/index.js",
+  "src/app/layers/ancientSites.js"
 ]

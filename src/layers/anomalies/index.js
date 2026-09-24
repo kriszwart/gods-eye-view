@@ -50,6 +50,7 @@ function earthDisc(viewer) {
 export function createAnomaliesLayer({
   source,
   overlayHost,
+  picking,
   assetBase = '/anomalies/',
   container,
   atmosphere = true,
@@ -237,6 +238,13 @@ export function createAnomaliesLayer({
           if (id) openDossier(id);
         }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
       }
+      picking?.registerPickOwner?.(
+        ANOMALY_LAYER_ID,
+        (pickedId) =>
+          enabled &&
+          typeof pickedId === 'string' &&
+          pickedId.startsWith('anomaly:'),
+      );
       refreshTime();
     },
 
@@ -244,6 +252,7 @@ export function createAnomaliesLayer({
       request?.abort();
       request = null;
       enabled = false;
+      picking?.unregisterPickOwner?.(ANOMALY_LAYER_ID);
       chrono?.setVisible(false);
       stopTour();
       if (legend) legend.hidden = true;

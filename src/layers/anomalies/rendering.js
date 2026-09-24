@@ -146,7 +146,7 @@ export function createAnomalyRenderer(
         [faded, false],
       ]) {
         collection(map, r.year).add({
-          id: { anomalyId: r.id },
+          id: { id: `anomaly:${r.id}`, anomalyId: r.id },
           position,
           pixelSize: pointSize(r, { current }),
           color: new Cesium.Color(red, green, blue, pointAlpha(r, { current })),
@@ -183,7 +183,7 @@ export function createAnomalyRenderer(
           minimumPixelSize: 56,
           maximumScale: 40000,
           customShader: state.infrared ? infrared : spectral,
-          id: { anomalyId: r.id },
+          id: { id: `anomaly:${r.id}`, anomalyId: r.id },
         });
         model.readyEvent.addEventListener(() =>
           model.activeAnimations.addAll({

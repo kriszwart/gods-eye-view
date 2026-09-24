@@ -851,5 +851,7 @@
   "src/styles/radar.js",
   "src/styles/infrared.js",
   "src/ui/styles/anomaly-atlas.css",
-  "scripts/qa-anomalies.mjs"
+  "scripts/qa-anomalies.mjs",
+  "src/app/phenomenaMode.js",
+  "src/app/phenomenaMode.test.mjs"
 ]

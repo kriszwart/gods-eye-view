@@ -78,6 +78,7 @@ export function createAnomaliesLayer({
   let tourToken = 0;
   let tourBtn = null;
   let activeStatuses = null;
+  let togglePhenomenaMode = null;
 
   const visibleCount = () =>
     rows.filter(
@@ -257,8 +258,21 @@ export function createAnomaliesLayer({
         });
         btn.setAttribute('aria-pressed', 'true');
       }
+      const phenomenaBtn = chrono.addAction('Phenomena mode', (btn) => {
+        if (typeof togglePhenomenaMode !== 'function') return;
+        btn.setAttribute('aria-pressed', String(togglePhenomenaMode()));
+      });
+      phenomenaBtn.setAttribute('aria-pressed', 'false');
       overlayHost?.setVisible?.(ANOMALY_LAYER_ID, false);
       console.log('[Data:Anomalies] Initialized');
+    },
+
+    /** The shell supplies the Phenomena mode toggle; the layer only exposes the button. */
+    attachShellServices(services) {
+      togglePhenomenaMode =
+        typeof services?.togglePhenomenaMode === 'function'
+          ? services.togglePhenomenaMode
+          : null;
     },
 
     enable() {

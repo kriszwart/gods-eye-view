@@ -9,6 +9,7 @@ import {
   routeWorldFocusRequest,
 } from '../worldFocus.js';
 import { registerNavigationAuthorityListener } from '../navigationPolicy.js';
+import { createPhenomenaMode } from '../app/phenomenaMode.js';
 /** Own manager subscriptions and the camera-entry events that outlive controls. */
 export class LayerBindings {
   constructor({
@@ -34,6 +35,7 @@ export class LayerBindings {
     this._dataManager = null;
     this._directionsShellModule = null;
     this._weatherShellModules = [];
+    this._anomaliesShellModule = null;
     this._cctvRequestFocusHandler = null;
     this._removeCctvRequestFocusListener = null;
     this._worldRequestFocusHandler = null;
@@ -139,6 +141,39 @@ export class LayerBindings {
     }
   }
 
+  /**
+   * Give the anomalies layer a Phenomena mode toggle. The mode itself is
+   * built here, against the data manager; the layer only wires a button to
+   * the callback so it never reaches across a package boundary for it.
+   */
+  _connectAnomaliesShell() {
+    if (!this._dataManager) {
+      this._anomaliesShellModule?.attachShellServices?.(null);
+      this._anomaliesShellModule = null;
+      return;
+    }
+    const anomalies = this._dataManager.layers?.get('anomalies')?.module;
+    if (this._anomaliesShellModule !== anomalies) {
+      this._anomaliesShellModule?.attachShellServices?.(null);
+      this._anomaliesShellModule = null;
+    }
+    if (typeof anomalies?.attachShellServices !== 'function') return;
+    this._anomaliesShellModule = anomalies;
+    const manager = this._dataManager;
+    const mode = createPhenomenaMode({
+      layerIds: [...manager.layers.keys()],
+      isEnabled: (id) => manager.isEnabled(id),
+      setEnabled: (id, on) => manager.setEnabled(id, on, { origin: 'user' }),
+      keep: ['anomalies', 'ancient-sites'],
+    });
+    anomalies.attachShellServices({
+      togglePhenomenaMode: () => {
+        mode.active ? mode.exit() : mode.enter();
+        return mode.active;
+      },
+    });
+  }
+
   _persistAwarenessSelection(event, cleared = false) {
     if (!this._dataManager) return;
     const origin = String(event?.detail?.origin || 'programmatic');
@@ -236,6 +271,7 @@ export class LayerBindings {
     this._radioControls.connect();
     this._connectDirectionsCamera();
     this._connectWeatherCamera();
+    this._connectAnomaliesShell();
     if (!this._awarenessSelectedHandler) {
       this._awarenessSelectedHandler = (event) =>
         this._persistAwarenessSelection(event, false);
@@ -288,5 +324,6 @@ export class LayerBindings {
     this._directionsShellModule = null;
     this._dataManager = null;
     this._connectWeatherCamera();
+    this._connectAnomaliesShell();
   }
 }

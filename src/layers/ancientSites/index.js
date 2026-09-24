@@ -54,7 +54,7 @@ export function createAncientSitesLayer({
       </dl>
       ${row.debated ? `<p class="uap-debated">Debated: ${escapeHtml(row.debated)}</p>` : ''}
       <p class="uap-summary">${escapeHtml(row.summary)}</p>
-      ${row.source_url ? `<p class="uap-source"><a href="${escapeHtml(row.source_url)}" target="_blank" rel="noopener noreferrer">Open source</a></p>` : ''}
+      ${row.source_url ? `<p class="uap-source"><a href="${escapeHtml(row.source_url)}" target="_blank" rel="noopener noreferrer">Open record</a></p>` : ''}
       ${row.attribution ? `<p class="uap-attribution">${escapeHtml(row.attribution)}</p>` : ''}`;
     dossier.hidden = false;
     dossier.querySelector('.uap-close').focus();

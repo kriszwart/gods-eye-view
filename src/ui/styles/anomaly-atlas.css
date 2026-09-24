@@ -47,7 +47,13 @@
   background: var(--glass-bg);
   color: var(--uap-ink);
   font: 400 14px/1.55 var(--uap-sans);
-  z-index: 40;
+  /* Clear the right rail (#right-context-rail and its DISPLAY, CCTV and
+     CONTEXT plates sit at z-index 110, the top of the documented panels
+     band 100-139 in foundation.css). Sit just above that band, still
+     below the voice pill (150) and every genuinely modal overlay:
+     first-run launcher (175), key-setup (190), toast and the Cesium
+     credit lightbox (200), clean-view-exit (300), loading screen (1000). */
+  z-index: 140;
 }
 .anomaly-atlas .uap-dossier::before,
 .anomaly-atlas .uap-dossier::after {

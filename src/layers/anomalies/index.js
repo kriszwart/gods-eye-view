@@ -1,5 +1,12 @@
 import * as Cesium from 'cesium';
-import { ANOMALY_LAYER_ID, YEAR_MIN, YEAR_MAX, inWindow, mapAnalystRecord, describeYear } from './model.js';
+import {
+  ANOMALY_LAYER_ID,
+  YEAR_MIN,
+  YEAR_MAX,
+  inWindow,
+  mapAnalystRecord,
+  describeYear,
+} from './model.js';
 import { yearHistogram } from './records.js';
 import { createAnomalyRenderer } from './rendering.js';
 import { createChronometer } from './chronometer.js';
@@ -8,7 +15,8 @@ export * from './model.js';
 export { normalizeAnomalySnapshot, yearHistogram } from './records.js';
 export { createAnomalySource } from './source.js';
 
-const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
+const escapeHtml = (s) =>
+  String(s ?? '').replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
 /** Project the Earth's disc into window space so the dial can wrap it. */
 function earthDisc(viewer) {
@@ -17,20 +25,37 @@ function earthDisc(viewer) {
   const d = Cesium.Cartesian3.magnitude(scene.camera.positionWC);
   const R = Cesium.Ellipsoid.WGS84.maximumRadius;
   if (!(d > R * 1.02)) return null;
-  const toWindow = Cesium.SceneTransforms.worldToWindowCoordinates || Cesium.SceneTransforms.wgs84ToWindowCoordinates;
+  const toWindow =
+    Cesium.SceneTransforms.worldToWindowCoordinates ||
+    Cesium.SceneTransforms.wgs84ToWindowCoordinates;
   const c = toWindow(scene, Cesium.Cartesian3.ZERO);
   const fovy = scene.camera.frustum.fovy;
   if (!c || !Number.isFinite(fovy)) return null;
-  const r = (Math.tan(Math.asin(R / d)) / Math.tan(fovy / 2)) * (canvas.clientHeight / 2);
-  return { cx: c.x, cy: c.y, r, width: canvas.clientWidth, height: canvas.clientHeight };
+  const r =
+    (Math.tan(Math.asin(R / d)) / Math.tan(fovy / 2)) *
+    (canvas.clientHeight / 2);
+  return {
+    cx: c.x,
+    cy: c.y,
+    r,
+    width: canvas.clientWidth,
+    height: canvas.clientHeight,
+  };
 }
 
 /**
  * UAP and UFO sightings with a radial time dial, animated hero craft and a
  * case dossier. Implements the standard GEV layer contract.
  */
-export function createAnomaliesLayer({ source, overlayHost, assetBase = '/anomalies/', container, atmosphere = true } = {}) {
-  if (typeof source?.getSnapshot !== 'function') throw new TypeError('Anomalies require a snapshot source');
+export function createAnomaliesLayer({
+  source,
+  overlayHost,
+  assetBase = '/anomalies/',
+  container,
+  atmosphere = true,
+} = {}) {
+  if (typeof source?.getSnapshot !== 'function')
+    throw new TypeError('Anomalies require a snapshot source');
   let viewer = null;
   let renderer = null;
   let chrono = null;
@@ -50,7 +75,8 @@ export function createAnomaliesLayer({ source, overlayHost, assetBase = '/anomal
   let tourToken = 0;
   let tourBtn = null;
 
-  const visibleCount = () => rows.filter((r) => inWindow(r, chrono?.year, chrono?.mode)).length;
+  const visibleCount = () =>
+    rows.filter((r) => inWindow(r, chrono?.year, chrono?.mode)).length;
   const refreshTime = () => {
     if (!renderer || !chrono) return;
     renderer.apply({ visible: enabled, year: chrono.year, mode: chrono.mode });
@@ -63,10 +89,15 @@ export function createAnomaliesLayer({ source, overlayHost, assetBase = '/anomal
     if (!chrono || !viewer) return;
     const disc = earthDisc(viewer);
     const canvas = viewer.scene.canvas;
-    const key = disc ? `${disc.cx | 0},${disc.cy | 0},${disc.r | 0}` : `band${canvas.clientWidth}x${canvas.clientHeight}`;
+    const key = disc
+      ? `${disc.cx | 0},${disc.cy | 0},${disc.r | 0}`
+      : `band${canvas.clientWidth}x${canvas.clientHeight}`;
     if (key === lastLayout) return;
     lastLayout = key;
-    chrono.layout(disc, { width: canvas.clientWidth, height: canvas.clientHeight });
+    chrono.layout(disc, {
+      width: canvas.clientWidth,
+      height: canvas.clientHeight,
+    });
   };
 
   async function openDossier(id) {
@@ -103,7 +134,9 @@ export function createAnomaliesLayer({ source, overlayHost, assetBase = '/anomal
   }
   /** Fly through hero cases in date order, setting the dial and opening each dossier. */
   async function playTour() {
-    const heroes = rows.filter((r) => r.hero).sort((a, b) => a.timeMs - b.timeMs);
+    const heroes = rows
+      .filter((r) => r.hero)
+      .sort((a, b) => a.timeMs - b.timeMs);
     if (!heroes.length || !viewer) return;
     const token = (tourToken = Date.now());
     if (tourBtn) tourBtn.textContent = 'Stop tour';
@@ -111,12 +144,22 @@ export function createAnomaliesLayer({ source, overlayHost, assetBase = '/anomal
       if (tourToken !== token || !viewer) return;
       chrono.setYear(r.year);
       await new Promise((resolve) =>
-        viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(r.lon, r.lat, 0), 15000), {
-          offset: new Cesium.HeadingPitchRange(Cesium.Math.toRadians(20), Cesium.Math.toRadians(-32), 120000),
-          duration: 3.2,
-          complete: resolve,
-          cancel: resolve,
-        }),
+        viewer.camera.flyToBoundingSphere(
+          new Cesium.BoundingSphere(
+            Cesium.Cartesian3.fromDegrees(r.lon, r.lat, 0),
+            15000,
+          ),
+          {
+            offset: new Cesium.HeadingPitchRange(
+              Cesium.Math.toRadians(20),
+              Cesium.Math.toRadians(-32),
+              120000,
+            ),
+            duration: 3.2,
+            complete: resolve,
+            cancel: resolve,
+          },
+        ),
       );
       if (tourToken !== token) return;
       await openDossier(r.id);
@@ -149,8 +192,14 @@ export function createAnomaliesLayer({ source, overlayHost, assetBase = '/anomal
       dossier.className = 'uap-dossier';
       dossier.hidden = true;
       dossier.setAttribute('aria-label', 'Case dossier');
-      dossier.addEventListener('click', (e) => e.target.closest('.uap-close') && (dossier.hidden = true));
-      dossier.addEventListener('keydown', (e) => e.key === 'Escape' && (dossier.hidden = true));
+      dossier.addEventListener(
+        'click',
+        (e) => e.target.closest('.uap-close') && (dossier.hidden = true),
+      );
+      dossier.addEventListener(
+        'keydown',
+        (e) => e.key === 'Escape' && (dossier.hidden = true),
+      );
       host.appendChild(dossier);
       legend = document.createElement('div');
       legend.className = 'uap-legend';
@@ -165,7 +214,9 @@ export function createAnomaliesLayer({ source, overlayHost, assetBase = '/anomal
           <li><i class="ring"></i>Hero case with craft</li>
         </ul>`;
       host.appendChild(legend);
-      tourBtn = chrono.addAction('Tour hero cases', () => (tourToken ? stopTour() : playTour()));
+      tourBtn = chrono.addAction('Tour hero cases', () =>
+        tourToken ? stopTour() : playTour(),
+      );
       overlayHost?.setVisible?.(ANOMALY_LAYER_ID, false);
       console.log('[Data:Anomalies] Initialized');
     },
@@ -174,7 +225,8 @@ export function createAnomaliesLayer({ source, overlayHost, assetBase = '/anomal
       enabled = true;
       chrono?.setVisible(true);
       if (legend) legend.hidden = false;
-      if (atmosphere && !restoreAtmosphere) restoreAtmosphere = applyAtlasAtmosphere(viewer);
+      if (atmosphere && !restoreAtmosphere)
+        restoreAtmosphere = applyAtlasAtmosphere(viewer);
       lastLayout = '';
       relayout();
       removeCamera ||= viewer.scene.postRender.addEventListener(relayout);
@@ -213,7 +265,8 @@ export function createAnomaliesLayer({ source, overlayHost, assetBase = '/anomal
       request = current;
       try {
         const next = await source.getSnapshot({ signal: current.signal });
-        if (current.signal.aborted || request !== current || !enabled) return false;
+        if (current.signal.aborted || request !== current || !enabled)
+          return false;
         rows = next;
         renderer.setRows(rows);
         chrono.setHistogram(yearHistogram(rows, YEAR_MIN, YEAR_MAX));
@@ -251,8 +304,13 @@ export function createAnomaliesLayer({ source, overlayHost, assetBase = '/anomal
 
     getAnalystRecords(maxCount = 2000) {
       if (!enabled) return [];
-      const limit = Number.isFinite(maxCount) ? Math.max(1, Math.floor(maxCount)) : 2000;
-      return rows.filter((r) => inWindow(r, chrono?.year, chrono?.mode)).slice(0, limit).map(mapAnalystRecord);
+      const limit = Number.isFinite(maxCount)
+        ? Math.max(1, Math.floor(maxCount))
+        : 2000;
+      return rows
+        .filter((r) => inWindow(r, chrono?.year, chrono?.mode))
+        .slice(0, limit)
+        .map(mapAnalystRecord);
     },
 
     getStats() {

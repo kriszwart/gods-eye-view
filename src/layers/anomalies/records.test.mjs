@@ -1,7 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeAnomalySnapshot, yearHistogram, bucketByYear } from './records.js';
-import { pointColor, inWindow, mapAnalystRecord, describeYear } from './model.js';
+import {
+  normalizeAnomalySnapshot,
+  yearHistogram,
+  bucketByYear,
+} from './records.js';
+import {
+  pointColor,
+  inWindow,
+  mapAnalystRecord,
+  describeYear,
+} from './model.js';
 
 const payload = () => ({
   schema: 'anomaly.app.v1',
@@ -10,8 +19,18 @@ const payload = () => ({
   crafts: ['egg', 'orb'],
   statuses: ['explained', 'insufficient', 'contested', 'unresolved'],
   columns: {
-    id: ['a-1964', 'b-1965'], t: [-2077, -1484], prec: [0, 0], lat: [34.06, 40.19], lon: [-106.89, -79.46],
-    km: [5, 10], src: [0, 0], craft: [0, 1], status: [3, 0], u: [90, 15], hero: [1, 0], title: ['Socorro', ''],
+    id: ['a-1964', 'b-1965'],
+    t: [-2077, -1484],
+    prec: [0, 0],
+    lat: [34.06, 40.19],
+    lon: [-106.89, -79.46],
+    km: [5, 10],
+    src: [0, 0],
+    craft: [0, 1],
+    status: [3, 0],
+    u: [90, 15],
+    hero: [1, 0],
+    title: ['Socorro', ''],
   },
 });
 

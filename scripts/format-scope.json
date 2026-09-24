@@ -837,5 +837,18 @@
   "src/ui/imageryBoxTool.test.mjs",
   "src/ui/recentImagery.test.mjs",
   "src/layers/recentImagery/testDoubles.mjs",
-  "scripts/qa-recent-imagery.mjs"
+  "scripts/qa-recent-imagery.mjs",
+  "src/app/layers/anomalies.js",
+  "src/layers/anomalies/index.js",
+  "src/layers/anomalies/model.js",
+  "src/layers/anomalies/records.js",
+  "src/layers/anomalies/source.js",
+  "src/layers/anomalies/rendering.js",
+  "src/layers/anomalies/atmosphere.js",
+  "src/layers/anomalies/chronometer.js",
+  "src/layers/anomalies/records.test.mjs",
+  "src/styles/spectral.js",
+  "src/styles/radar.js",
+  "src/styles/infrared.js",
+  "src/ui/styles/anomaly-atlas.css"
 ]

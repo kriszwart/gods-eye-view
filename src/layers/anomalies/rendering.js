@@ -25,24 +25,40 @@ const INFRARED_FS = /* glsl */ `
     material.alpha = 1.0;
   }`;
 
-const hashDeg = (s) => [...s].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7) % 360;
+const hashDeg = (s) =>
+  [...s].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7) % 360;
 
 /**
  * Owns every Cesium resource for the layer: one pair of point collections per
  * year (current and past), plus animated hero models.
  */
-export function createAnomalyRenderer(viewer, { assetBase = '/anomalies/' } = {}) {
+export function createAnomalyRenderer(
+  viewer,
+  { assetBase = '/anomalies/' } = {},
+) {
   const scene = viewer.scene;
   const bright = new Map();
   const faded = new Map();
   let heroes = [];
-  let state = { visible: false, year: null, mode: 'cumulative', span: 2, infrared: false };
+  let state = {
+    visible: false,
+    year: null,
+    mode: 'cumulative',
+    span: 2,
+    infrared: false,
+  };
   const uniforms = () => ({
     u_time: { type: Cesium.UniformType.FLOAT, value: 0 },
     u_strength: { type: Cesium.UniformType.FLOAT, value: 0.85 },
   });
-  const spectral = new Cesium.CustomShader({ uniforms: uniforms(), fragmentShaderText: SPECTRAL_FS });
-  const infrared = new Cesium.CustomShader({ uniforms: uniforms(), fragmentShaderText: INFRARED_FS });
+  const spectral = new Cesium.CustomShader({
+    uniforms: uniforms(),
+    fragmentShaderText: SPECTRAL_FS,
+  });
+  const infrared = new Cesium.CustomShader({
+    uniforms: uniforms(),
+    fragmentShaderText: INFRARED_FS,
+  });
   const ion = Cesium.Color.fromCssColorString(PALETTE.ion);
   const t0 = performance.now();
   const tick = () => {
@@ -54,7 +70,11 @@ export function createAnomalyRenderer(viewer, { assetBase = '/anomalies/' } = {}
     scene.requestRender();
   };
   // Arrival pulses: a ring blooms at each report as its year arrives.
-  const pulses = scene.primitives.add(new Cesium.PointPrimitiveCollection({ blendOption: Cesium.BlendOption.TRANSLUCENT }));
+  const pulses = scene.primitives.add(
+    new Cesium.PointPrimitiveCollection({
+      blendOption: Cesium.BlendOption.TRANSLUCENT,
+    }),
+  );
   let live = [];
   const PULSE_MS = 1600;
   const stepPulses = () => {
@@ -97,7 +117,11 @@ export function createAnomalyRenderer(viewer, { assetBase = '/anomalies/' } = {}
   function collection(map, year) {
     let c = map.get(year);
     if (!c) {
-      c = scene.primitives.add(new Cesium.PointPrimitiveCollection({ blendOption: Cesium.BlendOption.TRANSLUCENT }));
+      c = scene.primitives.add(
+        new Cesium.PointPrimitiveCollection({
+          blendOption: Cesium.BlendOption.TRANSLUCENT,
+        }),
+      );
       c.show = false;
       map.set(year, c);
     }
@@ -105,7 +129,8 @@ export function createAnomalyRenderer(viewer, { assetBase = '/anomalies/' } = {}
   }
 
   function clearPoints() {
-    for (const c of [...bright.values(), ...faded.values()]) scene.primitives.remove(c);
+    for (const c of [...bright.values(), ...faded.values()])
+      scene.primitives.remove(c);
     bright.clear();
     faded.clear();
   }
@@ -116,13 +141,18 @@ export function createAnomalyRenderer(viewer, { assetBase = '/anomalies/' } = {}
     for (const r of rows) {
       const position = Cesium.Cartesian3.fromDegrees(r.lon, r.lat, 0);
       const [red, green, blue] = pointColor(r);
-      for (const [map, current] of [[bright, true], [faded, false]]) {
+      for (const [map, current] of [
+        [bright, true],
+        [faded, false],
+      ]) {
         collection(map, r.year).add({
           id: { anomalyId: r.id },
           position,
           pixelSize: pointSize(r, { current }),
           color: new Cesium.Color(red, green, blue, pointAlpha(r, { current })),
-          outlineColor: r.hero ? ion.withAlpha(current ? 0.9 : 0.35) : Cesium.Color.TRANSPARENT,
+          outlineColor: r.hero
+            ? ion.withAlpha(current ? 0.9 : 0.35)
+            : Cesium.Color.TRANSPARENT,
           outlineWidth: r.hero ? 1.5 : 0,
           scaleByDistance: far,
         });
@@ -136,11 +166,18 @@ export function createAnomalyRenderer(viewer, { assetBase = '/anomalies/' } = {}
     heroes = [];
     for (const r of rows) {
       const origin = Cesium.Cartesian3.fromDegrees(r.lon, r.lat, 650);
-      const hpr = new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(hashDeg(r.id)), 0, 0);
+      const hpr = new Cesium.HeadingPitchRoll(
+        Cesium.Math.toRadians(hashDeg(r.id)),
+        0,
+        0,
+      );
       try {
         const model = await Cesium.Model.fromGltfAsync({
           url: `${assetBase}crafts/${r.craft}.glb`,
-          modelMatrix: Cesium.Transforms.headingPitchRollToFixedFrame(origin, hpr),
+          modelMatrix: Cesium.Transforms.headingPitchRollToFixedFrame(
+            origin,
+            hpr,
+          ),
           heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
           scene,
           minimumPixelSize: 56,
@@ -148,7 +185,11 @@ export function createAnomalyRenderer(viewer, { assetBase = '/anomalies/' } = {}
           customShader: state.infrared ? infrared : spectral,
           id: { anomalyId: r.id },
         });
-        model.readyEvent.addEventListener(() => model.activeAnimations.addAll({ loop: Cesium.ModelAnimationLoop.REPEAT }));
+        model.readyEvent.addEventListener(() =>
+          model.activeAnimations.addAll({
+            loop: Cesium.ModelAnimationLoop.REPEAT,
+          }),
+        );
         scene.primitives.add(model);
         heroes.push({ row: r, model });
       } catch (error) {
@@ -161,10 +202,22 @@ export function createAnomalyRenderer(viewer, { assetBase = '/anomalies/' } = {}
   function apply(next = {}) {
     state = { ...state, ...next };
     const { visible, year, mode, span } = state;
-    for (const [y, c] of bright) c.show = visible && (mode === 'all' || year == null || (mode === 'window' ? Math.abs(y - year) <= span : y === year));
-    for (const [y, c] of faded) c.show = visible && mode === 'cumulative' && year != null && y < year;
+    for (const [y, c] of bright)
+      c.show =
+        visible &&
+        (mode === 'all' ||
+          year == null ||
+          (mode === 'window' ? Math.abs(y - year) <= span : y === year));
+    for (const [y, c] of faded)
+      c.show = visible && mode === 'cumulative' && year != null && y < year;
     for (const h of heroes) {
-      h.model.show = visible && (mode === 'all' || year == null || (mode === 'window' ? Math.abs(h.row.year - year) <= span : h.row.year <= year));
+      h.model.show =
+        visible &&
+        (mode === 'all' ||
+          year == null ||
+          (mode === 'window'
+            ? Math.abs(h.row.year - year) <= span
+            : h.row.year <= year));
       h.model.customShader = state.infrared ? infrared : spectral;
     }
     scene.requestRender();

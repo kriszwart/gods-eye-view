@@ -4,7 +4,8 @@ import { overlayHost } from './overlayHost.js';
 
 /** Wire the bundled anomaly dataset to the application overlay host. */
 export function createApplicationAnomalies(options = {}) {
-  const base = options.assetBase || `${import.meta.env?.BASE_URL ?? '/'}anomalies/`;
+  const base =
+    options.assetBase || `${import.meta.env?.BASE_URL ?? '/'}anomalies/`;
   return createAnomaliesLayer({
     source: options.source || createAnomalySource({ baseUrl: base }),
     overlayHost,

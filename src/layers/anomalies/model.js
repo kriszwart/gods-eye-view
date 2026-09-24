@@ -21,7 +21,8 @@ export const PALETTE = Object.freeze({
   amber: '#FFB547',
 });
 
-const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+const rgb = (hex) =>
+  [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
 const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 
 /** RGB (0 to 1) for a row. */
@@ -29,7 +30,9 @@ export function pointColor(row) {
   if (row.status === 'contested') return rgb(PALETTE.amber);
   if (row.status === 'explained') return rgb(PALETTE.dim);
   const u = Math.max(0, Math.min(1, row.unexplained ?? 0.5));
-  return u < 0.6 ? mix(rgb(PALETTE.dim), rgb(PALETTE.violet), u / 0.6) : mix(rgb(PALETTE.violet), rgb(PALETTE.magenta), (u - 0.6) / 0.4);
+  return u < 0.6
+    ? mix(rgb(PALETTE.dim), rgb(PALETTE.violet), u / 0.6)
+    : mix(rgb(PALETTE.violet), rgb(PALETTE.magenta), (u - 0.6) / 0.4);
 }
 
 /** Pixel size: the current year reads loud, the past recedes. */
@@ -67,7 +70,8 @@ export function mapAnalystRecord(row, index = 0) {
 
 /** Plain-language readout for the chronometer, in sentence case. */
 export function describeYear(year, count, mode) {
-  const n = count === 1 ? '1 report' : `${count.toLocaleString('en-GB')} reports`;
+  const n =
+    count === 1 ? '1 report' : `${count.toLocaleString('en-GB')} reports`;
   if (mode === 'all') return `${n} across all years`;
   if (mode === 'window') return `${n} around ${year}`;
   return `${n} up to ${year}`;

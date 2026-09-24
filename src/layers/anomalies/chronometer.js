@@ -12,21 +12,38 @@ const el = (tag, attrs = {}, parent) => {
   return node;
 };
 
-export function createChronometer({ container, from, to, onChange, onModeChange, labels = {} }) {
+export function createChronometer({
+  container,
+  from,
+  to,
+  onChange,
+  onModeChange,
+  labels = {},
+}) {
   const years = to - from + 1;
   let hist = new Array(years).fill(0);
   let year = to;
   let mode = 'cumulative';
   let layout = null;
   let playTimer = null;
-  const reduced = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const reduced = globalThis.matchMedia?.(
+    '(prefers-reduced-motion: reduce)',
+  ).matches;
 
   const root = document.createElement('div');
   root.className = 'uap-chrono';
   root.dataset.layout = 'ring';
-  const svg = el('svg', { class: 'uap-chrono-svg', 'aria-hidden': 'true' }, root);
+  const svg = el(
+    'svg',
+    { class: 'uap-chrono-svg', 'aria-hidden': 'true' },
+    root,
+  );
   const defs = el('defs', {}, svg);
-  const grad = el('linearGradient', { id: 'uap-spectrum', x1: '0', y1: '0', x2: '1', y2: '1' }, defs);
+  const grad = el(
+    'linearGradient',
+    { id: 'uap-spectrum', x1: '0', y1: '0', x2: '1', y2: '1' },
+    defs,
+  );
   el('stop', { offset: '0', 'stop-color': 'var(--uap-magenta)' }, grad);
   el('stop', { offset: '0.55', 'stop-color': 'var(--uap-violet)' }, grad);
   el('stop', { offset: '1', 'stop-color': 'var(--uap-ion)' }, grad);
@@ -55,7 +72,8 @@ export function createChronometer({ container, from, to, onChange, onModeChange,
   const playBtn = panel.querySelector('.uap-play');
   const readout = panel.querySelector('.uap-readout');
 
-  const angleOf = (y) => -Math.PI / 2 + ((y - from + 0.5) / years) * Math.PI * 2;
+  const angleOf = (y) =>
+    -Math.PI / 2 + ((y - from + 0.5) / years) * Math.PI * 2;
   const yearFromAngle = (a) => {
     let f = (a + Math.PI / 2) / (Math.PI * 2);
     f -= Math.floor(f);
@@ -80,14 +98,43 @@ export function createChronometer({ container, from, to, onChange, onModeChange,
         const a = angleOf(y);
         const major = y % 10 === 0;
         const r0 = R - (major ? 7 : 3);
-        el('line', { x1: cx + Math.cos(a) * r0, y1: cy + Math.sin(a) * r0, x2: cx + Math.cos(a) * R, y2: cy + Math.sin(a) * R, class: major ? 'tick major' : 'tick' }, gTicks);
+        el(
+          'line',
+          {
+            x1: cx + Math.cos(a) * r0,
+            y1: cy + Math.sin(a) * r0,
+            x2: cx + Math.cos(a) * R,
+            y2: cy + Math.sin(a) * R,
+            class: major ? 'tick major' : 'tick',
+          },
+          gTicks,
+        );
         if (major) {
-          const t = el('text', { x: cx + Math.cos(a) * (R - 18), y: cy + Math.sin(a) * (R - 18) + 3.5, 'text-anchor': 'middle', class: 'label' }, gTicks);
+          const t = el(
+            'text',
+            {
+              x: cx + Math.cos(a) * (R - 18),
+              y: cy + Math.sin(a) * (R - 18) + 3.5,
+              'text-anchor': 'middle',
+              class: 'label',
+            },
+            gTicks,
+          );
           t.textContent = String(y);
         }
         if (hist[i]) {
           const len = 4 + 34 * Math.sqrt(hist[i] / max);
-          el('line', { x1: cx + Math.cos(a) * (R + 3), y1: cy + Math.sin(a) * (R + 3), x2: cx + Math.cos(a) * (R + 3 + len), y2: cy + Math.sin(a) * (R + 3 + len), class: inRange(y) ? 'bar on' : 'bar' }, gBars);
+          el(
+            'line',
+            {
+              x1: cx + Math.cos(a) * (R + 3),
+              y1: cy + Math.sin(a) * (R + 3),
+              x2: cx + Math.cos(a) * (R + 3 + len),
+              y2: cy + Math.sin(a) * (R + 3 + len),
+              class: inRange(y) ? 'bar on' : 'bar',
+            },
+            gBars,
+          );
         }
       }
       const a = angleOf(year);
@@ -98,22 +145,54 @@ export function createChronometer({ container, from, to, onChange, onModeChange,
       needleText.setAttribute('x', cx + Math.cos(a) * (R + 62));
       needleText.setAttribute('y', cy + Math.sin(a) * (R + 62) + 4);
       needleText.setAttribute('text-anchor', 'middle');
-      hit.setAttribute('d', `M ${cx - R - 20} ${cy} a ${R + 20} ${R + 20} 0 1 0 ${2 * (R + 20)} 0 a ${R + 20} ${R + 20} 0 1 0 ${-2 * (R + 20)} 0`);
+      hit.setAttribute(
+        'd',
+        `M ${cx - R - 20} ${cy} a ${R + 20} ${R + 20} 0 1 0 ${2 * (R + 20)} 0 a ${R + 20} ${R + 20} 0 1 0 ${-2 * (R + 20)} 0`,
+      );
     } else {
       const left = 24;
       const right = width - 24;
       const base = height - 34;
       const x = (y) => left + ((y - from + 0.5) / years) * (right - left);
-      el('line', { x1: left, x2: right, y1: base, y2: base, class: 'ring' }, gTicks);
+      el(
+        'line',
+        { x1: left, x2: right, y1: base, y2: base, class: 'ring' },
+        gTicks,
+      );
       for (let i = 0; i < years; i++) {
         const y = from + i;
         const major = y % 10 === 0;
-        el('line', { x1: x(y), x2: x(y), y1: base, y2: base + (major ? 7 : 3), class: major ? 'tick major' : 'tick' }, gTicks);
+        el(
+          'line',
+          {
+            x1: x(y),
+            x2: x(y),
+            y1: base,
+            y2: base + (major ? 7 : 3),
+            class: major ? 'tick major' : 'tick',
+          },
+          gTicks,
+        );
         if (major) {
-          const t = el('text', { x: x(y), y: base + 20, 'text-anchor': 'middle', class: 'label' }, gTicks);
+          const t = el(
+            'text',
+            { x: x(y), y: base + 20, 'text-anchor': 'middle', class: 'label' },
+            gTicks,
+          );
           t.textContent = String(y);
         }
-        if (hist[i]) el('line', { x1: x(y), x2: x(y), y1: base - 2, y2: base - 2 - (3 + 26 * Math.sqrt(hist[i] / max)), class: inRange(y) ? 'bar on' : 'bar' }, gBars);
+        if (hist[i])
+          el(
+            'line',
+            {
+              x1: x(y),
+              x2: x(y),
+              y1: base - 2,
+              y2: base - 2 - (3 + 26 * Math.sqrt(hist[i] / max)),
+              class: inRange(y) ? 'bar on' : 'bar',
+            },
+            gBars,
+          );
       }
       needleLine.setAttribute('x1', x(year));
       needleLine.setAttribute('x2', x(year));
@@ -122,26 +201,38 @@ export function createChronometer({ container, from, to, onChange, onModeChange,
       needleText.setAttribute('x', x(year));
       needleText.setAttribute('y', base - 46);
       needleText.setAttribute('text-anchor', 'middle');
-      hit.setAttribute('d', `M ${left} ${base - 44} H ${right} V ${base + 12} H ${left} Z`);
+      hit.setAttribute(
+        'd',
+        `M ${left} ${base - 44} H ${right} V ${base + 12} H ${left} Z`,
+      );
     }
     needleText.textContent = mode === 'all' ? 'All' : String(year);
   }
 
-  const inRange = (y) => (mode === 'all' ? true : mode === 'window' ? Math.abs(y - year) <= 2 : y <= year);
+  const inRange = (y) =>
+    mode === 'all'
+      ? true
+      : mode === 'window'
+        ? Math.abs(y - year) <= 2
+        : y <= year;
 
   function setYear(next, { silent = false } = {}) {
     const y = Math.min(to, Math.max(from, Math.round(next)));
     if (y === year && !silent) return;
     year = y;
     slider.setAttribute('aria-valuenow', String(y));
-    slider.setAttribute('aria-valuetext', mode === 'all' ? 'All years' : String(y));
+    slider.setAttribute(
+      'aria-valuetext',
+      mode === 'all' ? 'All years' : String(y),
+    );
     draw();
     if (!silent) onChange?.(y);
   }
 
   function setMode(next) {
     mode = next;
-    for (const b of panel.querySelectorAll('[data-mode]')) b.setAttribute('aria-checked', String(b.dataset.mode === next));
+    for (const b of panel.querySelectorAll('[data-mode]'))
+      b.setAttribute('aria-checked', String(b.dataset.mode === next));
     draw();
     onModeChange?.(next);
   }
@@ -153,14 +244,18 @@ export function createChronometer({ container, from, to, onChange, onModeChange,
     playBtn.textContent = on ? 'Pause' : 'Play';
     if (!on) return;
     if (year >= to) setYear(from);
-    playTimer = setInterval(() => (year >= to ? setPlaying(false) : setYear(year + 1)), reduced ? 900 : 450);
+    playTimer = setInterval(
+      () => (year >= to ? setPlaying(false) : setYear(year + 1)),
+      reduced ? 900 : 450,
+    );
   }
 
   const fromPointer = (e) => {
     const r = svg.getBoundingClientRect();
     const px = e.clientX - r.left;
     const py = e.clientY - r.top;
-    if (root.dataset.layout === 'ring') setYear(yearFromAngle(Math.atan2(py - layout.cy, px - layout.cx)));
+    if (root.dataset.layout === 'ring')
+      setYear(yearFromAngle(Math.atan2(py - layout.cy, px - layout.cx)));
     else setYear(from + ((px - 24) / (layout.width - 48)) * years - 0.5);
   };
   let dragging = false;
@@ -174,7 +269,14 @@ export function createChronometer({ container, from, to, onChange, onModeChange,
   hit.addEventListener('pointerup', () => (dragging = false));
   hit.addEventListener('pointercancel', () => (dragging = false));
   slider.addEventListener('keydown', (e) => {
-    const step = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1, PageUp: 10, PageDown: -10 }[e.key];
+    const step = {
+      ArrowRight: 1,
+      ArrowUp: 1,
+      ArrowLeft: -1,
+      ArrowDown: -1,
+      PageUp: 10,
+      PageDown: -10,
+    }[e.key];
     if (step) setYear(year + step);
     else if (e.key === 'Home') setYear(from);
     else if (e.key === 'End') setYear(to);
@@ -207,7 +309,10 @@ export function createChronometer({ container, from, to, onChange, onModeChange,
     },
     /** @param {{cx:number, cy:number, r:number, width:number, height:number}|null} disc */
     layout(disc, viewport) {
-      const fits = disc && disc.r > 40 && disc.r * 2 + 150 < Math.min(viewport.width, viewport.height);
+      const fits =
+        disc &&
+        disc.r > 40 &&
+        disc.r * 2 + 150 < Math.min(viewport.width, viewport.height);
       root.dataset.layout = fits ? 'ring' : 'band';
       layout = fits ? disc : { ...viewport };
       draw();

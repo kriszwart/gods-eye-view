@@ -12,7 +12,9 @@ export function createAnomalySource({
   return {
     async getSnapshot({ signal } = {}) {
       signal?.throwIfAborted();
-      const response = await fetchImpl(`${baseUrl}anomalies.v1.json`, { signal });
+      const response = await fetchImpl(`${baseUrl}anomalies.v1.json`, {
+        signal,
+      });
       if (!response.ok) throw new Error(`Anomalies HTTP ${response.status}`);
       const rows = normalizeAnomalySnapshot(await response.json());
       signal?.throwIfAborted();

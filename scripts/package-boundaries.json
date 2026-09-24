@@ -869,6 +869,19 @@
     ],
     "external": ["cesium"]
   },
+  "anomalies": {
+    "exports": ["./layers/anomalies"],
+    "modules": [
+      "src/layers/anomalies/index.js",
+      "src/layers/anomalies/model.js",
+      "src/layers/anomalies/records.js",
+      "src/layers/anomalies/source.js",
+      "src/layers/anomalies/rendering.js",
+      "src/layers/anomalies/atmosphere.js",
+      "src/layers/anomalies/chronometer.js"
+    ],
+    "external": ["cesium"]
+  },
   "recent-imagery": {
     "exports": ["./layers/recent-imagery"],
     "modules": [
@@ -1293,6 +1306,14 @@
       "src/app/layers/bikeshare.js",
       "src/app/layers/cctv.js",
       "src/app/layers/earthquakes.js",
+      "src/app/layers/anomalies.js",
+      "src/layers/anomalies/index.js",
+      "src/layers/anomalies/model.js",
+      "src/layers/anomalies/records.js",
+      "src/layers/anomalies/source.js",
+      "src/layers/anomalies/rendering.js",
+      "src/layers/anomalies/atmosphere.js",
+      "src/layers/anomalies/chronometer.js",
       "src/app/layers/firms.js",
       "src/app/layers/flights.js",
       "src/app/layers/militaryAwareness.js",
@@ -2001,6 +2022,14 @@
       "src/app/layers/bikeshare.js",
       "src/app/layers/cctv.js",
       "src/app/layers/earthquakes.js",
+      "src/app/layers/anomalies.js",
+      "src/layers/anomalies/index.js",
+      "src/layers/anomalies/model.js",
+      "src/layers/anomalies/records.js",
+      "src/layers/anomalies/source.js",
+      "src/layers/anomalies/rendering.js",
+      "src/layers/anomalies/atmosphere.js",
+      "src/layers/anomalies/chronometer.js",
       "src/app/layers/firms.js",
       "src/app/layers/flights.js",
       "src/app/layers/militaryAwareness.js",
@@ -2668,6 +2697,14 @@
     "modules": [
       "src/layers/earthquakes/records.js",
       "src/layers/earthquakes/source.js"
+    ],
+    "external": []
+  },
+  "anomalies-source": {
+    "exports": ["./layers/anomalies/source"],
+    "modules": [
+      "src/layers/anomalies/records.js",
+      "src/layers/anomalies/source.js"
     ],
     "external": []
   },

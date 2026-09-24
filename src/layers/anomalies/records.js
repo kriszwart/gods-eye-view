@@ -18,7 +18,8 @@ export function normalizeAnomalySnapshot(payload) {
   const n = payload.count;
   const c = payload.columns;
   if (!Number.isInteger(n) || n < 0 || !c) return null;
-  for (const k of REQUIRED) if (!Array.isArray(c[k]) || c[k].length !== n) return null;
+  for (const k of REQUIRED)
+    if (!Array.isArray(c[k]) || c[k].length !== n) return null;
   const sources = Array.isArray(payload.sources) ? payload.sources : [];
   const crafts = Array.isArray(payload.crafts) ? payload.crafts : [];
   const statuses = Array.isArray(payload.statuses) ? payload.statuses : [];
@@ -29,8 +30,10 @@ export function normalizeAnomalySnapshot(payload) {
     const lon = c.lon[i];
     const days = c.t[i];
     if (
-      !Number.isFinite(lat) || Math.abs(lat) > 90 ||
-      !Number.isFinite(lon) || Math.abs(lon) > 180 ||
+      !Number.isFinite(lat) ||
+      Math.abs(lat) > 90 ||
+      !Number.isFinite(lon) ||
+      Math.abs(lon) > 180 ||
       !Number.isInteger(days)
     )
       return null;
@@ -60,7 +63,8 @@ export function normalizeAnomalySnapshot(payload) {
 /** Sightings per year for the chronometer, inclusive of both ends. */
 export function yearHistogram(rows, from, to) {
   const out = new Array(Math.max(0, to - from + 1)).fill(0);
-  for (const r of rows) if (r.year >= from && r.year <= to) out[r.year - from]++;
+  for (const r of rows)
+    if (r.year >= from && r.year <= to) out[r.year - from]++;
   return out;
 }
 

@@ -12,7 +12,12 @@ export function applyAtlasAtmosphere(viewer) {
   const prev = {
     background: scene.backgroundColor.clone(),
     sky: sky && [sky.hueShift, sky.saturationShift, sky.brightnessShift],
-    globe: globe && [globe.atmosphereHueShift, globe.atmosphereSaturationShift, globe.atmosphereBrightnessShift, globe.enableLighting],
+    globe: globe && [
+      globe.atmosphereHueShift,
+      globe.atmosphereSaturationShift,
+      globe.atmosphereBrightnessShift,
+      globe.enableLighting,
+    ],
     moon: scene.moon?.show,
   };
   scene.backgroundColor = Cesium.Color.fromCssColorString('#070812');
@@ -31,8 +36,15 @@ export function applyAtlasAtmosphere(viewer) {
   scene.requestRender();
   return () => {
     scene.backgroundColor = prev.background;
-    if (sky && prev.sky) [sky.hueShift, sky.saturationShift, sky.brightnessShift] = prev.sky;
-    if (globe && prev.globe) [globe.atmosphereHueShift, globe.atmosphereSaturationShift, globe.atmosphereBrightnessShift, globe.enableLighting] = prev.globe;
+    if (sky && prev.sky)
+      [sky.hueShift, sky.saturationShift, sky.brightnessShift] = prev.sky;
+    if (globe && prev.globe)
+      [
+        globe.atmosphereHueShift,
+        globe.atmosphereSaturationShift,
+        globe.atmosphereBrightnessShift,
+        globe.enableLighting,
+      ] = prev.globe;
     if (scene.moon && prev.moon != null) scene.moon.show = prev.moon;
     scene.requestRender();
   };

@@ -52,6 +52,7 @@ export function createAnomalyRenderer(
     mode: 'cumulative',
     span: 2,
     infrared: false,
+    statuses: null,
   };
   // Continuous frames only while something animates: hero loops or pulses.
   let holding = false;
@@ -166,7 +167,7 @@ export function createAnomalyRenderer(
         [faded, false],
       ]) {
         collection(map, r.year).add({
-          id: { id: `anomaly:${r.id}`, anomalyId: r.id },
+          id: { id: `anomaly:${r.id}`, anomalyId: r.id, status: r.status },
           position,
           pixelSize: pointSize(r, { current }),
           color: new Cesium.Color(red, green, blue, pointAlpha(r, { current })),
@@ -203,7 +204,7 @@ export function createAnomalyRenderer(
           minimumPixelSize: 56,
           maximumScale: 40000,
           customShader: state.infrared ? infrared : spectral,
-          id: { id: `anomaly:${r.id}`, anomalyId: r.id },
+          id: { id: `anomaly:${r.id}`, anomalyId: r.id, status: r.status },
         });
         model.readyEvent.addEventListener(() =>
           model.activeAnimations.addAll({
@@ -230,6 +231,13 @@ export function createAnomalyRenderer(
           (mode === 'window' ? Math.abs(y - year) <= span : y === year));
     for (const [y, c] of faded)
       c.show = visible && mode === 'cumulative' && year != null && y < year;
+    const passes = (status) => !state.statuses || state.statuses.has(status);
+    for (const map of [bright, faded])
+      for (const [, c] of map)
+        for (let i = 0; i < c.length; i++) {
+          const p = c.get(i);
+          p.show = passes(p.id.status);
+        }
     for (const h of heroes) {
       h.model.show =
         visible &&
@@ -237,7 +245,8 @@ export function createAnomalyRenderer(
           year == null ||
           (mode === 'window'
             ? Math.abs(h.row.year - year) <= span
-            : h.row.year <= year));
+            : h.row.year <= year)) &&
+        passes(h.row.status);
       h.model.customShader = state.infrared ? infrared : spectral;
     }
     syncHold();

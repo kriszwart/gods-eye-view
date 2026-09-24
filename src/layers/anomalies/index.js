@@ -77,14 +77,30 @@ export function createAnomaliesLayer({
   let legend = null;
   let tourToken = 0;
   let tourBtn = null;
+  let activeStatuses = null;
 
   const visibleCount = () =>
-    rows.filter((r) => inWindow(r, chrono?.year, chrono?.mode)).length;
+    rows.filter(
+      (r) =>
+        inWindow(r, chrono?.year, chrono?.mode) &&
+        (!activeStatuses || activeStatuses.has(r.status)),
+    ).length;
   const refreshTime = () => {
     if (!renderer || !chrono) return;
-    renderer.apply({ visible: enabled, year: chrono.year, mode: chrono.mode });
+    renderer.apply({
+      visible: enabled,
+      year: chrono.year,
+      mode: chrono.mode,
+      statuses: activeStatuses,
+    });
     if (chrono.mode !== 'all' && lastYear != null && chrono.year !== lastYear)
-      renderer.pulse(rows.filter((r) => r.year === chrono.year));
+      renderer.pulse(
+        rows.filter(
+          (r) =>
+            r.year === chrono.year &&
+            (!activeStatuses || activeStatuses.has(r.status)),
+        ),
+      );
     lastYear = chrono.year;
     chrono.setReadout(describeYear(chrono.year, visibleCount(), chrono.mode));
   };
@@ -155,10 +171,10 @@ export function createAnomaliesLayer({
           {
             offset: new Cesium.HeadingPitchRange(
               Cesium.Math.toRadians(20),
-              Cesium.Math.toRadians(-32),
-              120000,
+              Cesium.Math.toRadians(-26),
+              60000,
             ),
-            duration: 3.2,
+            duration: 4.5,
             complete: resolve,
             cancel: resolve,
           },
@@ -166,7 +182,7 @@ export function createAnomaliesLayer({
       );
       if (tourToken !== token) return;
       await openDossier(r.id);
-      await wait(4500);
+      await wait(8000);
     }
     stopTour();
   }
@@ -220,6 +236,27 @@ export function createAnomaliesLayer({
       tourBtn = chrono.addAction('Tour hero cases', () =>
         tourToken ? stopTour() : playTour(),
       );
+      const STATUS_FILTERS = [
+        ['explained', 'Explained'],
+        ['insufficient', 'Too little data'],
+        ['unresolved', 'Unresolved'],
+        ['contested', 'Contested'],
+      ];
+      const enabledStatuses = new Set(STATUS_FILTERS.map(([k]) => k));
+      for (const [key, label] of STATUS_FILTERS) {
+        const btn = chrono.addAction(label, () => {
+          enabledStatuses.has(key)
+            ? enabledStatuses.delete(key)
+            : enabledStatuses.add(key);
+          btn.setAttribute('aria-pressed', String(enabledStatuses.has(key)));
+          activeStatuses =
+            enabledStatuses.size === STATUS_FILTERS.length
+              ? null
+              : new Set(enabledStatuses);
+          refreshTime();
+        });
+        btn.setAttribute('aria-pressed', 'true');
+      }
       overlayHost?.setVisible?.(ANOMALY_LAYER_ID, false);
       console.log('[Data:Anomalies] Initialized');
     },

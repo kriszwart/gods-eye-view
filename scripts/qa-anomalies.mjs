@@ -133,6 +133,25 @@ try {
     `${play.before} -> ${play.after}`,
   );
 
+  const filter = await page.evaluate(async () => {
+    const readout = () => document.querySelector('.uap-readout').textContent;
+    const before = readout();
+    const btn = [...document.querySelectorAll('.uap-chrono-panel button')].find(
+      (b) => b.textContent === 'Unresolved',
+    );
+    btn.click();
+    await new Promise((r) => setTimeout(r, 300));
+    const filtered = readout();
+    btn.click();
+    await new Promise((r) => setTimeout(r, 300));
+    return { before, filtered, restored: readout() };
+  });
+  check(
+    'status filter changes the visible count',
+    filter.before !== filter.filtered && filter.before === filter.restored,
+    JSON.stringify(filter),
+  );
+
   await page.evaluate(() => {
     const cam = window.__godsEyeView.viewer.camera;
     const p = cam.positionWC;

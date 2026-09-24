@@ -59,12 +59,12 @@ export function pointColor(row) {
 /** Pixel size: the current year reads loud, the past recedes. */
 export function pointSize(row, { current = true } = {}) {
   const u = row.unexplained ?? 0.5;
-  return current ? 5 + 5 * u + (row.hero ? 2 : 0) : 2.5 + 2 * u;
+  return current ? 7 + 6 * u + (row.hero ? 3 : 0) : 3.5 + 3 * u;
 }
 
 export function pointAlpha(row, { current = true } = {}) {
   const u = row.unexplained ?? 0.5;
-  return current ? 0.95 : 0.22 + 0.33 * u;
+  return current ? 0.95 : 0.3 + 0.4 * u;
 }
 
 /** Whether a row shows for the chronometer's year and mode. */

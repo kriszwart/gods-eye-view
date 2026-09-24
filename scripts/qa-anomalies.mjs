@@ -153,6 +153,21 @@ try {
     JSON.stringify(filter),
   );
 
+  const reenable = await page.evaluate(async () => {
+    const m = window.__godsEyeView.dataManager;
+    await m.setEnabled('anomalies', false, { origin: 'user' });
+    await m.setEnabled('anomalies', true, { origin: 'user' });
+    return {
+      enabled: m.isEnabled('anomalies'),
+      count: m.layers.get('anomalies')?.module?.getStats?.().count,
+    };
+  });
+  check(
+    'layer re-enables cleanly after first load',
+    reenable.enabled === true && reenable.count === 24,
+    JSON.stringify(reenable),
+  );
+
   await page.evaluate(() => {
     const cam = window.__godsEyeView.viewer.camera;
     cam.cancelFlight?.();

@@ -323,7 +323,10 @@ export function createAnomaliesLayer({
     },
 
     async update() {
-      if (!enabled || !renderer || loaded) return false;
+      if (!enabled || !renderer) return false;
+      // The dataset is static once fetched, so a loaded layer's update() on a
+      // repeat enable is an idempotent success, not a failure.
+      if (loaded) return true;
       request?.abort();
       const current = new AbortController();
       request = current;

@@ -31,9 +31,18 @@ export function fromSample(sample, sources) {
   });
 }
 
-export async function build({ sample = false, out = 'out' } = {}) {
+export async function build({ sample = false, out = 'out', normalisedDir = root('local_data/normalised') } = {}) {
   const sources = await loadJson('config/sources.json');
-  const records = sample ? fromSample(await loadJson('sample/hero-cases.sample.json'), sources) : await readNormalised(root('local_data/normalised'));
+  const heroes = fromSample(await loadJson('sample/hero-cases.sample.json'), sources);
+  // The hero sample cases are the atlas's curated cases (phase 4 replaces
+  // them with verified hero cases one by one; until then they must survive
+  // every build). `--sample` alone still gives the fast, offline-friendly
+  // 24-case set. Otherwise, merge them with every real source declared in
+  // sources.json -- filtering by declared source id keeps out anything else
+  // that happens to land in this shared folder (other pipelines' normalised
+  // output, sharing the naming convention but not this dataset's schema).
+  const knownSourceIds = Object.keys(sources).filter((id) => id !== 'sample');
+  const records = sample ? heroes : [...heroes, ...(await readNormalised(normalisedDir, knownSourceIds))];
   const bad = [];
   const seen = new Set();
   for (const r of records) {

@@ -48,19 +48,36 @@ try {
     JSON.stringify(present),
   );
 
+  // The real dataset's size is read from stats.json rather than pinned, so
+  // this gate stays valid as GEIPAN, Blue Book and future sources grow it.
+  const statsCount = await page.evaluate(async () => {
+    const r = await fetch('/anomalies/stats.json');
+    return (await r.json()).count;
+  });
+  check(
+    'stats.json reports at least 3,000 records',
+    Number.isInteger(statsCount) && statsCount >= 3000,
+    String(statsCount),
+  );
+
   await page.evaluate(() =>
     window.__godsEyeView.dataManager.setEnabled('anomalies', true, {
       origin: 'user',
     }),
   );
   await page.waitForFunction(
-    () =>
+    (expected) =>
       window.__godsEyeView.dataManager.layers
         .get('anomalies')
-        ?.module?.getStats?.().count === 24,
+        ?.module?.getStats?.().count === expected,
     { timeout: 30000 },
+    statsCount,
   );
-  check('24 sample points loaded after toggle on', true);
+  check(
+    'real dataset loaded after toggle on, matching stats.json',
+    true,
+    `count=${statsCount}`,
+  );
 
   await page.evaluate(() => {
     const cam = window.__godsEyeView.viewer.camera;
@@ -169,7 +186,7 @@ try {
   });
   check(
     'layer re-enables cleanly after first load',
-    reenable.enabled === true && reenable.count === 24,
+    reenable.enabled === true && reenable.count === statsCount,
     JSON.stringify(reenable),
   );
   check(

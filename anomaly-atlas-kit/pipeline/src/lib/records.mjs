@@ -33,9 +33,20 @@ export async function writeJsonl(file, rows) {
   await writeFile(file, rows.map((r) => JSON.stringify(r)).join('\n') + (rows.length ? '\n' : ''));
 }
 
-export async function readNormalised(dir) {
+/**
+ * Read every `.jsonl` file in a normalised-data folder and concatenate their
+ * rows. When `allow` is given (an array of source ids, matching the file's
+ * basename without `.jsonl`), only files whose name is in that list are
+ * read -- other pipelines can share this folder's naming convention for
+ * their own outputs without being swept into an unrelated dataset.
+ */
+export async function readNormalised(dir, allow = null) {
   const out = [];
-  for (const f of (await readdir(dir)).filter((n) => n.endsWith('.jsonl')).sort()) out.push(...(await readJsonl(`${dir}/${f}`)));
+  const files = (await readdir(dir))
+    .filter((n) => n.endsWith('.jsonl'))
+    .filter((n) => !allow || allow.includes(n.slice(0, -'.jsonl'.length)))
+    .sort();
+  for (const f of files) out.push(...(await readJsonl(`${dir}/${f}`)));
   return out;
 }
 

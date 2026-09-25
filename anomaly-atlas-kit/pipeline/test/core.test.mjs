@@ -5,7 +5,10 @@ import { parseDate, gradeFor, shapeMatcher, roundLocation, makeId } from '../src
 import { redactText } from '../src/lib/redact.mjs';
 import { parseCsv, csvObjects } from '../src/lib/csv.mjs';
 import { parsePlace } from '../src/lib/gazetteer.mjs';
-import { haversineKm } from '../src/lib/records.mjs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { haversineKm, readNormalised, writeJsonl } from '../src/lib/records.mjs';
 
 const shapeMap = JSON.parse(await readFile(new URL('../config/shape-map.json', import.meta.url), 'utf8'));
 
@@ -65,4 +68,18 @@ test('place parsing and distance helpers', () => {
   assert.equal(parsePlace('Levelland, TX').country, 'US');
   assert.ok(Math.abs(haversineKm({ lat: 51.5, lon: 0 }, { lat: 48.85, lon: 2.35 }) - 342) < 5);
   assert.match(makeId('bluebook', '1952-07-19', 'Washington, D.C.', '597821'), /^bluebook-1952-07-19-washington-d-c-597821$/);
+});
+
+test('readNormalised, given an allow-list, reads only the named files and skips the rest of the folder', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'read-normalised-'));
+  try {
+    await writeJsonl(path.join(dir, 'geipan.jsonl'), [{ a: 1 }]);
+    await writeJsonl(path.join(dir, 'other-layer.jsonl'), [{ b: 2 }]);
+    const all = await readNormalised(dir);
+    assert.equal(all.length, 2, 'no allow-list reads every jsonl file, unchanged default behaviour');
+    const filtered = await readNormalised(dir, ['geipan']);
+    assert.deepEqual(filtered, [{ a: 1 }]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

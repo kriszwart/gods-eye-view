@@ -218,8 +218,13 @@ they ship; raw source files stay local under `pipeline/local_data/raw/` and are 
 - **GEIPAN** (Groupe d'Études et d'Information sur les Phénomènes Aérospatiaux Non
   identifiés, CNES — the French space agency). Case data reused under GEIPAN's own open
   reuse notice; confirm current terms on the site before any redistribution beyond this
-  app. 3,381 cases at August 2026, downloaded by hand as `cas_pub.csv` and
-  `temoignages_pub.csv` from [geipan.fr](https://www.geipan.fr). Attribution: "GEIPAN, CNES".
+  app. 3,381 cases at August 2026, pulled from geipan.fr's own export endpoints,
+  `https://geipan.fr/fr/cnes/export/cas` (cases) and `https://geipan.fr/fr/cnes/export/temoignages`
+  (testimonies). Both endpoints serve XLSX despite their historical CSV naming, and both
+  need a browser user agent — the default `curl` user agent gets a 429; converted locally
+  to `cas_pub.csv` and `temoignages_pub.csv` before the adapter reads them. See
+  [DATA_PIPELINE.md](anomaly-atlas-kit/docs/DATA_PIPELINE.md) for the fuller pipeline
+  reference. Attribution: "GEIPAN, CNES".
 - **Project Blue Book.** US National Archives, [NAID 597821](https://catalog.archives.gov/id/597821)
   ("Sanitized Version of Project Blue Book Case Files on Sightings of Unidentified Flying
   Objects, 1947 to 1969"), a US federal record and public domain. Bulk metadata is fetched

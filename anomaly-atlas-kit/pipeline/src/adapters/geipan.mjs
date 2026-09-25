@@ -28,6 +28,33 @@ export function pickColumn(row, columns, key) {
 }
 
 /**
+ * Assert that every primary column name configured in geipan-columns.json
+ * (the first, canonical alias for every key this adapter reads via
+ * pickColumn) is present in the export's actual header. A renamed or
+ * dropped column degrades silently otherwise: pickColumn falls through to
+ * '', an unrecognised date column makes every row skip as 'date' (the
+ * adapter still exits 0), and a renamed id or classification column leaves
+ * source_ref or grade null without any error. Throws with the missing
+ * column names and the header actually found on failure, so the caller can
+ * print it and exit non-zero instead of writing a silently empty or wrong
+ * dataset.
+ */
+export function assertPrimaryColumns(header, columns) {
+  const found = new Set(header.map(norm));
+  const missing = Object.entries(columns)
+    .filter(([, aliases]) => Array.isArray(aliases))
+    .map(([key, aliases]) => ({ key, primary: aliases[0] }))
+    .filter(({ primary }) => !found.has(norm(primary)));
+  if (missing.length) {
+    const names = missing.map(({ key, primary }) => `${key}: "${primary}"`).join(', ');
+    throw new Error(
+      `GEIPAN export header is missing primary column(s): ${names}. ` +
+      `Found header: ${header.join(' | ')}`,
+    );
+  }
+}
+
+/**
  * Parse GEIPAN's "Date d'observation" column: dd/mm/yyyy, where `--` for the
  * day or the month means that part is unknown (kept at month or year
  * precision). A handful of rows also mask a digit of the day, or of the
@@ -44,7 +71,8 @@ export function parseGeipanDate(raw, yearFallback) {
       const full = parseDate(`${dd}/${mm}/${yyyy}`);
       if (full) return { date: full, approximate: false };
     } else if (mm !== '--') {
-      return { date: parseDate(`${yyyy}-${mm}`), approximate: false };
+      const month = parseDate(`${yyyy}-${mm}`);
+      if (month) return { date: month, approximate: false };
     } else {
       return { date: parseDate(yyyy), approximate: false };
     }
@@ -113,12 +141,27 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
   const out = [];
   const skipped = {};
+  let headerChecked = false;
   for (const f of caseFiles) {
-    for (const row of csvObjects(await readFile(f.path, 'utf8'))) {
+    const rows = csvObjects(await readFile(f.path, 'utf8'));
+    if (!headerChecked && rows.length) {
+      try {
+        assertPrimaryColumns(Object.keys(rows[0]), columns);
+      } catch (err) {
+        console.error(err.message);
+        process.exit(1);
+      }
+      headerChecked = true;
+    }
+    for (const row of rows) {
       const res = geipanRowToRecord(row, { columns, sources, matchShape });
       if (res.record) out.push(res.record);
       else skipped[res.skipped] = (skipped[res.skipped] || 0) + 1;
     }
+  }
+  if (!out.length) {
+    console.error(`GEIPAN: 0 records written; skipped ${JSON.stringify(skipped)}. Aborting without writing an empty dataset.`);
+    process.exit(1);
   }
   await writeJsonl(root('local_data/normalised/geipan.jsonl'), out);
   console.log(`GEIPAN: ${out.length} records written; skipped ${JSON.stringify(skipped)}`);

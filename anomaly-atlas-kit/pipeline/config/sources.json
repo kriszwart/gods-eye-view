@@ -14,10 +14,10 @@
   "geipan": {
     "label": "GEIPAN",
     "publisher": "CNES (French space agency)",
-    "access": "CSV downloads from geipan.fr (cases and testimonies). Download by hand into local_data/raw/geipan/ and read the data dictionary before mapping columns.",
+    "access": "geipan.fr's own export endpoints, https://geipan.fr/fr/cnes/export/cas (cases) and https://geipan.fr/fr/cnes/export/temoignages (testimonies). Both endpoints serve XLSX despite their historical CSV naming, and both need a browser user agent: the default curl user agent gets a 429. Convert to CSV locally (cas_pub.csv and temoignages_pub.csv) into local_data/raw/geipan/ before the adapter reads them, and read the data dictionary before mapping columns.",
     "licence": "Published open data; confirm the reuse notice on geipan.fr before redistribution and attribute GEIPAN/CNES.",
     "attribution": "GEIPAN, CNES",
-    "scale": "3,208 cases at 22 April 2025: A 860, B 1,245, C 1,000, D 102",
+    "scale": "3,381 cases at August 2026",
     "grades": "A identified, B probably identified, C insufficient data, D unidentified after investigation"
   },
   "pursue": {

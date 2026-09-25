@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { csvObjects } from '../src/lib/csv.mjs';
 import { shapeMatcher } from '../src/lib/normalise.mjs';
-import { geipanRowToRecord, parseGeipanDate, pickColumn } from '../src/adapters/geipan.mjs';
+import { geipanRowToRecord, parseGeipanDate, pickColumn, assertPrimaryColumns } from '../src/adapters/geipan.mjs';
 
 const sources = JSON.parse(await readFile(new URL('../config/sources.json', import.meta.url), 'utf8'));
 const columns = JSON.parse(await readFile(new URL('../config/geipan-columns.json', import.meta.url), 'utf8'));
@@ -99,6 +99,20 @@ test('a calendar-invalid full date (GEIPAN data error) falls back to Année inst
   assert.equal(r.date.iso, '2000');
 });
 
+test('a masked day with an invalid month falls back to Année, not dropped as "date" (fixture: --/00/1995)', () => {
+  const r = parseGeipanDate('--/00/1995', '1995');
+  assert.equal(r.approximate, true);
+  assert.equal(r.date.precision, 'year');
+  assert.equal(r.date.iso, '1995');
+});
+
+test('a full but invalid month (fixture: 15/00/1995) also falls back to Année', () => {
+  const r = parseGeipanDate('15/00/1995', '1995');
+  assert.equal(r.approximate, true);
+  assert.equal(r.date.precision, 'year');
+  assert.equal(r.date.iso, '1995');
+});
+
 test('row A: full date, explained, grade A, shape matched', () => {
   const { record } = geipanRowToRecord(rows[0], { columns, sources, matchShape });
   assert.equal(record.date.iso, '1980-06-12');
@@ -152,4 +166,39 @@ test('the long Détails narrative never appears in any record', () => {
     const res = geipanRowToRecord(row, { columns, sources, matchShape });
     if (res.record) assert.ok(!JSON.stringify(res.record).includes(DETAILS_MARKER), 'Détails leaked into a record');
   }
+});
+
+test('assertPrimaryColumns accepts the real export header', () => {
+  assert.doesNotThrow(() => assertPrimaryColumns(Object.keys(rows[0]), columns));
+});
+
+test('assertPrimaryColumns fails loudly when the export renames a configured primary column (regression: a renamed date column used to skip every row silently and exit 0)', () => {
+  // Same header as the real export, but "Date d'observation" has been
+  // renamed by GEIPAN, as a live export change would do.
+  const renamedHeader = HEADER.split(';').map((h) => (h === "Date d'observation" ? 'Date obs (v2)' : h));
+  assert.throws(
+    () => assertPrimaryColumns(renamedHeader, columns),
+    (err) => {
+      assert.match(err.message, /date: "Date d'observation"/);
+      assert.match(err.message, /Found header:/);
+      assert.match(err.message, /Date obs \(v2\)/);
+      return true;
+    },
+  );
+});
+
+test('assertPrimaryColumns reports every missing primary column, not just the first', () => {
+  const brokenHeader = HEADER.split(';').map((h) => {
+    if (h === "Date d'observation") return 'Date obs (v2)';
+    if (h === 'Latitude') return 'Lat (v2)';
+    return h;
+  });
+  assert.throws(
+    () => assertPrimaryColumns(brokenHeader, columns),
+    (err) => {
+      assert.match(err.message, /date: "Date d'observation"/);
+      assert.match(err.message, /latitude: "Latitude"/);
+      return true;
+    },
+  );
 });

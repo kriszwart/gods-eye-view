@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   stripHtml,
   isFreeLicence,
+  cleanAuthor,
   filePathUrl,
   imageFilename,
   wikipediaUrl,
@@ -106,6 +107,25 @@ const IMAGEINFO_NO_AUTHOR = {
   },
 };
 
+// A real-world Commons Artist value: an old-style unsigned wiki signature
+// (leading "--", a trailing timestamp) rather than a plain name.
+const IMAGEINFO_NOISY_AUTHOR = {
+  query: {
+    pages: {
+      '1001': {
+        imageinfo: [
+          {
+            extmetadata: {
+              LicenseShortName: { value: 'CC BY-SA 3.0' },
+              Artist: { value: '--Pinpin 17:43, 1 August 2006 (UTC)' },
+            },
+          },
+        ],
+      },
+    },
+  },
+};
+
 test('stripHtml drops tags and decodes entities (textContent semantics)', () => {
   assert.equal(
     stripHtml('<a href="//commons.wikimedia.org/wiki/User:Someone" title="User:Someone">Diego&nbsp;Delso</a>'),
@@ -119,12 +139,27 @@ test('stripHtml drops tags and decodes entities (textContent semantics)', () => 
 });
 
 test('isFreeLicence accepts only the licences we may ship', () => {
-  for (const lic of ['CC0', 'CC BY 2.5', 'CC BY-SA 4.0', 'cc-by-sa-3.0', 'Public domain', 'PDM']) {
+  for (const lic of ['CC0', 'CC BY 4.0', 'CC BY-SA 2.5', 'cc-by-sa-3.0', 'Public domain', 'PDM']) {
     assert.ok(isFreeLicence(lic), lic);
   }
   for (const lic of ['CC SA 1.0', 'No restrictions', '', null, undefined, 'All rights reserved']) {
     assert.ok(!isFreeLicence(lic), String(lic));
   }
+});
+
+test('isFreeLicence rejects every non-commercial and no-derivatives variant', () => {
+  for (const lic of ['CC BY-NC 4.0', 'CC BY-ND 4.0', 'CC BY-NC-SA 4.0', 'CC BY-NC-ND 4.0']) {
+    assert.ok(!isFreeLicence(lic), lic);
+  }
+});
+
+test('cleanAuthor strips a leading wiki-signature dash, a trailing (talk) link and a trailing signature timestamp', () => {
+  assert.equal(cleanAuthor('--Pinpin 17:43, 1 August 2006 (UTC)'), 'Pinpin');
+  assert.equal(cleanAuthor('Nevit Dilmen (talk)'), 'Nevit Dilmen');
+  assert.equal(cleanAuthor('Diego Delso'), 'Diego Delso');
+  assert.equal(cleanAuthor(''), '');
+  assert.equal(cleanAuthor(null), '');
+  assert.equal(cleanAuthor(undefined), '');
 });
 
 test('filePathUrl builds a Special:FilePath URL at width=640, URL-encoded', () => {
@@ -161,6 +196,10 @@ test('attributionFromImageInfo extracts licence and HTML-stripped author for a f
 
 test('attributionFromImageInfo returns null for a non-free licence', () => {
   assert.equal(attributionFromImageInfo(IMAGEINFO_NOT_FREE), null);
+});
+
+test('attributionFromImageInfo cleans a noisy wiki-signature author', () => {
+  assert.deepEqual(attributionFromImageInfo(IMAGEINFO_NOISY_AUTHOR), { licence: 'CC BY-SA 3.0', author: 'Pinpin' });
 });
 
 test('attributionFromImageInfo returns null when the licence is free but no author is recorded', () => {

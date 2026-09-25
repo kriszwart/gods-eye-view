@@ -22,8 +22,11 @@ const DELAY_MS = 1000;
 
 // Matches CC0, "CC BY 2.5", "CC BY-SA 4.0" (any case/spacing/dash), Public
 // domain and PDM. Deliberately does not match variants that lack the "BY"
-// component (e.g. "CC SA 1.0") or vague statements like "No restrictions".
-const FREE_LICENCE_RE = /^(cc0|cc[\s-]?by(-sa)?[\s-]?[\d.]*|public domain|pdm|pd[\s-]?us)/i;
+// component (e.g. "CC SA 1.0"), vague statements like "No restrictions", or
+// any non-commercial/no-derivatives variant (CC BY-NC*, CC BY-ND*): the
+// negative lookahead rejects an "-nc" or "-nd" component wherever it would
+// otherwise be free to appear before the version number.
+const FREE_LICENCE_RE = /^(cc0|cc[\s-]?by(?:[\s-]?sa)?(?![\s-]?(?:nc|nd))[\s-]?[\d.]*|public domain|pdm|pd[\s-]?us)/i;
 
 /** Strip HTML tags and decode the handful of entities Commons emits, textContent-style. */
 export function stripHtml(html) {
@@ -44,6 +47,21 @@ export function isFreeLicence(shortName) {
   return !!shortName && FREE_LICENCE_RE.test(String(shortName).trim());
 }
 
+/**
+ * Tidy a Commons Artist string for display in a dossier: drop a leading
+ * "--" (a common wiki-signature prefix), a trailing wiki-talk-page link
+ * such as " (talk)", and a trailing wiki signature timestamp such as
+ * " 17:43, 1 August 2006 (UTC)".
+ */
+export function cleanAuthor(name) {
+  if (!name) return '';
+  let s = String(name).trim();
+  s = s.replace(/^-{1,2}\s*/, '');
+  s = s.replace(/\s*\d{1,2}:\d{2},\s*\d{1,2}\s+[A-Za-z]+\s+\d{4}\s*\(UTC\)\s*$/i, '');
+  s = s.replace(/\s*\(talk\)\s*$/i, '');
+  return s.trim();
+}
+
 /** Special:FilePath URL for a Commons file name, at the given width. */
 export function filePathUrl(filename, width = IMAGE_WIDTH) {
   return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(filename)}?width=${width}`;
@@ -62,9 +80,11 @@ export function wikipediaUrl(entity) {
 }
 
 /**
- * Licence and HTML-stripped author from a Commons imageinfo response
+ * Licence and cleaned author from a Commons imageinfo response
  * (`action=query&prop=imageinfo&iiprop=extmetadata`), or null when the
  * licence is not free, or when a free licence carries no usable author.
+ * The author is HTML-stripped, then tidied of wiki-signature noise
+ * (see `cleanAuthor`) so it is fit for display in a dossier.
  */
 export function attributionFromImageInfo(imageInfoResponse) {
   const pages = imageInfoResponse?.query?.pages ?? {};
@@ -73,7 +93,7 @@ export function attributionFromImageInfo(imageInfoResponse) {
   if (!meta) return null;
   const licence = meta.LicenseShortName?.value ?? null;
   if (!isFreeLicence(licence)) return null;
-  const author = stripHtml(meta.Artist?.value);
+  const author = cleanAuthor(stripHtml(meta.Artist?.value));
   if (!author) return null;
   return { licence, author };
 }
@@ -150,7 +170,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     if (filename && !result.image) {
       const meta = Object.values(imageInfoResponse?.query?.pages ?? {})[0]?.imageinfo?.[0]?.extmetadata;
       const licence = meta?.LicenseShortName?.value ?? '(unknown)';
-      const author = stripHtml(meta?.Artist?.value);
+      const author = cleanAuthor(stripHtml(meta?.Artist?.value));
       notes.push(
         `${site.id} (${qid}): image "${filename}" excluded, licence="${licence}"${!isFreeLicence(licence) ? ' (not a free licence)' : author ? '' : ' (free licence but no author recorded)'}`,
       );

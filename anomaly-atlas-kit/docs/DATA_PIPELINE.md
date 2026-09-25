@@ -6,7 +6,7 @@ Raw files stay local (`pipeline/local_data/raw`, git-ignored). Only the built ou
 | Source | Scale | Access | Method |
 | --- | --- | --- | --- |
 | Project Blue Book (NARA, NAID 597821) | 12,618 sightings, 701 unidentified | Bulk JSON metadata, then first page of each case | Vision extraction of record cards |
-| GEIPAN (CNES) | 3,382 cases at August 2026 | XLSX export via geipan.fr's `/fr/cnes/export/cas` endpoint (needs a browser user agent) | Parser |
+| GEIPAN (CNES) | 3,381 cases at August 2026 | XLSX export via geipan.fr's `/fr/cnes/export/cas` endpoint (needs a browser user agent) | Parser |
 | PURSUE (war.gov/UFO) | 6 releases, about 447 files | Manual browser download (site blocks bots) | PDF extraction |
 | UK MoD files (TNA) | about 209 files, 52,000 pages | PDF download | PDF extraction, page ranges |
 | NUFORC | | Only with written permission | Licensed parser, no narratives |

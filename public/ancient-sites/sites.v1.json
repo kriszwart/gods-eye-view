@@ -16,7 +16,13 @@
       "unesco": "https://whc.unesco.org/en/list/1572/",
       "source_url": "https://whc.unesco.org/en/list/1572/",
       "attribution": "UNESCO World Heritage listing",
-      "glyph": "temple"
+      "glyph": "temple",
+      "image": "https://commons.wikimedia.org/wiki/Special:FilePath/G%C3%B6bekli%20Tepe%2C%20Urfa.jpg?width=640",
+      "image_attribution": {
+        "licence": "CC BY-SA 3.0",
+        "author": "Teomancimit"
+      },
+      "wikipedia": "https://en.wikipedia.org/wiki/G%C3%B6bekli_Tepe"
     },
     {
       "id": "stonehenge",
@@ -32,7 +38,13 @@
       "unesco": "https://whc.unesco.org/en/list/373/",
       "source_url": "https://whc.unesco.org/en/list/373/",
       "attribution": "Coordinates: The Modern Antiquarian",
-      "glyph": "circle"
+      "glyph": "circle",
+      "image": "https://commons.wikimedia.org/wiki/Special:FilePath/Stonehenge%20Total.jpg?width=640",
+      "image_attribution": {
+        "licence": "CC BY-SA 3.0",
+        "author": "Stefan Kühn"
+      },
+      "wikipedia": "https://en.wikipedia.org/wiki/Stonehenge"
     },
     {
       "id": "avebury",
@@ -48,7 +60,13 @@
       "unesco": "https://whc.unesco.org/en/list/373/",
       "source_url": "https://whc.unesco.org/en/list/373/",
       "attribution": "Coordinates: The Modern Antiquarian",
-      "glyph": "circle"
+      "glyph": "circle",
+      "image": "https://commons.wikimedia.org/wiki/Special:FilePath/Avebury%20May%202005.jpg?width=640",
+      "image_attribution": {
+        "licence": "CC BY 2.5",
+        "author": "Gordon Joly"
+      },
+      "wikipedia": "https://en.wikipedia.org/wiki/Avebury"
     },
     {
       "id": "newgrange",
@@ -64,7 +82,13 @@
       "unesco": "https://whc.unesco.org/en/list/659/",
       "source_url": "https://whc.unesco.org/en/list/659/",
       "attribution": "Coordinates: The Modern Antiquarian",
-      "glyph": "mound"
+      "glyph": "mound",
+      "image": "https://commons.wikimedia.org/wiki/Special:FilePath/Irelands%20history.jpg?width=640",
+      "image_attribution": {
+        "licence": "CC BY-SA 4.0",
+        "author": "Tjp finn"
+      },
+      "wikipedia": "https://en.wikipedia.org/wiki/Newgrange"
     },
     {
       "id": "callanish",
@@ -80,7 +104,10 @@
       "unesco": null,
       "source_url": "https://www.themodernantiquarian.com/site/198/callanish",
       "attribution": "Coordinates: The Modern Antiquarian",
-      "glyph": "circle"
+      "glyph": "circle",
+      "image": null,
+      "image_attribution": null,
+      "wikipedia": "https://en.wikipedia.org/wiki/Callanish_Stones"
     },
     {
       "id": "carnac-menec",
@@ -96,7 +123,13 @@
       "unesco": "https://whc.unesco.org/en/list/1725/",
       "source_url": "https://whc.unesco.org/en/list/1725/",
       "attribution": "Coordinates: The Modern Antiquarian",
-      "glyph": "trilith"
+      "glyph": "trilith",
+      "image": "https://commons.wikimedia.org/wiki/Special:FilePath/France-Carnac-Alignement%20de%20Kermario.jpg?width=640",
+      "image_attribution": {
+        "licence": "CC BY-SA 3.0",
+        "author": "--Pinpin 17:43, 1 August 2006 (UTC)"
+      },
+      "wikipedia": "https://en.wikipedia.org/wiki/Carnac_stones"
     },
     {
       "id": "ggantija",
@@ -112,7 +145,13 @@
       "unesco": "https://whc.unesco.org/en/list/132/",
       "source_url": "https://whc.unesco.org/en/list/132/",
       "attribution": "Coordinates: The Modern Antiquarian",
-      "glyph": "temple"
+      "glyph": "temple",
+      "image": "https://commons.wikimedia.org/wiki/Special:FilePath/Ggantija%20Temple%20on%20Gozo%20(cropped).jpg?width=640",
+      "image_attribution": {
+        "licence": "CC BY-SA 4.0",
+        "author": "FritzPhotography"
+      },
+      "wikipedia": "https://en.wikipedia.org/wiki/%C4%A0gantija"
     },
     {
       "id": "baalbek",
@@ -128,7 +167,13 @@
       "unesco": "https://whc.unesco.org/en/list/294/",
       "source_url": "https://whc.unesco.org/en/list/294/",
       "attribution": "UNESCO World Heritage listing",
-      "glyph": "trilith"
+      "glyph": "trilith",
+      "image": "https://commons.wikimedia.org/wiki/Special:FilePath/Temple%20of%20Bacchus.jpg?width=640",
+      "image_attribution": {
+        "licence": "CC BY-SA 4.0",
+        "author": "Saadedine AL SAIDI"
+      },
+      "wikipedia": "https://en.wikipedia.org/wiki/Baalbek"
     },
     {
       "id": "nabta-playa",
@@ -144,7 +189,13 @@
       "unesco": null,
       "source_url": "https://www.researchgate.net/publication/226354066_Astronomy_of_Nabta_Playa",
       "attribution": "Academic survey: Malville, 'Astronomy of Nabta Playa'",
-      "glyph": "circle"
+      "glyph": "circle",
+      "image": "https://commons.wikimedia.org/wiki/Special:FilePath/Calendar%20aswan.JPG?width=640",
+      "image_attribution": {
+        "licence": "CC BY-SA 3.0",
+        "author": "Raymbetz"
+      },
+      "wikipedia": "https://en.wikipedia.org/wiki/Nabta_Playa"
     },
     {
       "id": "great-zimbabwe",
@@ -160,7 +211,10 @@
       "unesco": "https://whc.unesco.org/en/list/364/",
       "source_url": "https://whc.unesco.org/en/list/364/",
       "attribution": "UNESCO World Heritage listing",
-      "glyph": "settlement"
+      "glyph": "settlement",
+      "image": null,
+      "image_attribution": null,
+      "wikipedia": "https://en.wikipedia.org/wiki/Great_Zimbabwe"
     },
     {
       "id": "derinkuyu",
@@ -176,7 +230,13 @@
       "unesco": "https://whc.unesco.org/en/list/357/",
       "source_url": "https://whc.unesco.org/en/list/357/",
       "attribution": "UNESCO World Heritage listing",
-      "glyph": "settlement"
+      "glyph": "settlement",
+      "image": "https://commons.wikimedia.org/wiki/Special:FilePath/Derinkuyu%20Underground%20City%209831%20Nevit%20Enhancer.jpg?width=640",
+      "image_attribution": {
+        "licence": "CC BY-SA 3.0",
+        "author": "Nevit Dilmen (talk)"
+      },
+      "wikipedia": "https://en.wikipedia.org/wiki/Derinkuyu_underground_city"
     },
     {
       "id": "mohenjo-daro",
@@ -192,7 +252,10 @@
       "unesco": "https://whc.unesco.org/en/list/138/",
       "source_url": "https://whc.unesco.org/en/list/138/",
       "attribution": "UNESCO World Heritage listing",
-      "glyph": "settlement"
+      "glyph": "settlement",
+      "image": null,
+      "image_attribution": null,
+      "wikipedia": "https://en.wikipedia.org/wiki/Mohenjo-daro"
     },
     {
       "id": "plain-of-jars",
@@ -208,7 +271,13 @@
       "unesco": "https://whc.unesco.org/en/list/1587/",
       "source_url": "https://whc.unesco.org/en/list/1587/",
       "attribution": "UNESCO World Heritage listing",
-      "glyph": "trilith"
+      "glyph": "trilith",
+      "image": "https://commons.wikimedia.org/wiki/Special:FilePath/20171115%20Plain%20of%20Jars%20Laos%202540%20DxO.jpg?width=640",
+      "image_attribution": {
+        "licence": "CC BY-SA 4.0",
+        "author": "Jakub Hałun"
+      },
+      "wikipedia": "https://en.wikipedia.org/wiki/Plain_of_Jars"
     },
     {
       "id": "nazca-lines",
@@ -224,7 +293,13 @@
       "unesco": "https://whc.unesco.org/en/list/700/",
       "source_url": "https://whc.unesco.org/en/list/700/",
       "attribution": "UNESCO World Heritage listing",
-      "glyph": "geoglyph"
+      "glyph": "geoglyph",
+      "image": "https://commons.wikimedia.org/wiki/Special:FilePath/L%C3%ADneas%20de%20Nazca%2C%20Nazca%2C%20Per%C3%BA%2C%202015-07-29%2C%20DD%2058.JPG?width=640",
+      "image_attribution": {
+        "licence": "CC BY-SA 4.0",
+        "author": "Diego Delso"
+      },
+      "wikipedia": "https://en.wikipedia.org/wiki/Nazca_lines"
     },
     {
       "id": "sacsayhuaman",
@@ -240,7 +315,13 @@
       "unesco": "https://whc.unesco.org/en/list/273/",
       "source_url": "https://whc.unesco.org/en/list/273/",
       "attribution": "UNESCO World Heritage listing (City of Cuzco)",
-      "glyph": "trilith"
+      "glyph": "trilith",
+      "image": "https://commons.wikimedia.org/wiki/Special:FilePath/Sacsayhuaman%20Inca.jpg?width=640",
+      "image_attribution": {
+        "licence": "CC BY-SA 3.0",
+        "author": "Leon Petrosyan"
+      },
+      "wikipedia": "https://en.wikipedia.org/wiki/Sacsayhuam%C3%A1n"
     },
     {
       "id": "puma-punku",
@@ -256,7 +337,13 @@
       "unesco": "https://whc.unesco.org/en/list/567/",
       "source_url": "https://whc.unesco.org/en/list/567/",
       "attribution": "UNESCO World Heritage listing (Tiwanaku)",
-      "glyph": "temple"
+      "glyph": "temple",
+      "image": "https://commons.wikimedia.org/wiki/Special:FilePath/Puma%20Punku14.JPG?width=640",
+      "image_attribution": {
+        "licence": "CC BY-SA 3.0",
+        "author": "Brattarb"
+      },
+      "wikipedia": "https://en.wikipedia.org/wiki/Pumapunku"
     },
     {
       "id": "serpent-mound",
@@ -272,7 +359,10 @@
       "unesco": null,
       "source_url": "https://www.ohiohistory.org/visit/browse-historical-sites/serpent-mound/",
       "attribution": "Ohio History Connection",
-      "glyph": "geoglyph"
+      "glyph": "geoglyph",
+      "image": null,
+      "image_attribution": null,
+      "wikipedia": "https://en.wikipedia.org/wiki/Serpent_Mound"
     },
     {
       "id": "poverty-point",
@@ -288,7 +378,10 @@
       "unesco": "https://whc.unesco.org/en/list/1435/",
       "source_url": "https://whc.unesco.org/en/list/1435/",
       "attribution": "UNESCO World Heritage listing",
-      "glyph": "mound"
+      "glyph": "mound",
+      "image": null,
+      "image_attribution": null,
+      "wikipedia": "https://en.wikipedia.org/wiki/Poverty_Point"
     },
     {
       "id": "yonaguni",
@@ -304,7 +397,13 @@
       "unesco": null,
       "source_url": "https://www.britannica.com/topic/Yonaguni-Monument",
       "attribution": "Encyclopaedia Britannica",
-      "glyph": "underwater"
+      "glyph": "underwater",
+      "image": "https://commons.wikimedia.org/wiki/Special:FilePath/Yonaguni%20Monument%20Terraces%20midpart%20NWW.jpg?width=640",
+      "image_attribution": {
+        "licence": "CC0",
+        "author": "Melkov"
+      },
+      "wikipedia": "https://en.wikipedia.org/wiki/Yonaguni_Monument"
     },
     {
       "id": "rujm-el-hiri",
@@ -320,7 +419,13 @@
       "unesco": null,
       "source_url": "https://www.researchgate.net/publication/317076516_Rujm_el-Hiri_The_Monument_in_the_Landscape",
       "attribution": "Academic survey: Paz, 'Rujm el-Hiri: The Monument in the Landscape'",
-      "glyph": "circle"
+      "glyph": "circle",
+      "image": "https://commons.wikimedia.org/wiki/Special:FilePath/Gilgal%20Refa'im%20-%20Rujm%20el-Hiri.JPG?width=640",
+      "image_attribution": {
+        "licence": "CC BY-SA 3.0",
+        "author": "אסף.צ"
+      },
+      "wikipedia": "https://en.wikipedia.org/wiki/Rujm_el-Hiri"
     }
   ]
 }

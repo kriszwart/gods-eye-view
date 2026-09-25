@@ -18,3 +18,21 @@ test('ancient sample is valid, honest and attributed', () => {
     assert.match(s.summary + s.debated, /^(?!.*ancient alien)/i);
   }
 });
+
+test('every site carries a Wikipedia link, and a free-licence Commons image when it has one', () => {
+  for (const s of data.sites) {
+    for (const key of ['image', 'image_attribution', 'wikipedia'])
+      assert.ok(key in s, `${s.id} missing ${key} field`);
+
+    assert.match(s.wikipedia, /^https:\/\/en\.wikipedia\.org\/wiki\/.+/, `${s.id} wikipedia is not an en.wikipedia.org URL`);
+
+    if (s.image === null) {
+      assert.equal(s.image_attribution, null, `${s.id} has a null image but non-null image_attribution`);
+    } else {
+      assert.match(s.image, /^https:\/\/commons\.wikimedia\.org\/wiki\/Special:FilePath\/.+/, `${s.id} image is not a Commons Special:FilePath URL`);
+      assert.ok(s.image_attribution, `${s.id} has an image but no image_attribution`);
+      assert.ok(typeof s.image_attribution.licence === 'string' && s.image_attribution.licence.length > 0, `${s.id} image_attribution missing licence`);
+      assert.ok(typeof s.image_attribution.author === 'string' && s.image_attribution.author.length > 0, `${s.id} image_attribution missing author`);
+    }
+  }
+});

@@ -1,5 +1,52 @@
 # Changelog
 
+- Phenomena phase 2c: the visual presets tray now wraps its preset buttons
+  onto extra rows instead of hiding them behind a scrollbar the tray itself
+  suppresses, so all ten styles (Spectral, Radar and Infrared included) stay
+  reachable by mouse. The fix is scoped to `#control-panel
+  #style-buttons.button-grid` (two ids) rather than the bare `.button-grid`
+  class, because `command-dock-compact.css` targets `#command-dock
+  .button-grid` (one id plus one class, equal specificity) with a later,
+  unconditional `flex-wrap: nowrap` that would otherwise win the cascade and
+  silently undo the wrap; the reasoning is documented alongside the rule in
+  `src/ui/styles/controls.css`.
+
+  Phenomena mode now applies the Spectral style on entry and restores
+  whichever style was active on exit, through optional `getStyle`/`setStyle`
+  hooks that leave the mode's existing layer-restore behaviour untouched
+  when absent. A forced exit resets the mode's own toggle button too, and
+  both the style and layer restore rulings are written up as doc comments
+  at the call site (`src/app/phenomenaMode.js`).
+
+  The chronometer gained case search across both registers: a portable
+  matcher ranks results by title, year, craft and type, its corpus is
+  fetched from the bundled datasets independent of whether the owning layer
+  is enabled, and picking a result auto-enables the target layer and opens
+  its dossier. Escape cancels a query still in its debounce window.
+
+  A Spotter MVP ships: a portable geometry and ranking core (haversine
+  distance, true bearing, an elevation approximation and kind priors)
+  drives a live panel over flights, military, local ADS-B and satellites,
+  with an honest empty state ("No match in tracked sources. Tracked sources
+  do not cover everything.") and a now-mode footer; the plate closes with
+  its host layer. The launch and lightning kinds wait for those layers to
+  expose analyst records.
+
+  New deterministic gate `scripts/qa-spotter.mjs` (a fixture fetch shim,
+  Node-side geometry truth and a camera settle-wait) joins a strengthened
+  `qa-anomalies` (19 checks) and `qa-ancient-sites` (11 checks).
+
+  Gates: `npm run format:check`, `npm run build`, `npm test` (5,075 tests,
+  5,074 passing, 1 skipped, 0 failed), `npm run check:boundaries`, `npm run
+  test:track` against the dev server (109 of 109), `node
+  scripts/qa-anomalies.mjs` (19 of 19), `node scripts/qa-ancient-sites.mjs`
+  (11 of 11), `node scripts/qa-spotter.mjs` (6 of 6) and `node
+  scripts/qa-perf.mjs` (24 of 24). `QA_BASE_URL=http://localhost:4173 node
+  scripts/qa-map-source-tray.mjs` ran 56 checks clean against the live dev
+  server, then hit the known stale-HMR artefact ("The standalone
+  application already owns this page"); per the standing note on that
+  artefact it was not chased.
+
 - Phenomena phase 2b: a second register, ancient sites, joins the atlas
   live behind share token 4 (twenty curated sites: temples, circles,
   mounds, a megalith alignment, a geoglyph, settlements, an underwater
@@ -36,7 +83,7 @@
   "Open record" link, Escape close, and share restore via token 4 alone
   and combined with anomalies as `l=3.4`), run three consecutive times,
   0 failures each time. Gates: `npm run format:check`, `npm run build`,
-  `npm test` (5,038 tests, 5,037 passing, 1 skipped, 0 failed), `npm run
+  `npm test` (5,075 tests, 5,074 passing, 1 skipped, 0 failed), `npm run
   check:boundaries`, `npm run test:track` against the dev server (109 of
   109), `node scripts/qa-anomalies.mjs` (0 failures) and `node
   scripts/qa-perf.mjs` (24 of 24). The full 17,392-site TMA sweep and a
@@ -95,7 +142,7 @@
   re-affirm success on a repeat call instead of relying on the `loaded`
   guard, the way `src/layers/earthquakes/index.js` does.
 
-  Gates: `npm run format:check`, `npm test` (5,035 of 5,036 passing, 1
+  Gates: `npm run format:check`, `npm test` (5,074 of 5,075 passing, 1
   skipped, 0 failed), `npm run check:boundaries`, `npm run build`, `npm run
   test:track` against the dev server (109 of 109), `node
   scripts/qa-anomalies.mjs` (0 failures) and `node scripts/qa-perf.mjs`

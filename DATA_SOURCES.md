@@ -107,7 +107,11 @@ The optional Local ADS-B layer and the broadcast-FM receiver use radio you recei
 
 Static datasets shipped in the repo for an out-of-the-box experience. **None are MIT** — each keeps its own license (see the carve-out in [LICENSE](LICENSE)). Each folder also has its own provenance README.
 
-The [Bhote Koshi event pack](public/events/bhote-koshi-2026/README.md), under `public/events/`, contains Vantor imagery crops and a GeoPera-derived river centerline under **CC BY-NC 4.0**, separately from the MIT code. The derived coordinate dataset in `src/data/bhoteKoshiFloodPath.js` has the same non-commercial restriction and is compiled into the Nepal scene. Commercial users must obtain separate permission or exclude both the event pack and that source-derived dataset from their source and build. Deleting only `public/events/bhote-koshi-2026/` does not remove all restricted data; excluding the scene also requires removing its registrations and imports before building. Linked witness posts and geolocation-map records retain their owners' terms; no social-media clips or cached posters are bundled. Other snapshots below are under `src/data/local_data/`.
+The [Bhote Koshi event pack](public/events/bhote-koshi-2026/README.md), under `public/events/`, contains Vantor imagery crops and a GeoPera-derived river centerline under **CC BY-NC 4.0**, separately from the MIT code. The derived coordinate dataset in `src/data/bhoteKoshiFloodPath.js` has the same non-commercial restriction and is compiled into the Nepal scene. Commercial users must obtain separate permission or exclude both the event pack and that source-derived dataset from their source and build. Deleting only `public/events/bhote-koshi-2026/` does not remove all restricted data; excluding the scene also requires removing its registrations and imports before building. Linked witness posts and geolocation-map records retain their owners' terms; no social-media clips or cached posters are bundled.
+
+The [UAP and UFO sightings dataset](#uap-and-ufo-sightings-publicanomalies), under `public/anomalies/`, is the anomaly atlas's bundled `anomalies.v1.json` and `cases.v1.json`, built offline from GEIPAN and NARA Project Blue Book sources by `anomaly-atlas-kit/pipeline` (see [DATA_PIPELINE.md](anomaly-atlas-kit/docs/DATA_PIPELINE.md)); GeoNames supplies a build-time-only place gazetteer and is not itself bundled. Sources, licences and current scale are detailed below. The in-app **Sources** panel (open the anomaly atlas, then the chronometer's "Sources" action) repeats this attribution for anyone using the app without this file.
+
+Other snapshots below are under `src/data/local_data/` unless noted otherwise.
 
 | Dataset                                                                     | Folder                            | License                                                                                                   | Commercial use?                                  | Attribution                                                                 |
 | --------------------------------------------------------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------- |
@@ -202,6 +206,39 @@ is legally required; we note the source here and in the folder's `SOURCE.md`, wh
 the retrieval date (2026-07-30), exact download URL, license evidence, and the
 deterministic transform (`scripts/build-sf-neighborhoods.mjs`: `nhood` → `name`, ~2 m
 Douglas-Peucker simplification, 6-decimal rounding).
+
+### UAP and UFO sightings (`public/anomalies/`)
+
+The anomaly atlas layer reads two build outputs written by `anomaly-atlas-kit/pipeline`'s
+`build-dataset.mjs`: `anomalies.v1.json` (the dial's points) and `cases.v1.json` (dossier
+detail, fetched on first case open). Both are validated, redacted and deduplicated before
+they ship; raw source files stay local under `pipeline/local_data/raw/` and are not bundled
+(see [DATA_PIPELINE.md](anomaly-atlas-kit/docs/DATA_PIPELINE.md)).
+
+- **GEIPAN** (Groupe d'Études et d'Information sur les Phénomènes Aérospatiaux Non
+  identifiés, CNES — the French space agency). Case data reused under GEIPAN's own open
+  reuse notice; confirm current terms on the site before any redistribution beyond this
+  app. 3,381 cases at August 2026, downloaded by hand as `cas_pub.csv` and
+  `temoignages_pub.csv` from [geipan.fr](https://www.geipan.fr). Attribution: "GEIPAN, CNES".
+- **Project Blue Book.** US National Archives, [NAID 597821](https://catalog.archives.gov/id/597821)
+  ("Sanitized Version of Project Blue Book Case Files on Sightings of Unidentified Flying
+  Objects, 1947 to 1969"), a US federal record and public domain. Bulk metadata is fetched
+  from the Archives' own JSON export at
+  `https://catalog.archives.gov/medialz/bulk-downloads/uaps/JSON/catalog-export-597821.json`;
+  10,622 digitised file units are indexed, with record-card extraction still pending (phase
+  4). Attribution: "Project Blue Book case files, US National Archives (NAID 597821)".
+- **GeoNames.** A gazetteer used only while building the dataset offline, to resolve place
+  names to coordinates; it is not bundled or fetched at runtime. Licensed
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); download the `cities1000.zip`
+  dump from [geonames.org](https://www.geonames.org) at
+  `https://download.geonames.org/export/dump/cities1000.zip` into
+  `pipeline/local_data/geonames/`. Attribution: "GeoNames (geonames.org), CC BY 4.0".
+- **Sample hero cases.** A small illustrative set shipped ahead of verified sourcing;
+  flagged as pending verification until phase 4 replaces it with cases carrying a primary
+  source link.
+
+All three sources, plus the sample-case caveat, are also listed in the app itself: open the
+anomaly atlas and use the chronometer's "Sources" action.
 
 ---
 

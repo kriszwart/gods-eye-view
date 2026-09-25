@@ -20,6 +20,48 @@ export { createAnomalySource } from './source.js';
 const escapeHtml = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
+/**
+ * An escaped, safeSourceUrl-guarded link for the Sources panel. Returns an
+ * empty string (no dangling anchor) when the URL fails the guard.
+ */
+function creditLink(url, label) {
+  const safe = safeSourceUrl(url);
+  if (!safe) return '';
+  return ` <a href="${escapeHtml(safe)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`;
+}
+
+/** Sentence-case attribution rows for the Sources and credits plate. */
+const CREDIT_ROWS = [
+  {
+    name: 'GEIPAN (CNES)',
+    text: "Case data under GEIPAN's open reuse notice, 3,381 cases at August 2026.",
+    url: 'https://www.geipan.fr',
+    label: 'geipan.fr',
+  },
+  {
+    name: 'Project Blue Book',
+    text: 'US National Archives, NAID 597821, public domain. 10,622 digitised file units indexed, extraction pending.',
+    url: 'https://catalog.archives.gov/id/597821',
+    label: 'catalog.archives.gov',
+  },
+  {
+    name: 'GeoNames',
+    text: 'Gazetteer, CC BY 4.0.',
+    url: 'https://www.geonames.org',
+    label: 'geonames.org',
+  },
+  {
+    name: 'Sample hero cases',
+    text: 'Illustrative, verification pending (phase 4).',
+  },
+  {
+    name: 'The Modern Antiquarian',
+    text: 'Per-site reference links in the ancient register.',
+    url: 'https://www.themodernantiquarian.com',
+    label: 'themodernantiquarian.com',
+  },
+];
+
 /** Project the Earth's disc into window space so the dial can wrap it. */
 function earthDisc(viewer) {
   const scene = viewer.scene;
@@ -76,6 +118,8 @@ export function createAnomaliesLayer({
   let lastYear = null;
   let restoreAtmosphere = null;
   let legend = null;
+  let credits = null;
+  let creditsBtn = null;
   let tourToken = 0;
   let tourBtn = null;
   let activeStatuses = null;
@@ -154,6 +198,24 @@ export function createAnomaliesLayer({
       ${detail?.summary ? `<p class="uap-summary">${escapeHtml(detail.summary)}</p>` : ''}`;
     dossier.hidden = false;
     dossier.querySelector('.uap-close').focus();
+  }
+
+  /** Open the Sources and credits plate, syncing its toggle button. */
+  function openCredits() {
+    if (!credits) return;
+    credits.hidden = false;
+    creditsBtn?.setAttribute('aria-pressed', 'true');
+    credits.querySelector('.uap-close')?.focus();
+  }
+  /** Close the Sources and credits plate, syncing its toggle button. */
+  function closeCredits() {
+    if (!credits) return;
+    credits.hidden = true;
+    creditsBtn?.setAttribute('aria-pressed', 'false');
+  }
+  function toggleCredits() {
+    if (!credits) return;
+    credits.hidden ? openCredits() : closeCredits();
   }
 
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -255,6 +317,32 @@ export function createAnomaliesLayer({
           <li><i class="ring"></i>Hero case with craft</li>
         </ul>`;
       host.appendChild(legend);
+      credits = document.createElement('div');
+      credits.className = 'uap-credits';
+      credits.hidden = true;
+      credits.setAttribute('role', 'dialog');
+      credits.setAttribute('aria-label', 'Sources and credits');
+      credits.tabIndex = -1;
+      credits.innerHTML = `
+        <button type="button" class="uap-close" aria-label="Close sources and credits">Close</button>
+        <h2>Sources and credits</h2>
+        <dl>
+          ${CREDIT_ROWS.map(
+            (row) =>
+              `<dt>${escapeHtml(row.name)}</dt><dd>${escapeHtml(row.text)}${row.url ? creditLink(row.url, row.label) : ''}</dd>`,
+          ).join('')}
+        </dl>`;
+      credits.addEventListener(
+        'click',
+        (e) => e.target.closest('.uap-close') && closeCredits(),
+      );
+      credits.addEventListener(
+        'keydown',
+        (e) => e.key === 'Escape' && closeCredits(),
+      );
+      host.appendChild(credits);
+      creditsBtn = chrono.addAction('Sources', () => toggleCredits());
+      creditsBtn.setAttribute('aria-pressed', 'false');
       tourBtn = chrono.addAction('Tour hero cases', () =>
         tourToken ? stopTour() : playTour(),
       );
@@ -375,6 +463,7 @@ export function createAnomaliesLayer({
       searchControl?.clear();
       stopTour();
       closeSpotterPanel();
+      closeCredits();
       if (legend) legend.hidden = true;
       restoreAtmosphere?.();
       restoreAtmosphere = null;
@@ -446,6 +535,9 @@ export function createAnomaliesLayer({
       dossier?.remove();
       legend?.remove();
       legend = null;
+      credits?.remove();
+      credits = null;
+      creditsBtn = null;
       renderer = null;
       chrono = null;
       dossier = null;

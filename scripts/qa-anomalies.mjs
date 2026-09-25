@@ -397,6 +397,38 @@ try {
     JSON.stringify(spotterCloses),
   );
 
+  const sourcesPanel = await page.evaluate(async () => {
+    const btn = [...document.querySelectorAll('.uap-chrono-panel button')].find(
+      (b) => b.textContent === 'Sources',
+    );
+    btn?.click();
+    await new Promise((r) => setTimeout(r, 200));
+    const panel = document.querySelector('.uap-credits');
+    const open = panel && !panel.hidden;
+    const text = panel ? panel.textContent : '';
+    panel?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    await new Promise((r) => setTimeout(r, 100));
+    return { open, closed: panel ? panel.hidden : null, text };
+  });
+  check(
+    'Sources panel lists GEIPAN and the National Archives',
+    sourcesPanel.open === true &&
+      sourcesPanel.text.includes('GEIPAN') &&
+      sourcesPanel.text.includes('National Archives'),
+    JSON.stringify({
+      open: sourcesPanel.open,
+      hasGeipan: sourcesPanel.text.includes('GEIPAN'),
+      hasNARA: sourcesPanel.text.includes('National Archives'),
+    }),
+  );
+  check(
+    'Escape closes the Sources panel',
+    sourcesPanel.closed === true,
+    JSON.stringify({ closed: sourcesPanel.closed }),
+  );
+
   check(
     'no page errors during the interactive pass',
     pageErrors.length === 0,

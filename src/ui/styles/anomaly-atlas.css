@@ -417,6 +417,69 @@
   height: 9px;
 }
 
+/* Sources and credits: opened from the chronometer's "Sources" action.
+   Bottom-left, the one corner free of the dossier (top-right), the legend
+   (top-left) and the Spotter plate (bottom-right). Registration corners and
+   z-index match the dossier and Spotter plates (see the dossier's z-order
+   note above): it is an interactive plate with its own close control, not
+   passive read-out like the legend. */
+.anomaly-atlas .uap-credits {
+  position: absolute;
+  left: calc(24px + env(safe-area-inset-left, 0px));
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  width: min(340px, calc(100vw - 48px));
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  padding: 20px;
+  background: var(--glass-bg);
+  color: var(--uap-ink);
+  font: 400 14px/1.55 var(--uap-sans);
+  z-index: 140;
+}
+.anomaly-atlas .uap-credits::before,
+.anomaly-atlas .uap-credits::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: solid var(--uap-hair-strong);
+}
+.anomaly-atlas .uap-credits::before {
+  top: 0;
+  left: 0;
+  border-width: 1px 0 0 1px;
+}
+.anomaly-atlas .uap-credits::after {
+  bottom: 0;
+  right: 0;
+  border-width: 0 1px 1px 0;
+}
+.anomaly-atlas .uap-credits h2 {
+  margin: 6px 0 12px;
+  font: 400 16px/1.2 var(--uap-mono);
+  letter-spacing: -0.01em;
+}
+.anomaly-atlas .uap-credits dl {
+  display: grid;
+  gap: 2px 0;
+  margin: 0;
+}
+.anomaly-atlas .uap-credits dt {
+  margin: 12px 0 2px;
+  color: var(--uap-magenta);
+  font: 400 11px/1.4 var(--uap-mono);
+}
+.anomaly-atlas .uap-credits dt:first-child {
+  margin-top: 0;
+}
+.anomaly-atlas .uap-credits dd {
+  margin: 0;
+  color: rgba(217, 220, 230, 0.8);
+}
+.anomaly-atlas .uap-credits a {
+  color: var(--uap-ion);
+}
+
 /* Gold register: the ancient sites dossier variant. */
 .anomaly-atlas .uap-dossier.ancient .uap-debated {
   border-left: 2px solid rgba(216, 179, 106, 0.6);

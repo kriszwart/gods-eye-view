@@ -155,6 +155,22 @@
   display: none;
 }
 
+/*
+ * The presets tray hides its scrollbar and maps no wheel gesture to it, so
+ * anything past Snow (Spectral, Radar, Infrared) is unreachable by mouse.
+ * Wrap it to rows instead. Scoped to `#control-panel #style-buttons` (two
+ * ids) rather than the bare class, which command-dock-compact.css also
+ * targets (`#command-dock .button-grid`, one id + one class) with a later
+ * unconditional `flex-wrap: nowrap; overflow-x: auto;` of equal specificity
+ * to `#style-buttons.button-grid` alone that would otherwise win the
+ * cascade and silently undo this. The extra id keeps the fix scoped to the
+ * presets tray without touching the shared `.button-grid` class.
+ */
+#control-panel #style-buttons.button-grid {
+  flex-wrap: wrap;
+  overflow-x: visible;
+}
+
 .style-btn {
   position: relative;
   display: flex;

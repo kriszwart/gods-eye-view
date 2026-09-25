@@ -1,5 +1,66 @@
 # Changelog
 
+- Phenomena phase 3: real data, structured sources. Source links across
+  both dossiers (anomalies and ancient sites) now pass through a shared
+  `safeSourceUrl` allowlist restricted to `http:` and `https:`, closing
+  the door a crafted source field could otherwise open.
+
+  The real GEIPAN export replaces the sample data: 3,381 cases at August
+  2026, parsed from geipan.fr's own export endpoints (`export/cas` and
+  `export/temoignages`, both serving XLSX despite their historical CSV
+  naming, and both needing a browser user agent, since the default curl
+  user agent gets a 429). Each case keeps GEIPAN's own grade verbatim (A
+  to D) alongside the shared status it maps to: A and B to explained, C
+  to insufficient, D to unresolved. Coordinates keep GEIPAN's own 0.1
+  degree rounding (a precisionKm of 11, stored per record); date
+  precision is reported honestly wherever the source date is partial; no
+  narrative text ships in any record.
+
+  Project Blue Book moves from nothing to an index: NARA's 89.8 MB bulk
+  JSON export downloads resumably, byte-range page by page, each page
+  validated against its expected size before being accepted; one defect
+  in NARA's own JSON (a missing top-level array comma) is repaired with
+  a narrow, tested pass rather than a blanket reparse. 10,622 digitised
+  file units are indexed. Counts are reconciled honestly rather than
+  merged into one figure: 12,618 is the historical count of Blue Book
+  sightings, 10,622 is how many have a digitised file unit today;
+  record-card extraction (the Batch API vision pass over each case's
+  first page) stays out of scope until phase 4.
+
+  The atlas itself now carries 3,405 records (3,381 GEIPAN plus the 24
+  sample hero cases), all valid. Two real defects in `build-dataset.mjs`
+  were caught and fixed with a failing test first: the hero-case merge
+  was dropping matches, and a shared-folder glob was picking up
+  unrelated `.jsonl` files sitting beside the normalised sources.
+  `qa-anomalies.mjs`'s record-count check now reads `stats.json` at run
+  time instead of a hardcoded 24, so the gate suite survives future data
+  swaps without hand-editing. The dataset's single 1937 record stays
+  visible in the chronometer's cumulative and all-years modes but sits
+  outside the 1940 to 2026 dial span; it remains a documented limitation
+  until the deep-time dial work.
+
+  A Sources and credits panel (the chronometer's "Sources" action) now
+  lists real attribution: GEIPAN (CNES), the National Archives (NAID
+  597821), GeoNames, The Modern Antiquarian, and an explicit note that
+  the sample hero cases are pending verification. DATA_SOURCES.md is
+  updated throughout with the real endpoints and counts.
+
+  Acceptance: at least 3,000 GEIPAN cases placed with grades A to D
+  mapped to shared statuses (met: 3,381), zero invalid records in the
+  build (met), attribution visible in the app (met). What phase 4 still
+  owes: extraction of the 10,622 indexed Blue Book file units into
+  structured record cards via the Batch API, and hand verification of
+  hero cases against primary sources before the sample set is replaced.
+
+  Gates: `npm run format:check` (1,115 files clean), `npm run build`,
+  `npm test` (5,063 tests, 5,062 passing, 1 skipped, 0 failed), `npm run
+  check:boundaries`, `npm run test:track` against the dev server (109 of
+  109), `node scripts/qa-anomalies.mjs` (0 failures, stats.json count
+  3,405), `node scripts/qa-ancient-sites.mjs` (0 failures), `node
+  scripts/qa-spotter.mjs` (0 failures) and `node scripts/qa-perf.mjs`
+  (24 of 24 passed). Pipeline suite: `cd anomaly-atlas-kit/pipeline &&
+  npm test` (36 of 36).
+
 - Phenomena phase 2c: the visual presets tray now wraps its preset buttons
   onto extra rows instead of hiding them behind a scrollbar the tray itself
   suppresses, so all ten styles (Spectral, Radar and Infrared included) stay

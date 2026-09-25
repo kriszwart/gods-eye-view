@@ -459,6 +459,59 @@ try {
   });
   check('infrared style reaches the layer', ir === true);
 
+  // Hotspots: a debounced imagery-layer overlay that follows the dial.
+  // Turning it on must add exactly one imagery layer immediately (no
+  // waiting on the 250 ms debounce); stepping the year twice while it is
+  // on must settle back at the same +1 (proving debounced swaps remove the
+  // old layer before or as they add the new one, never leaking a second);
+  // turning it off must return to the original count.
+  const heat = await page.evaluate(async () => {
+    const viewer = window.__godsEyeView.viewer;
+    const before = viewer.imageryLayers.length;
+    const btn = [...document.querySelectorAll('.uap-chrono-panel button')].find(
+      (b) => b.textContent === 'Hotspots',
+    );
+    btn.click();
+    const afterOn = viewer.imageryLayers.length;
+    const ariaPressedOn = btn.getAttribute('aria-pressed');
+    const slider = document.querySelector('.uap-slider');
+    slider.focus();
+    slider.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }),
+    );
+    slider.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }),
+    );
+    await new Promise((r) => setTimeout(r, 600));
+    const afterSteps = viewer.imageryLayers.length;
+    btn.click();
+    const afterOff = viewer.imageryLayers.length;
+    const ariaPressedOff = btn.getAttribute('aria-pressed');
+    return {
+      before,
+      afterOn,
+      ariaPressedOn,
+      afterSteps,
+      afterOff,
+      ariaPressedOff,
+    };
+  });
+  check(
+    'toggling Hotspots on adds exactly one imagery layer',
+    heat.afterOn === heat.before + 1 && heat.ariaPressedOn === 'true',
+    JSON.stringify(heat),
+  );
+  check(
+    'stepping the year with Hotspots on holds at +1 after the debounce settles (no leak)',
+    heat.afterSteps === heat.before + 1,
+    JSON.stringify(heat),
+  );
+  check(
+    'toggling Hotspots off returns to the base imagery layer count',
+    heat.afterOff === heat.before && heat.ariaPressedOff === 'false',
+    JSON.stringify(heat),
+  );
+
   // The Spotter plate is a sibling of the viewer container, not a child of
   // the anomalies layer's own DOM (task 5 fix round 1): disabling the
   // layer must still close it, since the Spotter button that opened it

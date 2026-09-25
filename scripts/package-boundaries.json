@@ -892,6 +892,7 @@
       "src/layers/anomalies/records.js",
       "src/layers/anomalies/source.js",
       "src/layers/anomalies/rendering.js",
+      "src/layers/anomalies/hotspots.js",
       "src/layers/anomalies/atmosphere.js",
       "src/layers/anomalies/chronometer.js",
       "src/sources/safeUrl.js"
@@ -1340,6 +1341,7 @@
       "src/layers/anomalies/records.js",
       "src/layers/anomalies/source.js",
       "src/layers/anomalies/rendering.js",
+      "src/layers/anomalies/hotspots.js",
       "src/layers/anomalies/atmosphere.js",
       "src/layers/anomalies/chronometer.js",
       "src/sources/safeUrl.js",
@@ -2071,6 +2073,7 @@
       "src/layers/anomalies/records.js",
       "src/layers/anomalies/source.js",
       "src/layers/anomalies/rendering.js",
+      "src/layers/anomalies/hotspots.js",
       "src/layers/anomalies/atmosphere.js",
       "src/layers/anomalies/chronometer.js",
       "src/sources/safeUrl.js",

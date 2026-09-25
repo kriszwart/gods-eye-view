@@ -6,6 +6,7 @@ import {
   PALETTE,
   ANOMALY_LAYER_ID,
 } from './model.js';
+import { binRows, blurBins, heatAlpha } from './hotspots.js';
 
 // Thin-film sheen for hero craft: strongest at grazing angles, drifting slowly.
 const SPECTRAL_FS = /* glsl */ `
@@ -79,6 +80,142 @@ export function createAnomalyRenderer(
     fragmentShaderText: INFRARED_FS,
   });
   const ion = Cesium.Color.fromCssColorString(PALETTE.ion);
+
+  // Heat overlay: reports binned onto hotspots.js's default grid (so
+  // blurBins's radius keeps the real-world extent it was tuned for), then
+  // drawn ion-to-magenta and upsampled (bilinear) onto a 1440x720 canvas —
+  // a smoother glow than binning at full canvas resolution, for a fraction
+  // of the blur cost. Cesium-side only: no portability constraint here.
+  const HEAT_BIN_WIDTH = 720;
+  const HEAT_BIN_HEIGHT = 360;
+  const HEAT_CANVAS_WIDTH = 1440;
+  const HEAT_CANVAS_HEIGHT = 720;
+  const HEAT_BLUR_RADIUS = 2;
+  const HEAT_ALPHA = 0.55;
+  const HEAT_DEBOUNCE_MS = 250;
+  const hexToRgb = (hex) =>
+    [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const heatIonRgb = hexToRgb(PALETTE.ion);
+  const heatMagentaRgb = hexToRgb(PALETTE.magenta);
+  const heatBinCanvas = document.createElement('canvas');
+  heatBinCanvas.width = HEAT_BIN_WIDTH;
+  heatBinCanvas.height = HEAT_BIN_HEIGHT;
+  const heatBinCtx = heatBinCanvas.getContext('2d');
+  const heatCanvas = document.createElement('canvas');
+  heatCanvas.width = HEAT_CANVAS_WIDTH;
+  heatCanvas.height = HEAT_CANVAS_HEIGHT;
+  const heatCtx = heatCanvas.getContext('2d');
+  heatCtx.imageSmoothingEnabled = true;
+  let heatRows = [];
+  let heatOn = false;
+  let heatFilter;
+  let heatLayer = null;
+  let heatTimer = null;
+
+  /** Paint the density ramp (ion low, magenta high) and return a data: URL. */
+  function paintHeat(filter) {
+    const bins = binRows(heatRows, {
+      width: HEAT_BIN_WIDTH,
+      height: HEAT_BIN_HEIGHT,
+      filter,
+    });
+    const blurred = blurBins(
+      bins,
+      HEAT_BIN_WIDTH,
+      HEAT_BIN_HEIGHT,
+      HEAT_BLUR_RADIUS,
+    );
+    let max = 0;
+    for (let i = 0; i < blurred.length; i++)
+      if (blurred[i] > max) max = blurred[i];
+    const image = heatBinCtx.createImageData(HEAT_BIN_WIDTH, HEAT_BIN_HEIGHT);
+    const data = image.data;
+    for (let i = 0; i < blurred.length; i++) {
+      const value = blurred[i];
+      const ratio = max > 0 ? Math.min(1, value / max) : 0;
+      const p = i * 4;
+      data[p] = heatIonRgb[0] + (heatMagentaRgb[0] - heatIonRgb[0]) * ratio;
+      data[p + 1] = heatIonRgb[1] + (heatMagentaRgb[1] - heatIonRgb[1]) * ratio;
+      data[p + 2] = heatIonRgb[2] + (heatMagentaRgb[2] - heatIonRgb[2]) * ratio;
+      data[p + 3] = Math.round(heatAlpha(value, max) * 255);
+    }
+    heatBinCtx.putImageData(image, 0, 0);
+    heatCtx.clearRect(0, 0, HEAT_CANVAS_WIDTH, HEAT_CANVAS_HEIGHT);
+    heatCtx.drawImage(
+      heatBinCanvas,
+      0,
+      0,
+      HEAT_CANVAS_WIDTH,
+      HEAT_CANVAS_HEIGHT,
+    );
+    return heatCanvas.toDataURL('image/png');
+  }
+
+  /**
+   * Repaint the heat texture and swap it in. SingleTileImageryProvider is
+   * immutable once created, so a fresh provider is added and the old layer
+   * removed once the new one is in place; a one-shot governed render covers
+   * the swap (the overlay never holds continuous render).
+   */
+  function swapHeatLayer(filter) {
+    const provider = new Cesium.SingleTileImageryProvider({
+      url: paintHeat(filter),
+      tileWidth: HEAT_CANVAS_WIDTH,
+      tileHeight: HEAT_CANVAS_HEIGHT,
+      rectangle: Cesium.Rectangle.fromDegrees(-180, -90, 180, 90),
+    });
+    const old = heatLayer;
+    heatLayer = viewer.imageryLayers.addImageryProvider(provider);
+    heatLayer.alpha = HEAT_ALPHA;
+    if (old) viewer.imageryLayers.remove(old, true);
+    requestFrame('anomalies-heat');
+  }
+
+  function cancelHeatDebounce() {
+    if (heatTimer) {
+      clearTimeout(heatTimer);
+      heatTimer = null;
+    }
+  }
+
+  /**
+   * Add or remove the heat imagery layer. Turning on repaints and swaps in
+   * immediately (using the last known filter), so the layer never lags the
+   * toggle; turning off cancels any pending debounced swap.
+   * @param {boolean} on
+   */
+  function setHeat(on) {
+    const next = !!on;
+    if (next === heatOn) return;
+    heatOn = next;
+    cancelHeatDebounce();
+    if (!heatOn) {
+      if (heatLayer) {
+        viewer.imageryLayers.remove(heatLayer, true);
+        heatLayer = null;
+      }
+      requestFrame('anomalies-heat');
+      return;
+    }
+    swapHeatLayer(heatFilter);
+  }
+
+  /**
+   * Recompute the heat texture for the current row filter. A no-op while
+   * heat is off; otherwise debounced 250 ms so rapid dial input (arrow
+   * repeat, drag) coalesces into a single texture swap.
+   * @param {(row: object) => boolean} [filter]
+   */
+  function refreshHeat(filter) {
+    heatFilter = filter;
+    if (!heatOn) return;
+    cancelHeatDebounce();
+    heatTimer = setTimeout(() => {
+      heatTimer = null;
+      swapHeatLayer(heatFilter);
+    }, HEAT_DEBOUNCE_MS);
+  }
+
   const t0 = performance.now();
   const tick = () => {
     if (!state.visible || !heroes.length) return;
@@ -157,6 +294,7 @@ export function createAnomalyRenderer(
   }
 
   function setRows(rows) {
+    heatRows = rows;
     clearPoints();
     const far = new Cesium.NearFarScalar(2.0e5, 1.6, 2.0e7, 0.75);
     for (const r of rows) {
@@ -270,8 +408,23 @@ export function createAnomalyRenderer(
     clearPoints();
     for (const h of heroes) scene.primitives.remove(h.model);
     heroes = [];
+    cancelHeatDebounce();
+    if (heatLayer) {
+      viewer.imageryLayers.remove(heatLayer, true);
+      heatLayer = null;
+    }
     syncHold();
   }
 
-  return { setRows, setHeroes, apply, pick, heroPosition, pulse, destroy };
+  return {
+    setRows,
+    setHeroes,
+    apply,
+    pick,
+    heroPosition,
+    pulse,
+    setHeat,
+    refreshHeat,
+    destroy,
+  };
 }

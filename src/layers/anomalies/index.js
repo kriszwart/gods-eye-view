@@ -129,6 +129,8 @@ export function createAnomaliesLayer({
   let tourToken = 0;
   let tourBtn = null;
   let activeStatuses = null;
+  let heatOn = false;
+  let heatBtn = null;
   let togglePhenomenaMode = null;
   let phenomenaBtn = null;
   let toggleSpotter = null;
@@ -162,6 +164,12 @@ export function createAnomaliesLayer({
       );
     lastYear = chrono.year;
     chrono.setReadout(describeYear(chrono.year, visibleCount(), chrono.mode));
+    if (heatOn)
+      renderer.refreshHeat(
+        (r) =>
+          inWindow(r, chrono.year, chrono.mode) &&
+          (!activeStatuses || activeStatuses.has(r.status)),
+      );
   };
   const relayout = () => {
     if (!chrono || !viewer) return;
@@ -324,6 +332,7 @@ export function createAnomaliesLayer({
       legend.hidden = true;
       legend.innerHTML = `
         <p>Brighter means less explained</p>
+        <p>Heat shows report density, not credibility</p>
         <ul>
           <li><i style="--c: var(--uap-dim)"></i>Explained</li>
           <li><i style="--c: var(--uap-violet)"></i>Too little data</li>
@@ -382,6 +391,13 @@ export function createAnomaliesLayer({
         });
         btn.setAttribute('aria-pressed', 'true');
       }
+      heatBtn = chrono.addAction('Hotspots', (btn) => {
+        heatOn = !heatOn;
+        btn.setAttribute('aria-pressed', String(heatOn));
+        renderer.setHeat(heatOn);
+        refreshTime();
+      });
+      heatBtn.setAttribute('aria-pressed', 'false');
       phenomenaBtn = chrono.addAction('Phenomena mode', (btn) => {
         if (typeof togglePhenomenaMode !== 'function') return;
         btn.setAttribute('aria-pressed', String(togglePhenomenaMode()));
@@ -479,6 +495,9 @@ export function createAnomaliesLayer({
       stopTour();
       closeSpotterPanel();
       closeCredits();
+      heatOn = false;
+      heatBtn?.setAttribute('aria-pressed', 'false');
+      renderer?.setHeat(false);
       if (legend) legend.hidden = true;
       restoreAtmosphere?.();
       restoreAtmosphere = null;

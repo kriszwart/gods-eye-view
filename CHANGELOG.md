@@ -1,5 +1,52 @@
 # Changelog
 
+- Phenomena phase 3b: ancient site imagery and cross-source links, on the
+  free tier throughout, with no LLM anywhere in the pipeline.
+
+  Ancient sites gain Commons photographs via Wikidata's P18 property: 15
+  of the 20 curated sites now carry a photograph, each with its own
+  licence and author string. A free-licence filter rejects NC and ND
+  Creative Commons variants outright, and author strings are cleaned of
+  wiki signature debris (leading dashes, trailing talk links, signature
+  timestamps) before they reach a dossier. The remaining 5 sites stay
+  without a photo: some have no free-licensed image on Wikidata, others
+  have an image but no attribution data, and the project's honesty rule
+  treats both as "no image" rather than ship anything unattributed. All
+  20 sites carry a Wikipedia link regardless of image status. In the
+  dossier itself, the photo renders hotlinked from Commons through the
+  existing host-allowlisted `safeImageUrl` guard, with a credit line and
+  the Wikipedia link alongside it; offline or off-allowlist, the dossier
+  degrades to alt text rather than a broken image.
+
+  Hero cases gain the same treatment on the anomalies side: 21 of the 24
+  curated hero cases now link to their Wikipedia article, each link
+  redirect-verified rather than guessed from the case title. The other
+  3 keep a null Wikipedia field for want of a dedicated article, again
+  honest-null over a guessed or dead link.
+
+  Every one of the 3,381 real GEIPAN cases now links to its own record
+  at geipan.fr from its dossier, not just the 24 hero cases. Non-hero
+  records carry this as a compact two-key entry (`id`, `source_url`)
+  rather than the hero cases' full shape, keeping the file growth
+  proportionate to the data added: `cases.v1.json` grew from 19 KB to
+  389 KB.
+
+  All of this enrichment is committed build output, produced by the
+  pipeline and checked in; nothing runs at request time beyond the
+  existing hotlinked-image guard. No LLM was used anywhere in the phase,
+  keeping it on the free tier. A cryptids register (Bigfoot, Loch Ness
+  and similar reported-but-uncatalogued phenomena) was scoped and
+  rejected for this phase; it remains a noted future direction rather
+  than a silent gap.
+
+  Gates: `npm run format:check` (1,115 files clean), `npm run build`,
+  `npm test` (5,065 tests, 5,064 passing, 1 skipped, 0 failed), `npm run
+  check:boundaries`, `npm run test:track` against the dev server (109 of
+  109), `node scripts/qa-anomalies.mjs` (0 failures), `node
+  scripts/qa-ancient-sites.mjs` (0 failures), `node scripts/qa-spotter.mjs`
+  (0 failures) and `node scripts/qa-perf.mjs` (24 of 24 passed). Pipeline
+  suite: `cd anomaly-atlas-kit/pipeline && npm test` (61 of 61).
+
 - Phenomena phase 3: real data, structured sources. Source links across
   both dossiers (anomalies and ancient sites) now pass through a shared
   `safeSourceUrl` allowlist restricted to `http:` and `https:`, closing

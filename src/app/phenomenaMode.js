@@ -14,11 +14,26 @@
  * duration of the mode: enter() records the current style via `getStyle()`
  * then calls `setStyle('spectral')`; exit() calls `setStyle()` again with
  * the recorded style to restore it. Both hooks are optional and independent
- * of the layer bookkeeping above — when either is missing, style is left
+ * of the layer bookkeeping above; when either is missing, style is left
  * alone and behaviour is unchanged from before they existed. A forced or
  * repeated exit() (no matching enter(), or exit() called twice) never calls
  * setStyle more than once per enter(), because exit() is a no-op whenever
  * the mode is not active.
+ *
+ * This mirrors the restore-set ruling above: just as a kept layer the user
+ * toggles off during the mode still gets switched back on, a style the
+ * user picks by hand while the mode is active is discarded on exit. In
+ * both cases the mode's own recorded snapshot wins over anything the user
+ * changed while it was active. exit() always writes back the single style
+ * recorded at enter(), never whatever style happens to be active when
+ * exit() runs.
+ *
+ * Entering the mode while a share link's visual restore is still pending
+ * supersedes the link: getStyle() records whichever style is active at
+ * that moment, and exit() reasserts that recorded snapshot rather than
+ * the style the pending link would otherwise have applied. This is
+ * deliberate, matching how other explicit visual actions claim the
+ * restore lane elsewhere in the shell.
  */
 export function createPhenomenaMode({
   layerIds,

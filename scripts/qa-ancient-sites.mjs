@@ -3,9 +3,10 @@
  * Browser proof of the ancient sites layer acceptance: registration, the
  * curated 20-site register, an off/on re-enable with overlay labels
  * surviving, decoupling from the anomalies year dial, dossier open with a
- * debated line and record link, Escape close, and share-link restore via
- * token 4, solo and alongside anomalies. Needs the dev server on :4173
- * (QA_BASE_URL overrides).
+ * debated line, record link, site photograph (host-guarded), photo credit
+ * and Wikipedia link, Escape close, and share-link restore via token 4,
+ * solo and alongside anomalies. Needs the dev server on :4173 (QA_BASE_URL
+ * overrides).
  */
 import puppeteer from 'puppeteer';
 const base = process.env.QA_BASE_URL || 'http://localhost:4173';
@@ -131,10 +132,29 @@ try {
     const link = d ? d.querySelector('a') : null;
     const hasDebated = !!d?.querySelector('.uap-debated');
     const linkText = link ? link.textContent.trim() : null;
+    const photo = d ? d.querySelector('.uap-photo') : null;
+    const photoHost = photo ? new URL(photo.src).hostname : null;
+    const creditText =
+      d?.querySelector('.uap-photo-credit')?.textContent.trim() ?? null;
+    const wikipediaLink = d
+      ? [...d.querySelectorAll('.uap-source a')].find(
+          (a) => a.textContent.trim() === 'Wikipedia',
+        )
+      : null;
+    const wikipediaHref = wikipediaLink ? wikipediaLink.href : null;
     d?.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
     );
-    return { open, text, hasDebated, linkText, closed: d ? d.hidden : null };
+    return {
+      open,
+      text,
+      hasDebated,
+      linkText,
+      closed: d ? d.hidden : null,
+      photoHost,
+      creditText,
+      wikipediaHref,
+    };
   });
   check(
     'focusSite opens the dossier with a debated line',
@@ -147,6 +167,24 @@ try {
     'dossier carries an Open record link',
     dossier.linkText === 'Open record',
     String(dossier.linkText),
+  );
+  check(
+    'dossier photo resolves from an allowed Wikimedia host',
+    dossier.photoHost === 'upload.wikimedia.org' ||
+      dossier.photoHost === 'commons.wikimedia.org',
+    String(dossier.photoHost),
+  );
+  check(
+    'dossier carries a photo credit line',
+    typeof dossier.creditText === 'string' &&
+      dossier.creditText.startsWith('Photo:'),
+    String(dossier.creditText),
+  );
+  check(
+    'dossier carries a Wikipedia link',
+    typeof dossier.wikipediaHref === 'string' &&
+      dossier.wikipediaHref.includes('wikipedia.org'),
+    String(dossier.wikipediaHref),
   );
   check('Escape closes the dossier', dossier.closed === true);
 

@@ -5,7 +5,7 @@ import {
   createAncientOverlayEntry,
 } from './model.js';
 import { createAncientRenderer } from './rendering.js';
-import { safeSourceUrl } from '../../sources/safeUrl.js';
+import { safeSourceUrl, safeImageUrl } from '../../sources/safeUrl.js';
 export * from './model.js';
 export { normalizeAncientSites } from './records.js';
 export { createAncientSource } from './source.js';
@@ -45,10 +45,15 @@ export function createAncientSitesLayer({
     const row = rows.find((r) => r.id === id);
     if (!row || !dossier) return;
     const sourceUrl = safeSourceUrl(row.source_url);
+    const wikipediaUrl = safeSourceUrl(row.wikipedia);
+    const imageUrl = safeImageUrl(row.image);
+    const credit = row.image_attribution;
     dossier.innerHTML = `
       <button type="button" class="uap-close" aria-label="Close site">Close</button>
       <h2>${escapeHtml(row.name)}</h2>
       <img class="uap-glyph" alt="" src="${assetBase}glyphs/${escapeHtml(row.glyph)}.svg">
+      ${imageUrl ? `<img class="uap-photo" alt="${escapeHtml(row.name)}" loading="lazy" src="${escapeHtml(imageUrl)}">` : ''}
+      ${imageUrl && credit?.author && credit?.licence ? `<p class="uap-photo-credit">Photo: ${escapeHtml(credit.author)}, ${escapeHtml(credit.licence)}</p>` : ''}
       <dl>
         <dt>Period</dt><dd>${escapeHtml(row.period)}</dd>
         <dt>Country</dt><dd>${escapeHtml(row.country)}</dd>
@@ -56,7 +61,11 @@ export function createAncientSitesLayer({
       </dl>
       ${row.debated ? `<p class="uap-debated">Debated: ${escapeHtml(row.debated)}</p>` : ''}
       <p class="uap-summary">${escapeHtml(row.summary)}</p>
-      ${sourceUrl ? `<p class="uap-source"><a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open record</a></p>` : ''}
+      ${
+        sourceUrl || wikipediaUrl
+          ? `<p class="uap-source">${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open record</a>` : ''}${wikipediaUrl ? `<a href="${escapeHtml(wikipediaUrl)}" target="_blank" rel="noopener noreferrer">Wikipedia</a>` : ''}</p>`
+          : ''
+      }
       ${row.attribution ? `<p class="uap-attribution">${escapeHtml(row.attribution)}</p>` : ''}`;
     dossier.hidden = false;
     dossier.querySelector('.uap-close').focus();

@@ -109,6 +109,24 @@
   color: rgba(217, 220, 230, 0.8);
   margin: 0;
 }
+.anomaly-atlas .uap-dossier .uap-photo {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+  margin: 12px 0 0;
+}
+.anomaly-atlas .uap-dossier .uap-photo-credit {
+  margin: 4px 0 0;
+  font: 400 11px/1.4 var(--uap-mono);
+  color: var(--uap-dim);
+}
+.anomaly-atlas .uap-dossier .uap-source {
+  display: flex;
+  gap: 14px;
+  margin: 12px 0;
+}
 .anomaly-atlas .uap-close {
   position: absolute;
   top: 12px;

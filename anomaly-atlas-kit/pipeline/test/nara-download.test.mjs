@@ -35,6 +35,30 @@ async function startFixtureServer(body) {
   return { url: `http://127.0.0.1:${port}/fixture.json`, requests, close: () => new Promise((r) => server.close(r)) };
 }
 
+/** A fixture server that always truncates its 206 body, short of what the
+ * requested Range asked for -- standing in for a flaky connection or a CDN
+ * edge that cuts a response off early. */
+async function startShortBodyServer(body, shortBy) {
+  const requests = [];
+  const server = createServer((req, res) => {
+    requests.push({ method: req.method, range: req.headers.range });
+    if (req.method === 'HEAD') {
+      res.writeHead(200, { 'content-length': String(body.length), 'accept-ranges': 'bytes' });
+      res.end();
+      return;
+    }
+    const [, s, e] = /^bytes=(\d+)-(\d+)$/.exec(req.headers.range || '');
+    const start = Number(s);
+    const end = Number(e);
+    const slice = body.subarray(start, end + 1 - shortBy);
+    res.writeHead(206, { 'content-range': `bytes ${start}-${end}/${body.length}`, 'content-length': String(slice.length) });
+    res.end(slice);
+  });
+  await new Promise((resolve) => server.listen(0, resolve));
+  const { port } = server.address();
+  return { url: `http://127.0.0.1:${port}/fixture.json`, requests, close: () => new Promise((r) => server.close(r)) };
+}
+
 async function withTempDirs(fn) {
   const base = await mkdtemp(path.join(tmpdir(), 'nara-download-'));
   try {
@@ -137,6 +161,25 @@ test('logs progress every 10 pages and always on the final page', async () => {
       assert.ok(mentions10, `expected a log mentioning page 10/25, got: ${JSON.stringify(logs)}`);
       assert.ok(mentions20, `expected a log mentioning page 20/25, got: ${JSON.stringify(logs)}`);
       assert.ok(mentionsFinal, `expected a log mentioning the final page 25/25, got: ${JSON.stringify(logs)}`);
+    });
+  } finally {
+    await close();
+  }
+});
+
+test('a short 206 body is retried up to maxAttempts, then fails loudly instead of assembling a corrupt file', async () => {
+  const body = Buffer.from('0123456789ABCDEFGHIJ'); // 20 bytes, one page (chunkBytes 20)
+  const { url, requests, close } = await startShortBodyServer(body, 3); // every response is 3 bytes short
+  try {
+    await withTempDirs(async ({ pagesDir, outFile }) => {
+      await assert.rejects(
+        downloadPaged({ url, pagesDir, outFile, chunkBytes: 20, delayMs: 0, maxAttempts: 3, sleep: noSleep, log: () => {} }),
+        /returned 17 bytes, expected 20/,
+      );
+      const getRequests = requests.filter((r) => r.method === 'GET');
+      assert.equal(getRequests.length, 3, 'every attempt should have been retried up to maxAttempts');
+      await assert.rejects(readFile(outFile), { code: 'ENOENT' }, 'no assembled file should exist after a failed download');
+      await assert.rejects(readFile(path.join(pagesDir, 'page-00000.part')), { code: 'ENOENT' }, 'the short page should never be written to disk');
     });
   } finally {
     await close();

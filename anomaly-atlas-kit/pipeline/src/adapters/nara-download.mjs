@@ -19,7 +19,10 @@
 // bluebook.mjs's units() expects. This module downloads that file in
 // byte-range "pages" so a slow or interrupted connection can resume, with a
 // browser User-Agent, a delay between requests, and progress logged every 10
-// pages, then assembles the pages in order into the target file.
+// pages, then assembles the pages in order into the target file. Each freshly
+// fetched page's byte length is checked against the range it asked for
+// before being accepted (retried a few times, then a loud failure) so a
+// short response never gets silently baked into the assembled file.
 
 import { mkdir, readFile, writeFile, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -29,6 +32,7 @@ export const BULK_URL = 'https://catalog.archives.gov/medialz/bulk-downloads/uap
 export const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 export const DEFAULT_CHUNK_BYTES = 1024 * 1024; // 1 MiB pages: ~86 pages for the ~90 MB export
 export const DEFAULT_DELAY_MS = 2000;
+export const DEFAULT_MAX_ATTEMPTS = 3;
 
 /** Split a byte length into inclusive [start, end] ranges of at most `size` bytes each. */
 export function chunkRanges(totalBytes, size) {
@@ -45,6 +49,29 @@ async function pageIsComplete(file, expectedBytes) {
 }
 
 /**
+ * Fetch one byte range, retrying up to `maxAttempts` times (with `sleep`
+ * between attempts) whenever the server errors or returns fewer bytes than
+ * the range asked for -- a short 206 body would otherwise be accepted as a
+ * complete page and silently corrupt the assembled file. Throws with the
+ * last failure reason if every attempt comes back short.
+ */
+async function fetchPage({ url, start, end, expected, fetchImpl, sleep, delayMs, maxAttempts }) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const res = await fetchImpl(url, { headers: { 'User-Agent': USER_AGENT, Range: `bytes=${start}-${end}` } });
+    if (res.ok || res.status === 206) {
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length === expected) return buf;
+      lastError = new Error(`bytes ${start}-${end} returned ${buf.length} bytes, expected ${expected} (attempt ${attempt}/${maxAttempts})`);
+    } else {
+      lastError = new Error(`bytes ${start}-${end} failed: HTTP ${res.status} (attempt ${attempt}/${maxAttempts})`);
+    }
+    if (attempt < maxAttempts) await sleep(delayMs);
+  }
+  throw lastError;
+}
+
+/**
  * Download `url` in byte-range pages into `pagesDir`, skipping any page
  * already saved at its expected size, then assemble the pages in order into
  * `outFile`. `fetchImpl`, `sleep` and `log` are injectable for tests.
@@ -56,6 +83,7 @@ export async function downloadPaged({
   outFile,
   chunkBytes = DEFAULT_CHUNK_BYTES,
   delayMs = DEFAULT_DELAY_MS,
+  maxAttempts = DEFAULT_MAX_ATTEMPTS,
   fetchImpl = fetch,
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   log = console.log,
@@ -76,9 +104,8 @@ export async function downloadPaged({
     const expected = end - start + 1;
     if (await pageIsComplete(file, expected)) continue;
 
-    const res = await fetchImpl(url, { headers: { 'User-Agent': USER_AGENT, Range: `bytes=${start}-${end}` } });
-    if (!res.ok && res.status !== 206) throw new Error(`page ${i} (bytes ${start}-${end}) failed: HTTP ${res.status}`);
-    await writeFile(file, Buffer.from(await res.arrayBuffer()));
+    const buf = await fetchPage({ url, start, end, expected, fetchImpl, sleep, delayMs, maxAttempts });
+    await writeFile(file, buf);
     fetched++;
     if ((i + 1) % 10 === 0 || i === ranges.length - 1) log(`page ${i + 1}/${ranges.length} saved`);
     if (i < ranges.length - 1) await sleep(delayMs);

@@ -8,7 +8,7 @@
     "access": "Download the JSON metadata only. It lists every digital object; fetch just the first page (the record card) of each case file. The full image zips run to hundreds of gigabytes, so avoid them.",
     "licence": "US federal record, generally public domain. Attribute NARA.",
     "attribution": "Project Blue Book case files, US National Archives (NAID 597821)",
-    "scale": "12,618 sightings, 701 concluded unidentified",
+    "scale": "12,618 sightings investigated 1947 to 1969, 701 concluded unidentified (the Project Blue Book programme total, per the US Air Force and National Archives Foundation); the sanitised series NAID 597821 itself holds 10,622 digitised file units (confirmed via the catalog's own fileUnitCount), since its own scope note says a case file can cover one sighting or a group of closely related sightings",
     "quirks": "Scans are online out of chronological order. Witness names are already removed in the sanitised series."
   },
   "geipan": {

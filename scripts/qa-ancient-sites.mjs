@@ -3,10 +3,10 @@
  * Browser proof of the ancient sites layer acceptance: registration, the
  * curated 20-site register, an off/on re-enable with overlay labels
  * surviving, decoupling from the anomalies year dial, dossier open with a
- * debated line, record link, site photograph (host-guarded), photo credit
- * and Wikipedia link, Escape close, and share-link restore via token 4,
- * solo and alongside anomalies. Needs the dev server on :4173 (QA_BASE_URL
- * overrides).
+ * debated line, record link, site photograph (host-guarded), photo credit,
+ * Wikipedia link and Street view link, Escape close, and share-link restore
+ * via token 4, solo and alongside anomalies. Needs the dev server on :4173
+ * (QA_BASE_URL overrides).
  */
 import puppeteer from 'puppeteer';
 const base = process.env.QA_BASE_URL || 'http://localhost:4173';
@@ -142,6 +142,15 @@ try {
         )
       : null;
     const wikipediaHref = wikipediaLink ? wikipediaLink.href : null;
+    const streetViewLink = d
+      ? [...d.querySelectorAll('.uap-source a')].find(
+          (a) => a.textContent.trim() === 'Street view',
+        )
+      : null;
+    const streetViewHref = streetViewLink ? streetViewLink.href : null;
+    const streetViewHost = streetViewLink
+      ? new URL(streetViewLink.href).host
+      : null;
     d?.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
     );
@@ -154,6 +163,8 @@ try {
       photoHost,
       creditText,
       wikipediaHref,
+      streetViewHref,
+      streetViewHost,
     };
   });
   check(
@@ -185,6 +196,16 @@ try {
     typeof dossier.wikipediaHref === 'string' &&
       dossier.wikipediaHref.includes('wikipedia.org'),
     String(dossier.wikipediaHref),
+  );
+  check(
+    'dossier carries a Street view link to the site coordinates',
+    dossier.streetViewHost === 'www.google.com' &&
+      typeof dossier.streetViewHref === 'string' &&
+      dossier.streetViewHref.includes('37.2231'),
+    JSON.stringify({
+      streetViewHost: dossier.streetViewHost,
+      streetViewHref: dossier.streetViewHref,
+    }),
   );
   check('Escape closes the dossier', dossier.closed === true);
 

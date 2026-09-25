@@ -329,10 +329,24 @@ try {
     const text = d ? d.textContent : '';
     const wikiLink = d?.querySelector('.uap-source a[href*="wikipedia.org"]');
     const wikiHost = wikiLink ? new URL(wikiLink.href).host : null;
+    const streetViewLink = [
+      ...(d?.querySelectorAll('.uap-source a') || []),
+    ].find((a) => a.textContent === 'Street view');
+    const streetViewHost = streetViewLink
+      ? new URL(streetViewLink.href).host
+      : null;
+    const streetViewHref = streetViewLink ? streetViewLink.href : null;
     d?.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
     );
-    return { rowCount: rows.length, open, text, wikiHost };
+    return {
+      rowCount: rows.length,
+      open,
+      text,
+      wikiHost,
+      streetViewHost,
+      streetViewHref,
+    };
   });
   check(
     'search finds Phoenix and opens the anomalies dossier',
@@ -345,6 +359,16 @@ try {
     'Phoenix lights dossier carries a Wikipedia link to en.wikipedia.org',
     caseSearch.wikiHost === 'en.wikipedia.org',
     JSON.stringify({ wikiHost: caseSearch.wikiHost }),
+  );
+  check(
+    'Phoenix lights dossier carries a Street view link to the reported coordinates',
+    caseSearch.streetViewHost === 'www.google.com' &&
+      typeof caseSearch.streetViewHref === 'string' &&
+      caseSearch.streetViewHref.includes('33.4000'),
+    JSON.stringify({
+      streetViewHost: caseSearch.streetViewHost,
+      streetViewHref: caseSearch.streetViewHref,
+    }),
   );
 
   // Real (non-hero) GEIPAN cases now carry a compact { id, source_url } dossier

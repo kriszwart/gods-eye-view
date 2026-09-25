@@ -46,6 +46,9 @@ export function createAncientSitesLayer({
     if (!row || !dossier) return;
     const sourceUrl = safeSourceUrl(row.source_url);
     const wikipediaUrl = safeSourceUrl(row.wikipedia);
+    const streetViewUrl = safeSourceUrl(
+      `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${row.lat.toFixed(4)},${row.lon.toFixed(4)}`,
+    );
     const credit = row.image_attribution;
     const attributed = !!(credit?.author && credit?.licence);
     const imageUrl = attributed ? safeImageUrl(row.image) : null;
@@ -63,8 +66,8 @@ export function createAncientSitesLayer({
       ${row.debated ? `<p class="uap-debated">Debated: ${escapeHtml(row.debated)}</p>` : ''}
       <p class="uap-summary">${escapeHtml(row.summary)}</p>
       ${
-        sourceUrl || wikipediaUrl
-          ? `<p class="uap-source">${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open record</a>` : ''}${wikipediaUrl ? `<a href="${escapeHtml(wikipediaUrl)}" target="_blank" rel="noopener noreferrer">Wikipedia</a>` : ''}</p>`
+        sourceUrl || wikipediaUrl || streetViewUrl
+          ? `<p class="uap-source">${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open record</a>` : ''}${wikipediaUrl ? `<a href="${escapeHtml(wikipediaUrl)}" target="_blank" rel="noopener noreferrer">Wikipedia</a>` : ''}${streetViewUrl ? `<a href="${escapeHtml(streetViewUrl)}" target="_blank" rel="noopener noreferrer">Street view</a>` : ''}</p>`
           : ''
       }
       ${row.attribution ? `<p class="uap-attribution">${escapeHtml(row.attribution)}</p>` : ''}`;

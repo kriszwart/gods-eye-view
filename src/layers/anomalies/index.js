@@ -183,6 +183,7 @@ export function createAnomaliesLayer({
     }
     const when = detail?.date?.iso || String(row.year);
     const sourceUrl = safeSourceUrl(detail?.source_url);
+    const wikipediaUrl = safeSourceUrl(detail?.wikipedia);
     dossier.innerHTML = `
       <button type="button" class="uap-close" aria-label="Close case">Close</button>
       <p class="uap-code">${escapeHtml(row.source)} / ${escapeHtml(row.status)}</p>
@@ -193,9 +194,14 @@ export function createAnomaliesLayer({
         <dt>Where</dt><dd>${escapeHtml(detail?.location?.place || `${row.lat.toFixed(2)}, ${row.lon.toFixed(2)}`)}${row.precisionKm ? ` (within ${row.precisionKm} km)` : ''}</dd>
         <dt>Reported as</dt><dd>${escapeHtml(detail?.shape_raw || row.craft.replace(/-/g, ' '))}</dd>
         <dt>Outcome</dt><dd>${escapeHtml(detail?.explanation || row.status)}</dd>
-        <dt>Source</dt><dd>${escapeHtml(detail?.source_note || detail?.attribution || row.source)}${sourceUrl ? ` <a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open record</a>` : ''}</dd>
+        <dt>Source</dt><dd>${escapeHtml(detail?.source_note || detail?.attribution || row.source)}</dd>
       </dl>
-      ${detail?.summary ? `<p class="uap-summary">${escapeHtml(detail.summary)}</p>` : ''}`;
+      ${detail?.summary ? `<p class="uap-summary">${escapeHtml(detail.summary)}</p>` : ''}
+      ${
+        sourceUrl || wikipediaUrl
+          ? `<p class="uap-source">${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open record</a>` : ''}${wikipediaUrl ? `<a href="${escapeHtml(wikipediaUrl)}" target="_blank" rel="noopener noreferrer">Wikipedia</a>` : ''}</p>`
+          : ''
+      }`;
     dossier.hidden = false;
     dossier.querySelector('.uap-close').focus();
   }

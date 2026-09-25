@@ -25,6 +25,7 @@ export function fromSample(sample, sources) {
       shape_raw: c.shape_raw, craft_id: c.craft_id,
       grade: gradeFor('sample', c.status),
       explanation: c.explanation ?? null, summary: c.summary ?? null,
+      wikipedia: c.wikipedia ?? null,
       media: [], tags: c.tags || [], hero: true, review: true,
       extraction: { method: 'sample', model: null, confidence: null },
     };

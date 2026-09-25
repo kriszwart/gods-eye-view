@@ -8,7 +8,7 @@ import { parsePlace } from '../src/lib/gazetteer.mjs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { haversineKm, readNormalised, writeJsonl } from '../src/lib/records.mjs';
+import { haversineKm, readNormalised, writeJsonl, toCases } from '../src/lib/records.mjs';
 
 const shapeMap = JSON.parse(await readFile(new URL('../config/shape-map.json', import.meta.url), 'utf8'));
 
@@ -82,4 +82,27 @@ test('readNormalised, given an allow-list, reads only the named files and skips 
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test('toCases carries the wikipedia field through for hero records, leaving non-hero behaviour untouched', () => {
+  const base = {
+    title: 'Hero case', hero: true,
+    date: { iso: '1997-03-13', precision: 'day', days: 9933 },
+    location: { lat: 33, lon: -112, precision_km: 50 },
+    craft_id: 'boomerang', shape_raw: null,
+    grade: { scheme: 'sample', value: null, status: 'contested', score: 0.5 },
+    explanation: null, summary: null, source: 'sample',
+    source_ref: null, source_url: null, source_note: null,
+    attribution: 'Sample', media: [], tags: [], related: [],
+  };
+  const heroWithWikipedia = { ...base, id: 'case-hero-with-wikipedia', wikipedia: 'https://en.wikipedia.org/wiki/Example' };
+  const heroWithoutWikipedia = { ...base, id: 'case-hero-without-wikipedia', wikipedia: null };
+  const nonHero = { ...base, id: 'not-a-hero', hero: false, wikipedia: 'https://en.wikipedia.org/wiki/Ignored' };
+  const cases = toCases([heroWithWikipedia, heroWithoutWikipedia, nonHero]);
+  assert.equal(cases.length, 2, 'non-hero records are still excluded from the dossier output');
+  assert.equal(
+    cases.find((c) => c.id === 'case-hero-with-wikipedia').wikipedia,
+    'https://en.wikipedia.org/wiki/Example',
+  );
+  assert.equal(cases.find((c) => c.id === 'case-hero-without-wikipedia').wikipedia, null);
 });

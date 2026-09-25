@@ -327,10 +327,12 @@ try {
     const d = document.querySelector('.uap-dossier:not(.ancient)');
     const open = d && !d.hidden;
     const text = d ? d.textContent : '';
+    const wikiLink = d?.querySelector('.uap-source a[href*="wikipedia.org"]');
+    const wikiHost = wikiLink ? new URL(wikiLink.href).host : null;
     d?.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
     );
-    return { rowCount: rows.length, open, text };
+    return { rowCount: rows.length, open, text, wikiHost };
   });
   check(
     'search finds Phoenix and opens the anomalies dossier',
@@ -338,6 +340,11 @@ try {
       caseSearch.open === true &&
       caseSearch.text.includes('Phoenix'),
     JSON.stringify({ rowCount: caseSearch.rowCount, open: caseSearch.open }),
+  );
+  check(
+    'Phoenix lights dossier carries a Wikipedia link to en.wikipedia.org',
+    caseSearch.wikiHost === 'en.wikipedia.org',
+    JSON.stringify({ wikiHost: caseSearch.wikiHost }),
   );
 
   // Ancient sites match by country as well as by name (Gobekli Tepe and

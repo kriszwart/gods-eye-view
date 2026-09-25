@@ -116,6 +116,7 @@ export function toCases(records) {
     id: r.id, title: r.title, date: r.date, location: r.location, craft_id: r.craft_id, shape_raw: r.shape_raw ?? null,
     grade: r.grade, explanation: r.explanation ?? null, summary: r.summary ?? null, source: r.source,
     source_ref: r.source_ref ?? null, source_url: r.source_url ?? null, source_note: r.source_note ?? null,
+    wikipedia: r.wikipedia ?? null,
     attribution: r.attribution, media: r.media || [], tags: r.tags || [], related: r.related || [],
   }));
 }

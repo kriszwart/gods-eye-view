@@ -848,6 +848,8 @@
   "src/layers/anomalies/rendering.js",
   "src/layers/anomalies/atmosphere.js",
   "src/layers/anomalies/chronometer.js",
+  "src/layers/anomalies/hotspots.js",
+  "src/layers/anomalies/hotspots.test.mjs",
   "src/layers/anomalies/records.test.mjs",
   "src/styles/spectral.js",
   "src/styles/radar.js",

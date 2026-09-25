@@ -423,3 +423,116 @@
   padding-left: 8px;
   color: var(--uap-dim, #7c8195);
 }
+
+/* Spotter: a live sky-check plate over currently tracked sources. Opposite
+   corner from the dossier so both can stand open at once. */
+.anomaly-atlas .uap-spotter {
+  position: absolute;
+  right: calc(24px + env(safe-area-inset-right, 0px));
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  width: min(340px, calc(100vw - 48px));
+  max-height: min(60vh, 480px);
+  overflow-y: auto;
+  padding: 18px 20px;
+  background: var(--glass-bg);
+  color: var(--uap-ink);
+  font: 400 13px/1.5 var(--uap-sans);
+  z-index: 140;
+}
+.anomaly-atlas .uap-spotter::before,
+.anomaly-atlas .uap-spotter::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: solid var(--uap-hair-strong);
+}
+.anomaly-atlas .uap-spotter::before {
+  top: 0;
+  left: 0;
+  border-width: 1px 0 0 1px;
+}
+.anomaly-atlas .uap-spotter::after {
+  bottom: 0;
+  right: 0;
+  border-width: 0 1px 1px 0;
+}
+.anomaly-atlas .uap-spotter-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 14px;
+}
+.anomaly-atlas .uap-spotter-head h2 {
+  margin: 0;
+  font: 400 16px/1.2 var(--uap-mono);
+  letter-spacing: -0.01em;
+}
+.anomaly-atlas .uap-spotter-refresh {
+  background: none;
+  border: 1px solid var(--uap-hair, rgba(217, 220, 230, 0.16));
+  color: var(--uap-ink);
+  font: 400 11px var(--uap-mono);
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.anomaly-atlas .uap-spotter-refresh:hover,
+.anomaly-atlas .uap-spotter-refresh:focus-visible {
+  border-color: var(--uap-hair-strong, rgba(217, 220, 230, 0.32));
+}
+.anomaly-atlas .uap-spotter-refresh:focus-visible {
+  outline: 2px solid var(--uap-ink, #d9dce6);
+  outline-offset: 2px;
+}
+.anomaly-atlas .uap-spotter-rows {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.anomaly-atlas .uap-spotter-row {
+  display: grid;
+  grid-template-columns: 16px 1fr auto auto;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--uap-hair, rgba(217, 220, 230, 0.16));
+}
+.anomaly-atlas .uap-spotter-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.anomaly-atlas .uap-spotter-glyph {
+  color: var(--uap-ion);
+  font-size: 13px;
+}
+.anomaly-atlas .uap-spotter-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.anomaly-atlas .uap-spotter-bearing,
+.anomaly-atlas .uap-spotter-distance {
+  color: var(--uap-dim);
+  font: 400 11px var(--uap-mono);
+  white-space: nowrap;
+}
+.anomaly-atlas .uap-spotter-why {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: rgba(217, 220, 230, 0.72);
+  font-size: 12px;
+}
+.anomaly-atlas .uap-spotter-empty {
+  margin: 0 0 12px;
+  color: var(--uap-dim);
+}
+.anomaly-atlas .uap-spotter-note {
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--uap-hair, rgba(217, 220, 230, 0.16));
+  color: var(--uap-dim);
+  font-size: 11px;
+}

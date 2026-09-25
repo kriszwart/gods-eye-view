@@ -80,6 +80,8 @@ export function createAnomaliesLayer({
   let activeStatuses = null;
   let togglePhenomenaMode = null;
   let phenomenaBtn = null;
+  let toggleSpotter = null;
+  let spotterBtn = null;
   let shellSearchCases = null;
   let shellFocusResult = null;
   let searchControl = null;
@@ -267,6 +269,11 @@ export function createAnomaliesLayer({
         btn.setAttribute('aria-pressed', String(togglePhenomenaMode()));
       });
       phenomenaBtn.setAttribute('aria-pressed', 'false');
+      spotterBtn = chrono.addAction('Spotter', (btn) => {
+        if (typeof toggleSpotter !== 'function') return;
+        btn.setAttribute('aria-pressed', String(toggleSpotter()));
+      });
+      spotterBtn.setAttribute('aria-pressed', 'false');
       searchControl = chrono.addSearch({
         onQuery: (query) => shellSearchCases?.(query) || [],
         onPick: (result) => shellFocusResult?.(result),
@@ -276,10 +283,11 @@ export function createAnomaliesLayer({
     },
 
     /**
-     * The shell supplies the Phenomena mode toggle and the cross-register
-     * case search; the layer only exposes the button and the search box.
-     * Returns `{ setPhenomenaActive }` so the shell can reset the button's
-     * `aria-pressed` when it force-exits a live mode (manager reconnect or
+     * The shell supplies the Phenomena mode toggle, the cross-register case
+     * search and the Spotter panel toggle; the layer only exposes the
+     * buttons and the search box. Returns `{ setPhenomenaActive }` so the
+     * shell can reset the button's `aria-pressed` when it force-exits a
+     * live mode (manager reconnect or
      * teardown) without the layer having asked for it.
      */
     attachShellServices(services) {
@@ -294,6 +302,10 @@ export function createAnomaliesLayer({
       shellFocusResult =
         typeof services?.focusResult === 'function'
           ? services.focusResult
+          : null;
+      toggleSpotter =
+        typeof services?.toggleSpotter === 'function'
+          ? services.toggleSpotter
           : null;
       return {
         setPhenomenaActive(on) {

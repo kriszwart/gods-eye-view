@@ -1,3 +1,4 @@
+import * as Cesium from 'cesium';
 import { isExplicitLayerStateOrigin } from '../data/layerState.js';
 import {
   registerCctvFocusRequestListener,
@@ -11,6 +12,8 @@ import {
 import { registerNavigationAuthorityListener } from '../navigationPolicy.js';
 import { createPhenomenaMode } from '../app/phenomenaMode.js';
 import { searchCases } from '../app/caseSearch.js';
+import { createSpotter } from '../app/spotter.js';
+import { rankCandidates } from '../spotter/rank.js';
 import { createAnomalySource } from '../layers/anomalies/source.js';
 import { createAncientSource } from '../layers/ancientSites/source.js';
 /** Own manager subscriptions and the camera-entry events that outlive controls. */
@@ -41,6 +44,7 @@ export class LayerBindings {
     this._anomaliesShellModule = null;
     this._anomaliesMode = null;
     this._anomaliesSetPhenomenaActive = null;
+    this._spotter = null;
     this._cctvRequestFocusHandler = null;
     this._removeCctvRequestFocusListener = null;
     this._worldRequestFocusHandler = null;
@@ -163,6 +167,12 @@ export class LayerBindings {
    * the last time it was attached) is used to tell the layer to reset its
    * own button, since the mode restoring layers and style says nothing
    * about the button's aria-pressed state by itself.
+   *
+   * The same channel also carries the Spotter panel's toggle
+   * (`_toggleSpotter`). The panel itself is built lazily, on the first
+   * press, and then lives for as long as this instance does (`stop()`
+   * destroys it); only the toggle callback is re-attached on every
+   * connect, same as the mode and search callbacks above.
    */
   _connectAnomaliesShell() {
     if (this._anomaliesMode?.active) {
@@ -206,11 +216,143 @@ export class LayerBindings {
       searchCases: async (query) =>
         searchCases(query, await this._buildCaseSearchRecords()),
       focusResult: (result) => this._focusCaseSearchResult(result),
+      // Built lazily, on the first press, so wiring this channel never
+      // requires a document (a headless unit-test shell attaches a data
+      // manager with no browser globals at all).
+      toggleSpotter: () => this._toggleSpotter(),
     });
     this._anomaliesSetPhenomenaActive =
       typeof attached?.setPhenomenaActive === 'function'
         ? attached.setPhenomenaActive
         : null;
+  }
+
+  /**
+   * Show or hide the Spotter panel, building it on first use. Returns the
+   * panel's new open state.
+   * @returns {boolean}
+   */
+  _toggleSpotter() {
+    this._spotter ||= createSpotter({
+      getObservation: () => this._spotterObservation(),
+      getCandidates: () => this._spotterCandidates(),
+      rank: rankCandidates,
+      container: this.viewer.container,
+    });
+    return this._spotter.toggle();
+  }
+
+  /**
+   * The spotter's observation point: the current map centre. Mirrors the
+   * traffic layer's own fetch-centre idiom (`src/layers/traffic/viewport.js`
+   * `getFetchCenter`) — `camera.pickEllipsoid` at the canvas centre, which
+   * works even with the globe hidden under Google 3D tiles, falling back to
+   * the camera's own nadir (`positionCartographic`) when nothing is hit,
+   * for example a camera pitched up at open sky.
+   * @returns {{lat: number, lon: number}|null}
+   */
+  _spotterObservation() {
+    const camera = this.viewer?.camera;
+    const canvas = this.viewer?.scene?.canvas;
+    if (!camera) return null;
+    let cartographic = null;
+    if (canvas && typeof camera.pickEllipsoid === 'function') {
+      const width = canvas.clientWidth || canvas.width;
+      const height = canvas.clientHeight || canvas.height;
+      if (width > 0 && height > 0) {
+        let hit = null;
+        try {
+          hit = camera.pickEllipsoid(
+            new Cesium.Cartesian2(width / 2, height / 2),
+            Cesium.Ellipsoid.WGS84,
+          );
+        } catch {
+          hit = null;
+        }
+        if (hit) cartographic = Cesium.Cartographic.fromCartesian(hit);
+      }
+    }
+    cartographic ||= camera.positionCartographic || null;
+    if (!cartographic) return null;
+    return {
+      lat: Cesium.Math.toDegrees(cartographic.latitude),
+      lon: Cesium.Math.toDegrees(cartographic.longitude),
+    };
+  }
+
+  /**
+   * Read-only candidate list for the spotter, built from whichever tracked
+   * layers are currently enabled. Each module's analyst-record shape
+   * differs (see the task report's field-mapping table), so every source
+   * is mapped defensively here and rows without a finite position are
+   * skipped. `rocket-launches` and `weather-lightning` expose no
+   * analyst-record (or equivalent) accessor on this branch, so the
+   * `launch` and `lightning` kinds never surface candidates yet; wiring
+   * them in is future work once those layers grow one.
+   * @returns {Array<{id: string, kind: string, label: string, lat: number, lon: number, altM?: number}>}
+   */
+  _spotterCandidates() {
+    const manager = this._dataManager;
+    if (!manager) return [];
+    const candidates = [];
+    const push = (kind, id, label, lat, lon, altM) => {
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+      const row = {
+        id: String(id ?? `${kind}-${candidates.length}`),
+        kind,
+        label: String(label || id || kind),
+        lat,
+        lon,
+      };
+      if (Number.isFinite(altM)) row.altM = altM;
+      candidates.push(row);
+    };
+    const fromAircraftLayer = (layerId, kind) => {
+      if (!manager.isEnabled(layerId)) return;
+      const module = manager.layers?.get(layerId)?.module;
+      const rows = module?.getAnalystRecords?.() || [];
+      for (const row of rows)
+        push(
+          kind,
+          row.icao24 || row.id,
+          row.callsign || row.id,
+          row.lat,
+          row.lon,
+          row.altitudeM,
+        );
+    };
+    fromAircraftLayer('flights', 'aircraft');
+    fromAircraftLayer('military', 'military');
+    if (manager.isEnabled('local-adsb')) {
+      const module = manager.layers?.get('local-adsb')?.module;
+      // local-adsb has no getAnalystRecords: getAllPositions is its closest
+      // equivalent (id/label/callsign plus latitude/longitude/altitudeM —
+      // note the longer field names, unlike every other source here).
+      const rows = module?.getAllPositions?.() || [];
+      for (const row of rows)
+        push(
+          'aircraft',
+          row.id,
+          row.label || row.callsign || row.id,
+          row.latitude,
+          row.longitude,
+          row.altitudeM,
+        );
+    }
+    if (manager.isEnabled('satellites')) {
+      const module = manager.layers?.get('satellites')?.module;
+      const rows = module?.getAnalystRecords?.() || [];
+      for (const row of rows)
+        push(
+          'satellite',
+          row.noradId || row.id,
+          row.name || row.id,
+          row.lat,
+          row.lon,
+          row.altitudeM,
+        );
+    }
+    return candidates;
   }
 
   /** Base URL matching the `import.meta.env.BASE_URL` pattern the anomalies
@@ -449,6 +591,8 @@ export class LayerBindings {
     this._navigationOwnerChangedRemover = null;
     this._removeNavigationAuthorityListener?.();
     this._removeNavigationAuthorityListener = null;
+    this._spotter?.destroy?.();
+    this._spotter = null;
   }
   disconnect() {
     this._dataManagerUnsubscribe?.();

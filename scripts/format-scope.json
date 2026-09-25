@@ -860,6 +860,7 @@
   "src/spotter/geometry.test.mjs",
   "src/spotter/rank.js",
   "src/spotter/rank.test.mjs",
+  "src/app/spotter.js",
   "src/layers/ancientSites/model.js",
   "src/layers/ancientSites/records.js",
   "src/layers/ancientSites/source.js",

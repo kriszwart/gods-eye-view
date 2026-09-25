@@ -694,6 +694,8 @@
   "src/tooling/importDirections.test.mjs",
   "src/sources/reference.js",
   "src/sources/reference.test.mjs",
+  "src/sources/safeUrl.js",
+  "src/sources/safeUrl.test.mjs",
   "src/search/nominatim.js",
   "src/search/nominatim.test.mjs",
   "src/sources/httpBody.js",

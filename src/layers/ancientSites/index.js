@@ -5,6 +5,7 @@ import {
   createAncientOverlayEntry,
 } from './model.js';
 import { createAncientRenderer } from './rendering.js';
+import { safeSourceUrl } from '../../sources/safeUrl.js';
 export * from './model.js';
 export { normalizeAncientSites } from './records.js';
 export { createAncientSource } from './source.js';
@@ -43,6 +44,7 @@ export function createAncientSitesLayer({
   function openDossier(id) {
     const row = rows.find((r) => r.id === id);
     if (!row || !dossier) return;
+    const sourceUrl = safeSourceUrl(row.source_url);
     dossier.innerHTML = `
       <button type="button" class="uap-close" aria-label="Close site">Close</button>
       <h2>${escapeHtml(row.name)}</h2>
@@ -54,7 +56,7 @@ export function createAncientSitesLayer({
       </dl>
       ${row.debated ? `<p class="uap-debated">Debated: ${escapeHtml(row.debated)}</p>` : ''}
       <p class="uap-summary">${escapeHtml(row.summary)}</p>
-      ${row.source_url ? `<p class="uap-source"><a href="${escapeHtml(row.source_url)}" target="_blank" rel="noopener noreferrer">Open record</a></p>` : ''}
+      ${sourceUrl ? `<p class="uap-source"><a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open record</a></p>` : ''}
       ${row.attribution ? `<p class="uap-attribution">${escapeHtml(row.attribution)}</p>` : ''}`;
     dossier.hidden = false;
     dossier.querySelector('.uap-close').focus();

@@ -893,7 +893,8 @@
       "src/layers/anomalies/source.js",
       "src/layers/anomalies/rendering.js",
       "src/layers/anomalies/atmosphere.js",
-      "src/layers/anomalies/chronometer.js"
+      "src/layers/anomalies/chronometer.js",
+      "src/sources/safeUrl.js"
     ],
     "external": ["cesium"]
   },
@@ -904,7 +905,8 @@
       "src/layers/ancientSites/model.js",
       "src/layers/ancientSites/records.js",
       "src/layers/ancientSites/source.js",
-      "src/layers/ancientSites/rendering.js"
+      "src/layers/ancientSites/rendering.js",
+      "src/sources/safeUrl.js"
     ],
     "external": ["cesium"]
   },
@@ -1340,6 +1342,7 @@
       "src/layers/anomalies/rendering.js",
       "src/layers/anomalies/atmosphere.js",
       "src/layers/anomalies/chronometer.js",
+      "src/sources/safeUrl.js",
       "src/app/layers/ancientSites.js",
       "src/layers/ancientSites/index.js",
       "src/layers/ancientSites/model.js",
@@ -2070,6 +2073,7 @@
       "src/layers/anomalies/rendering.js",
       "src/layers/anomalies/atmosphere.js",
       "src/layers/anomalies/chronometer.js",
+      "src/sources/safeUrl.js",
       "src/app/layers/ancientSites.js",
       "src/layers/ancientSites/index.js",
       "src/layers/ancientSites/model.js",
@@ -2813,7 +2817,8 @@
       "src/sources/httpBody.js",
       "src/layers/perimeters/source.js",
       "src/layers/perimeters/records.js",
-      "src/layers/submarineCables/bundledSource.js"
+      "src/layers/submarineCables/bundledSource.js",
+      "src/sources/safeUrl.js"
     ],
     "external": []
   },

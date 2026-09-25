@@ -5,7 +5,7 @@
  * from src/spotter/rank.js) over a fixture OpenSky feed. Two isolated
  * contexts:
  *
- *   1. Fixture context — a fetch shim serves one synthetic aircraft at a
+ *   1. Fixture context: a fetch shim serves one synthetic aircraft at a
  *      known offset from the observation point the Spotter uses (the map
  *      centre). The camera is steered to a known lat/lon first
  *      (cancelFlight + setView, straight-down orientation) so the map
@@ -15,7 +15,7 @@
  *      appears in the first row, its rendered distance is within 2 km of
  *      the truth distance, and its rendered compass abbreviation matches
  *      the 16-point rose direction for the truth bearing.
- *   2. Empty context — the same shim returns no aircraft and only the
+ *   2. Empty context: the same shim returns no aircraft and only the
  *      Spotter's host layer (anomalies) is enabled; asserts the exact
  *      honest empty-state text.
  *
@@ -36,7 +36,7 @@ const base = process.env.QA_BASE_URL || 'http://localhost:4173';
  * Spotter's `pickEllipsoid`-derived observation lands on this point). */
 const OBSERVATION = { lat: 34.0, lon: -118.2 };
 
-/** Synthetic aircraft at a known offset from OBSERVATION — north-east,
+/** Synthetic aircraft at a known offset from OBSERVATION: north-east,
  * about 32 km out, comfortably inside both the default 150 km search
  * radius and the middle of the NE compass bucket (33.75-56.25 deg), so a
  * few degrees of measurement drift can never flip the expected rose
@@ -148,7 +148,7 @@ async function installOpenSkyShim(page, aircraft) {
  * `checks` consecutive polls, or give up at `timeout`. With no share-link
  * state in the URL, app startup fires a fire-and-forget `flyToAustin`
  * flight (src/app/controls.js) that is still animating when
- * `window.__godsEyeView.dataManager` first appears — a `cancelFlight` +
+ * `window.__godsEyeView.dataManager` first appears: a `cancelFlight` +
  * `setView` issued into that race gets overwritten by the flight's own
  * next tick. Waiting for the camera to go idle first (and again after our
  * own `setView`, to confirm nothing else pre-empts it) makes the
@@ -190,7 +190,7 @@ async function waitForCameraIdle(
  * Spotter's map-centre observation (`_spotterObservation` in
  * src/ui/layerBindings.js: `camera.pickEllipsoid` at the canvas centre)
  * lands on that exact point. Waits out any startup camera flight first,
- * then confirms the new position sticks — see `waitForCameraIdle`.
+ * then confirms the new position sticks, see `waitForCameraIdle`.
  * @param {import('puppeteer').Page} page
  * @param {{lat: number, lon: number}} point
  */
@@ -241,14 +241,14 @@ const browser = await puppeteer.launch({
 let failures = 0;
 const check = (name, passed, detail = '') => {
   console.log(
-    `[${passed ? 'PASS' : 'FAIL'}] ${name}${detail ? ` — ${detail}` : ''}`,
+    `[${passed ? 'PASS' : 'FAIL'}] ${name}${detail ? `: ${detail}` : ''}`,
   );
   if (!passed) failures++;
 };
 
 try {
   // ================================================================
-  // Context 1: fixture aircraft — the Spotter ranks it, with a distance
+  // Context 1: fixture aircraft, the Spotter ranks it, with a distance
   // and compass direction matching the geometry truth.
   // ================================================================
   {
@@ -336,7 +336,7 @@ try {
   }
 
   // ================================================================
-  // Context 2: empty feed, anomalies-only — the honest empty state.
+  // Context 2: empty feed, anomalies-only: the honest empty state.
   // ================================================================
   {
     const isolated = await browser.createBrowserContext();

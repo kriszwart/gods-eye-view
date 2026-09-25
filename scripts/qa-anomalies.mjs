@@ -20,7 +20,7 @@ const browser = await puppeteer.launch({
 let failures = 0;
 const check = (name, passed, detail = '') => {
   console.log(
-    `[${passed ? 'PASS' : 'FAIL'}] ${name}${detail ? ` — ${detail}` : ''}`,
+    `[${passed ? 'PASS' : 'FAIL'}] ${name}${detail ? `: ${detail}` : ''}`,
   );
   if (!passed) failures++;
 };
@@ -323,6 +323,28 @@ try {
     JSON.stringify({ rowCount: caseSearch.rowCount, open: caseSearch.open }),
   );
 
+  // Ancient sites match by country as well as by name (Gobekli Tepe and
+  // Derinkuyu are both Turkey rows in public/ancient-sites/sites.v1.json).
+  const countrySearch = await page.evaluate(async () => {
+    const input = document.querySelector('.uap-search');
+    input.value = 'Turkey';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 500));
+    const rows = [...document.querySelectorAll('.uap-search-results li')];
+    const text = rows.map((row) => row.textContent).join(' | ');
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 300));
+    return { rowCount: rows.length, text };
+  });
+  check(
+    'search matches ancient sites by country (Turkey)',
+    countrySearch.rowCount > 0 &&
+      (countrySearch.text.includes('Gobekli Tepe') ||
+        countrySearch.text.includes('Derinkuyu')),
+    JSON.stringify(countrySearch),
+  );
+
   const ir = await page.evaluate(async () => {
     window.__godsEyeView.styleManager.setStyle('infrared');
     await new Promise((r) => setTimeout(r, 600));
@@ -333,7 +355,7 @@ try {
   check('infrared style reaches the layer', ir === true);
 
   // The Spotter plate is a sibling of the viewer container, not a child of
-  // the anomalies layer's own DOM (task 5 fix round 1) — disabling the
+  // the anomalies layer's own DOM (task 5 fix round 1): disabling the
   // layer must still close it, since the Spotter button that opened it
   // disappears along with the rest of the chronometer.
   const spotterCloses = await page.evaluate(async () => {

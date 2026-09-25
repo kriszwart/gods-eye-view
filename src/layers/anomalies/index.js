@@ -163,7 +163,7 @@ export function createAnomaliesLayer({
    * Close the shell-owned Spotter plate and reset this layer's own button.
    * The plate sits outside this layer's DOM (a sibling of the viewer
    * container, owned by the shell), so leaving it open across a disable
-   * would strand a live-data panel on screen with no reachable control —
+   * would strand a live-data panel on screen with no reachable control:
    * the Spotter button that opened it just went invisible along with the
    * rest of the chronometer.
    */
@@ -298,12 +298,13 @@ export function createAnomaliesLayer({
     /**
      * The shell supplies the Phenomena mode toggle, the cross-register case
      * search and the Spotter panel's toggle and close; the layer only
-     * exposes the buttons and the search box. Returns `{ setPhenomenaActive }`
-     * so the shell can reset the button's `aria-pressed` when it
-     * force-exits a live mode (manager reconnect or teardown) without the
-     * layer having asked for it. `closeSpotter` runs the other direction:
-     * this layer calls it from `disable()`/`destroy()` so the shell-owned
-     * plate never outlives the button that opened it.
+     * exposes the buttons and the search box. Returns
+     * `{ setPhenomenaActive, setSpotterOpen }` so the shell can reset each
+     * button's `aria-pressed` when it force-exits a live mode (manager
+     * reconnect or teardown) without the layer having asked for it.
+     * `closeSpotter` runs the other direction: this layer calls it from
+     * `disable()`/`destroy()` so the shell-owned plate never outlives the
+     * button that opened it.
      */
     attachShellServices(services) {
       togglePhenomenaMode =
@@ -329,6 +330,9 @@ export function createAnomaliesLayer({
       return {
         setPhenomenaActive(on) {
           phenomenaBtn?.setAttribute('aria-pressed', String(Boolean(on)));
+        },
+        setSpotterOpen(on) {
+          spotterBtn?.setAttribute('aria-pressed', String(Boolean(on)));
         },
       };
     },

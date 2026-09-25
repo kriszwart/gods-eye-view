@@ -1,7 +1,7 @@
 /**
  * The spotter panel: a live sky-check plate over whatever tracked sources
  * are currently enabled (flights, military aircraft, satellites, and so
- * on). DOM only, no Cesium — a thin, testable shell around the portable
+ * on). DOM only, no Cesium: a thin, testable shell around the portable
  * `rankCandidates` function in `src/spotter/rank.js`.
  *
  * The panel recomputes on open and whenever "Use map centre" is pressed: it
@@ -175,7 +175,7 @@ export function createSpotter({
       return !root.hidden;
     },
     /**
-     * Hide the plate unconditionally. Idempotent — safe to call whether or
+     * Hide the plate unconditionally. Idempotent: safe to call whether or
      * not it is currently open, so the layer that hosts this panel can
      * always close it on the way out (disable/destroy) without checking
      * state first.

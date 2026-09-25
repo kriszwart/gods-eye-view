@@ -343,6 +343,7 @@ export function createChronometer({
         items = [];
         list.replaceChildren();
         list.hidden = true;
+        input.value = '';
       };
 
       const render = (next) => {
@@ -393,7 +394,6 @@ export function createChronometer({
           e.preventDefault();
           if (items[0]) onPick?.(items[0]);
         } else if (e.key === 'Escape') {
-          input.value = '';
           clear();
         }
       });

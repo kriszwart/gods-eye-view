@@ -44,6 +44,7 @@ export class LayerBindings {
     this._anomaliesShellModule = null;
     this._anomaliesMode = null;
     this._anomaliesSetPhenomenaActive = null;
+    this._anomaliesSetSpotterOpen = null;
     this._spotter = null;
     this._cctvRequestFocusHandler = null;
     this._removeCctvRequestFocusListener = null;
@@ -175,7 +176,7 @@ export class LayerBindings {
    * re-attached on every connect, same as the mode and search callbacks
    * above. Unlike Phenomena mode, closing has no "restore" step to force,
    * so this function just closes the plate unconditionally on every
-   * connect (below) rather than tracking an active/inactive pair — a
+   * connect (below) rather than tracking an active/inactive pair: a
    * plate that was never opened has nothing to close, and one left open
    * across a rewire is exactly the orphaned-plate bug this fixes.
    */
@@ -190,10 +191,15 @@ export class LayerBindings {
     this._anomaliesSetPhenomenaActive = null;
     // The Spotter plate is a sibling of the viewer container, not a child
     // of the anomalies module's own DOM, so a rewire (teardown or a fresh
-    // manager) must close it here too — otherwise a live-data plate could
+    // manager) must close it here too, otherwise a live-data plate could
     // be left on screen with the very channel that can reach it about to
-    // be torn down and rebuilt.
+    // be torn down and rebuilt. `_closeSpotter` also resets the Spotter
+    // button's `aria-pressed` (via `_anomaliesSetSpotterOpen`, still the
+    // outgoing module's callback at this point), so the button and the
+    // plate stay in lockstep; the field is then nulled below so a stale
+    // callback is never used before the new module attaches its own.
     this._closeSpotter();
+    this._anomaliesSetSpotterOpen = null;
     if (!this._dataManager) {
       this._anomaliesShellModule?.attachShellServices?.(null);
       this._anomaliesShellModule = null;
@@ -241,6 +247,10 @@ export class LayerBindings {
       typeof attached?.setPhenomenaActive === 'function'
         ? attached.setPhenomenaActive
         : null;
+    this._anomaliesSetSpotterOpen =
+      typeof attached?.setSpotterOpen === 'function'
+        ? attached.setSpotterOpen
+        : null;
   }
 
   /**
@@ -259,19 +269,23 @@ export class LayerBindings {
   }
 
   /**
-   * Close the Spotter panel if one has been built. Never builds one just to
-   * close it — a panel that was never opened has nothing to close — so this
-   * is always safe to call unconditionally (layer disable/destroy, a shell
-   * rewire) without first checking whether the panel exists or is open.
+   * Close the Spotter panel if one has been built, and reset the Spotter
+   * button's `aria-pressed` through the currently attached module's
+   * `setSpotterOpen`, if any, so the button and the plate stay in
+   * lockstep. Never builds a panel just to close it: a panel that was
+   * never opened has nothing to close, so this is always safe to call
+   * unconditionally (layer disable/destroy, a shell rewire) without first
+   * checking whether the panel exists or is open.
    */
   _closeSpotter() {
     this._spotter?.close?.();
+    this._anomaliesSetSpotterOpen?.(false);
   }
 
   /**
    * The spotter's observation point: the current map centre. Mirrors the
    * traffic layer's own fetch-centre idiom (`src/layers/traffic/viewport.js`
-   * `getFetchCenter`) — `camera.pickEllipsoid` at the canvas centre, which
+   * `getFetchCenter`): `camera.pickEllipsoid` at the canvas centre, which
    * works even with the globe hidden under Google 3D tiles, falling back to
    * the camera's own nadir (`positionCartographic`) when nothing is hit,
    * for example a camera pitched up at open sky.
@@ -352,7 +366,7 @@ export class LayerBindings {
     if (manager.isEnabled('local-adsb')) {
       const module = manager.layers?.get('local-adsb')?.module;
       // local-adsb has no getAnalystRecords: getAllPositions is its closest
-      // equivalent (id/label/callsign plus latitude/longitude/altitudeM —
+      // equivalent (id/label/callsign plus latitude/longitude/altitudeM;
       // note the longer field names, unlike every other source here).
       const rows = module?.getAllPositions?.() || [];
       for (const row of rows)
@@ -433,6 +447,7 @@ export class LayerBindings {
         title: r.name,
         type: r.type,
         period: r.period,
+        country: r.country,
       }));
     } catch (error) {
       console.warn('[UI:CaseSearch] Ancient sites dataset unavailable', error);

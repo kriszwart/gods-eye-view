@@ -158,13 +158,17 @@ function anomaliesManager(tag, layerIds) {
   const enabledSet = new Set(layerIds);
   const setCalls = [];
   const phenomenaActiveCalls = [];
+  const spotterOpenCalls = [];
   let services;
   const manager = {
     layers: new Map(layerIds.map(id => [id, { module: id === 'anomalies' ? {
       attachShellServices(value) {
         services = value;
         return value
-          ? { setPhenomenaActive: on => phenomenaActiveCalls.push([tag, on]) }
+          ? {
+              setPhenomenaActive: on => phenomenaActiveCalls.push([tag, on]),
+              setSpotterOpen: on => spotterOpenCalls.push([tag, on]),
+            }
           : undefined;
       },
     } : {} }])),
@@ -179,6 +183,7 @@ function anomaliesManager(tag, layerIds) {
     manager,
     setCalls,
     phenomenaActiveCalls,
+    spotterOpenCalls,
     toggle: () => services.togglePhenomenaMode(),
   };
 }
@@ -204,6 +209,10 @@ test('a manager reconnect while Phenomena mode is active restores the layers it 
   ]);
   // The layer never asked to exit, so the shell resets its button itself.
   assert.deepEqual(old.phenomenaActiveCalls, [['old', false]]);
+  // The rewire path closes the Spotter plate unconditionally, and resets
+  // the Spotter button in lockstep, regardless of whether it was ever
+  // opened in this pass.
+  assert.deepEqual(old.spotterOpenCalls, [['old', false]]);
 });
 
 test('disconnecting while Phenomena mode is active restores the layers it hid', (t) => {
@@ -218,4 +227,5 @@ test('disconnecting while Phenomena mode is active restores the layers it hid', 
 
   assert.deepEqual(stub.setCalls.at(-1), ['shell', 'flights', true]);
   assert.deepEqual(stub.phenomenaActiveCalls, [['shell', false]]);
+  assert.deepEqual(stub.spotterOpenCalls, [['shell', false]]);
 });

@@ -218,6 +218,71 @@ try {
   check('focusCase opens the dossier', dossier.open === true);
   check('Escape closes the dossier', dossier.closed === true);
 
+  // Cross-register case search: enable ancient sites so its register has
+  // data to search, then drive the chronometer's search box to find a site
+  // and a sky report in turn, crossing from one layer's dossier to the
+  // other's.
+  await page.evaluate(() =>
+    window.__godsEyeView.dataManager.setEnabled('ancient-sites', true, {
+      origin: 'user',
+    }),
+  );
+  await page.waitForFunction(
+    () =>
+      window.__godsEyeView.dataManager.layers
+        .get('ancient-sites')
+        ?.module?.getStats?.().count === 20,
+    { timeout: 30000 },
+  );
+
+  const siteSearch = await page.evaluate(async () => {
+    const input = document.querySelector('.uap-search');
+    input.value = 'Stonehenge';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 400));
+    const rows = [...document.querySelectorAll('.uap-search-results li')];
+    rows[0]?.click();
+    await new Promise((r) => setTimeout(r, 3500));
+    const d = document.querySelector('.uap-dossier.ancient');
+    const open = d && !d.hidden;
+    const text = d ? d.textContent : '';
+    d?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    return { rowCount: rows.length, open, text };
+  });
+  check(
+    'search finds Stonehenge and opens the ancient dossier',
+    siteSearch.rowCount > 0 &&
+      siteSearch.open === true &&
+      siteSearch.text.includes('Stonehenge'),
+    JSON.stringify({ rowCount: siteSearch.rowCount, open: siteSearch.open }),
+  );
+
+  const caseSearch = await page.evaluate(async () => {
+    const input = document.querySelector('.uap-search');
+    input.value = 'Phoenix';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 400));
+    const rows = [...document.querySelectorAll('.uap-search-results li')];
+    rows[0]?.click();
+    await new Promise((r) => setTimeout(r, 800));
+    const d = document.querySelector('.uap-dossier:not(.ancient)');
+    const open = d && !d.hidden;
+    const text = d ? d.textContent : '';
+    d?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    return { rowCount: rows.length, open, text };
+  });
+  check(
+    'search finds Phoenix and opens the anomalies dossier',
+    caseSearch.rowCount > 0 &&
+      caseSearch.open === true &&
+      caseSearch.text.includes('Phoenix'),
+    JSON.stringify({ rowCount: caseSearch.rowCount, open: caseSearch.open }),
+  );
+
   const ir = await page.evaluate(async () => {
     window.__godsEyeView.styleManager.setStyle('infrared');
     await new Promise((r) => setTimeout(r, 600));

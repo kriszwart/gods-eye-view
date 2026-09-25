@@ -307,6 +307,79 @@ export function createChronometer({
       panel.insertBefore(b, readout);
       return b;
     },
+    /**
+     * Add a case-and-site search box to the dial's panel: an input plus a
+     * results list, debounced, keyboard-operable, register-tagged rows.
+     * @param {{onQuery: (query: string) => Array<Object>, onPick: (result: Object) => void}} handlers
+     * @returns {{clear: () => void}}
+     */
+    addSearch({ onQuery, onPick } = {}) {
+      const wrap = document.createElement('div');
+      wrap.className = 'uap-search-wrap';
+      const input = document.createElement('input');
+      input.type = 'search';
+      input.className = 'uap-search';
+      input.placeholder = 'Search cases and sites';
+      input.setAttribute('aria-label', 'Search cases and sites');
+      input.autocomplete = 'off';
+      const list = document.createElement('ul');
+      list.className = 'uap-search-results';
+      list.hidden = true;
+      wrap.append(input, list);
+      panel.insertBefore(wrap, readout);
+
+      let items = [];
+      let debounceTimer = null;
+
+      const clear = () => {
+        items = [];
+        list.replaceChildren();
+        list.hidden = true;
+      };
+
+      const render = (next) => {
+        items = Array.isArray(next) ? next : [];
+        list.replaceChildren();
+        for (const item of items) {
+          const row = document.createElement('li');
+          row.className = item.register === 'ancient' ? 'ancient' : 'sky';
+          row.tabIndex = 0;
+          const title = document.createElement('span');
+          title.className = 'uap-search-title';
+          title.textContent = item.title || '';
+          const tag = document.createElement('span');
+          tag.className = 'uap-search-tag';
+          tag.textContent = item.register === 'ancient' ? 'Ancient' : 'Sky';
+          row.append(title, tag);
+          row.addEventListener('click', () => onPick?.(item));
+          row.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              onPick?.(item);
+            }
+          });
+          list.appendChild(row);
+        }
+        list.hidden = items.length === 0;
+      };
+
+      input.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        const query = input.value;
+        debounceTimer = setTimeout(() => render(onQuery?.(query)), 150);
+      });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (items[0]) onPick?.(items[0]);
+        } else if (e.key === 'Escape') {
+          input.value = '';
+          clear();
+        }
+      });
+
+      return { clear };
+    },
     /** @param {{cx:number, cy:number, r:number, width:number, height:number}|null} disc */
     layout(disc, viewport) {
       const fits =

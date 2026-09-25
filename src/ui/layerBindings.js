@@ -10,6 +10,7 @@ import {
 } from '../worldFocus.js';
 import { registerNavigationAuthorityListener } from '../navigationPolicy.js';
 import { createPhenomenaMode } from '../app/phenomenaMode.js';
+import { searchCases } from '../app/caseSearch.js';
 /** Own manager subscriptions and the camera-entry events that outlive controls. */
 export class LayerBindings {
   constructor({
@@ -196,11 +197,62 @@ export class LayerBindings {
         mode.active ? mode.exit() : mode.enter();
         return mode.active;
       },
+      searchCases: (query) =>
+        searchCases(query, this._buildCaseSearchRecords()),
+      focusResult: (result) => this._focusCaseSearchResult(result),
     });
     this._anomaliesSetPhenomenaActive =
       typeof attached?.setPhenomenaActive === 'function'
         ? attached.setPhenomenaActive
         : null;
+  }
+
+  /**
+   * Records for the chronometer's cross-register search: the anomalies
+   * layer's own analyst rows (sky register) plus the ancient sites
+   * register, mapped into the shared search shape. Built lazily on every
+   * query, since either register's rows can change (a fresh dataset load,
+   * or the anomalies chronometer's own year window).
+   */
+  _buildCaseSearchRecords() {
+    const manager = this._dataManager;
+    if (!manager) return [];
+    const anomalies = manager.layers?.get('anomalies')?.module;
+    const ancient = manager.layers?.get('ancient-sites')?.module;
+    const sky = (anomalies?.getAnalystRecords?.() || []).map((r) => ({
+      id: r.id,
+      register: 'sky',
+      title: r.title,
+      year: r.year,
+      craft: r.craft,
+    }));
+    const ancientSites = (ancient?.getAnalystRecords?.() || []).map((r) => ({
+      id: r.id,
+      register: 'ancient',
+      title: r.name,
+      type: r.type,
+      period: r.period,
+    }));
+    return [...sky, ...ancientSites];
+  }
+
+  /**
+   * Fly to and open the dossier for a case-search result. The target
+   * register's layer is enabled first when it is off (awaited, so its
+   * first data load has settled) before the layer's own focus call runs.
+   */
+  async _focusCaseSearchResult(result) {
+    const manager = this._dataManager;
+    if (!manager || !result) return;
+    const targetId =
+      result.register === 'ancient' ? 'ancient-sites' : 'anomalies';
+    if (!manager.layers?.get(targetId)) return;
+    if (!manager.isEnabled(targetId)) {
+      await manager.setEnabled(targetId, true, { origin: 'user' });
+    }
+    const mod = manager.layers.get(targetId)?.module;
+    if (targetId === 'ancient-sites') await mod?.focusSite?.(result.id);
+    else await mod?.focusCase?.(result.id);
   }
 
   _persistAwarenessSelection(event, cleared = false) {

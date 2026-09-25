@@ -80,6 +80,8 @@ export function createAnomaliesLayer({
   let activeStatuses = null;
   let togglePhenomenaMode = null;
   let phenomenaBtn = null;
+  let shellSearchCases = null;
+  let shellFocusResult = null;
 
   const visibleCount = () =>
     rows.filter(
@@ -264,20 +266,33 @@ export function createAnomaliesLayer({
         btn.setAttribute('aria-pressed', String(togglePhenomenaMode()));
       });
       phenomenaBtn.setAttribute('aria-pressed', 'false');
+      chrono.addSearch({
+        onQuery: (query) => shellSearchCases?.(query) || [],
+        onPick: (result) => shellFocusResult?.(result),
+      });
       overlayHost?.setVisible?.(ANOMALY_LAYER_ID, false);
       console.log('[Data:Anomalies] Initialized');
     },
 
     /**
-     * The shell supplies the Phenomena mode toggle; the layer only exposes
-     * the button. Returns `{ setPhenomenaActive }` so the shell can reset
-     * the button's `aria-pressed` when it force-exits a live mode (manager
-     * reconnect or teardown) without the layer having asked for it.
+     * The shell supplies the Phenomena mode toggle and the cross-register
+     * case search; the layer only exposes the button and the search box.
+     * Returns `{ setPhenomenaActive }` so the shell can reset the button's
+     * `aria-pressed` when it force-exits a live mode (manager reconnect or
+     * teardown) without the layer having asked for it.
      */
     attachShellServices(services) {
       togglePhenomenaMode =
         typeof services?.togglePhenomenaMode === 'function'
           ? services.togglePhenomenaMode
+          : null;
+      shellSearchCases =
+        typeof services?.searchCases === 'function'
+          ? services.searchCases
+          : null;
+      shellFocusResult =
+        typeof services?.focusResult === 'function'
+          ? services.focusResult
           : null;
       return {
         setPhenomenaActive(on) {

@@ -854,6 +854,8 @@
   "scripts/qa-anomalies.mjs",
   "src/app/phenomenaMode.js",
   "src/app/phenomenaMode.test.mjs",
+  "src/app/caseSearch.js",
+  "src/app/caseSearch.test.mjs",
   "src/layers/ancientSites/model.js",
   "src/layers/ancientSites/records.js",
   "src/layers/ancientSites/source.js",

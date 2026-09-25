@@ -65,7 +65,7 @@ function compassAbbr(bearing) {
  *   rank: (observation: Object, candidates: Array<Object>) => Array<Object>,
  *   container: HTMLElement,
  * }} deps
- * @returns {{toggle: () => boolean, isOpen: () => boolean, destroy: () => void}}
+ * @returns {{toggle: () => boolean, close: () => void, isOpen: () => boolean, destroy: () => void}}
  */
 export function createSpotter({
   getObservation,
@@ -114,7 +114,9 @@ export function createSpotter({
       const glyph = document.createElement('span');
       glyph.className = 'uap-spotter-glyph';
       glyph.setAttribute('aria-hidden', 'true');
-      glyph.textContent = KIND_GLYPHS[row.kind] || '•';
+      glyph.textContent = Object.hasOwn(KIND_GLYPHS, row.kind)
+        ? KIND_GLYPHS[row.kind]
+        : '•';
 
       const label = document.createElement('span');
       label.className = 'uap-spotter-label';
@@ -171,6 +173,15 @@ export function createSpotter({
       root.hidden = !root.hidden;
       if (!root.hidden) refresh();
       return !root.hidden;
+    },
+    /**
+     * Hide the plate unconditionally. Idempotent — safe to call whether or
+     * not it is currently open, so the layer that hosts this panel can
+     * always close it on the way out (disable/destroy) without checking
+     * state first.
+     */
+    close() {
+      root.hidden = true;
     },
     isOpen() {
       return !root.hidden;

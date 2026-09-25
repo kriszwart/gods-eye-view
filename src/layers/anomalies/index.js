@@ -81,6 +81,7 @@ export function createAnomaliesLayer({
   let togglePhenomenaMode = null;
   let phenomenaBtn = null;
   let toggleSpotter = null;
+  let shellCloseSpotter = null;
   let spotterBtn = null;
   let shellSearchCases = null;
   let shellFocusResult = null;
@@ -157,6 +158,18 @@ export function createAnomaliesLayer({
   function stopTour() {
     tourToken = 0;
     if (tourBtn) tourBtn.textContent = 'Tour hero cases';
+  }
+  /**
+   * Close the shell-owned Spotter plate and reset this layer's own button.
+   * The plate sits outside this layer's DOM (a sibling of the viewer
+   * container, owned by the shell), so leaving it open across a disable
+   * would strand a live-data panel on screen with no reachable control —
+   * the Spotter button that opened it just went invisible along with the
+   * rest of the chronometer.
+   */
+  function closeSpotterPanel() {
+    shellCloseSpotter?.();
+    spotterBtn?.setAttribute('aria-pressed', 'false');
   }
   /** Fly through hero cases in date order, setting the dial and opening each dossier. */
   async function playTour() {
@@ -284,11 +297,13 @@ export function createAnomaliesLayer({
 
     /**
      * The shell supplies the Phenomena mode toggle, the cross-register case
-     * search and the Spotter panel toggle; the layer only exposes the
-     * buttons and the search box. Returns `{ setPhenomenaActive }` so the
-     * shell can reset the button's `aria-pressed` when it force-exits a
-     * live mode (manager reconnect or
-     * teardown) without the layer having asked for it.
+     * search and the Spotter panel's toggle and close; the layer only
+     * exposes the buttons and the search box. Returns `{ setPhenomenaActive }`
+     * so the shell can reset the button's `aria-pressed` when it
+     * force-exits a live mode (manager reconnect or teardown) without the
+     * layer having asked for it. `closeSpotter` runs the other direction:
+     * this layer calls it from `disable()`/`destroy()` so the shell-owned
+     * plate never outlives the button that opened it.
      */
     attachShellServices(services) {
       togglePhenomenaMode =
@@ -306,6 +321,10 @@ export function createAnomaliesLayer({
       toggleSpotter =
         typeof services?.toggleSpotter === 'function'
           ? services.toggleSpotter
+          : null;
+      shellCloseSpotter =
+        typeof services?.closeSpotter === 'function'
+          ? services.closeSpotter
           : null;
       return {
         setPhenomenaActive(on) {
@@ -349,6 +368,7 @@ export function createAnomaliesLayer({
       chrono?.setVisible(false);
       searchControl?.clear();
       stopTour();
+      closeSpotterPanel();
       if (legend) legend.hidden = true;
       restoreAtmosphere?.();
       restoreAtmosphere = null;
@@ -408,6 +428,10 @@ export function createAnomaliesLayer({
 
     destroy() {
       layer.disable();
+      // disable() above already closes the Spotter plate; called again
+      // explicitly so this path stays correct even if a future edit ever
+      // stops destroy() from delegating to disable() first.
+      closeSpotterPanel();
       searchControl?.clear();
       searchControl = null;
       overlayHost?.clearSource?.(ANOMALY_LAYER_ID);

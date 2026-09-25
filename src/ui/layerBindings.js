@@ -169,10 +169,15 @@ export class LayerBindings {
    * about the button's aria-pressed state by itself.
    *
    * The same channel also carries the Spotter panel's toggle
-   * (`_toggleSpotter`). The panel itself is built lazily, on the first
-   * press, and then lives for as long as this instance does (`stop()`
-   * destroys it); only the toggle callback is re-attached on every
-   * connect, same as the mode and search callbacks above.
+   * (`_toggleSpotter`) and close (`_closeSpotter`). The panel itself is
+   * built lazily, on the first press, and then lives for as long as this
+   * instance does (`stop()` destroys it); the two callbacks are
+   * re-attached on every connect, same as the mode and search callbacks
+   * above. Unlike Phenomena mode, closing has no "restore" step to force,
+   * so this function just closes the plate unconditionally on every
+   * connect (below) rather than tracking an active/inactive pair — a
+   * plate that was never opened has nothing to close, and one left open
+   * across a rewire is exactly the orphaned-plate bug this fixes.
    */
   _connectAnomaliesShell() {
     if (this._anomaliesMode?.active) {
@@ -183,6 +188,12 @@ export class LayerBindings {
     }
     this._anomaliesMode = null;
     this._anomaliesSetPhenomenaActive = null;
+    // The Spotter plate is a sibling of the viewer container, not a child
+    // of the anomalies module's own DOM, so a rewire (teardown or a fresh
+    // manager) must close it here too — otherwise a live-data plate could
+    // be left on screen with the very channel that can reach it about to
+    // be torn down and rebuilt.
+    this._closeSpotter();
     if (!this._dataManager) {
       this._anomaliesShellModule?.attachShellServices?.(null);
       this._anomaliesShellModule = null;
@@ -220,6 +231,11 @@ export class LayerBindings {
       // requires a document (a headless unit-test shell attaches a data
       // manager with no browser globals at all).
       toggleSpotter: () => this._toggleSpotter(),
+      // The reverse direction: the layer calls this from its own
+      // disable()/destroy() so a layer-panel toggle-off (or the layer
+      // tearing down) closes the plate the shell owns, instead of leaving
+      // it orphaned with a dead Spotter button behind it.
+      closeSpotter: () => this._closeSpotter(),
     });
     this._anomaliesSetPhenomenaActive =
       typeof attached?.setPhenomenaActive === 'function'
@@ -240,6 +256,16 @@ export class LayerBindings {
       container: this.viewer.container,
     });
     return this._spotter.toggle();
+  }
+
+  /**
+   * Close the Spotter panel if one has been built. Never builds one just to
+   * close it — a panel that was never opened has nothing to close — so this
+   * is always safe to call unconditionally (layer disable/destroy, a shell
+   * rewire) without first checking whether the panel exists or is open.
+   */
+  _closeSpotter() {
+    this._spotter?.close?.();
   }
 
   /**

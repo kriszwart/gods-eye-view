@@ -332,6 +332,32 @@ try {
   });
   check('infrared style reaches the layer', ir === true);
 
+  // The Spotter plate is a sibling of the viewer container, not a child of
+  // the anomalies layer's own DOM (task 5 fix round 1) — disabling the
+  // layer must still close it, since the Spotter button that opened it
+  // disappears along with the rest of the chronometer.
+  const spotterCloses = await page.evaluate(async () => {
+    const btn = [...document.querySelectorAll('.uap-chrono-panel button')].find(
+      (b) => b.textContent === 'Spotter',
+    );
+    btn?.click();
+    const opened = document.querySelector('.uap-spotter');
+    const openedVisible = !!opened && !opened.hidden;
+    const m = window.__godsEyeView.dataManager;
+    await m.setEnabled('anomalies', false, { origin: 'user' });
+    const after = document.querySelector('.uap-spotter');
+    const afterHiddenOrAbsent = !after || after.hidden === true;
+    // Restore for the rest of this pass (re-enable is already proven safe above).
+    await m.setEnabled('anomalies', true, { origin: 'user' });
+    return { openedVisible, afterHiddenOrAbsent };
+  });
+  check(
+    'disabling the anomalies layer closes the Spotter plate',
+    spotterCloses.openedVisible === true &&
+      spotterCloses.afterHiddenOrAbsent === true,
+    JSON.stringify(spotterCloses),
+  );
+
   check(
     'no page errors during the interactive pass',
     pageErrors.length === 0,

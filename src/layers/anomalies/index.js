@@ -82,6 +82,7 @@ export function createAnomaliesLayer({
   let phenomenaBtn = null;
   let shellSearchCases = null;
   let shellFocusResult = null;
+  let searchControl = null;
 
   const visibleCount = () =>
     rows.filter(
@@ -266,7 +267,7 @@ export function createAnomaliesLayer({
         btn.setAttribute('aria-pressed', String(togglePhenomenaMode()));
       });
       phenomenaBtn.setAttribute('aria-pressed', 'false');
-      chrono.addSearch({
+      searchControl = chrono.addSearch({
         onQuery: (query) => shellSearchCases?.(query) || [],
         onPick: (result) => shellFocusResult?.(result),
       });
@@ -334,6 +335,7 @@ export function createAnomaliesLayer({
       enabled = false;
       picking?.unregisterPickOwner?.(ANOMALY_LAYER_ID);
       chrono?.setVisible(false);
+      searchControl?.clear();
       stopTour();
       if (legend) legend.hidden = true;
       restoreAtmosphere?.();
@@ -394,6 +396,8 @@ export function createAnomaliesLayer({
 
     destroy() {
       layer.disable();
+      searchControl?.clear();
+      searchControl = null;
       overlayHost?.clearSource?.(ANOMALY_LAYER_ID);
       renderer?.destroy();
       chrono?.destroy();

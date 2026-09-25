@@ -310,7 +310,11 @@ export function createChronometer({
     /**
      * Add a case-and-site search box to the dial's panel: an input plus a
      * results list, debounced, keyboard-operable, register-tagged rows.
-     * @param {{onQuery: (query: string) => Array<Object>, onPick: (result: Object) => void}} handlers
+     * `onQuery` may return a promise (the shell's corpus can need a first
+     * fetch): the pending debounce is always cancellable via `clear()` or a
+     * fresh keystroke, and a stale resolution from a superseded query is
+     * dropped rather than clobbering a newer render.
+     * @param {{onQuery: (query: string) => (Array<Object>|Promise<Array<Object>>), onPick: (result: Object) => void}} handlers
      * @returns {{clear: () => void}}
      */
     addSearch({ onQuery, onPick } = {}) {
@@ -330,8 +334,12 @@ export function createChronometer({
 
       let items = [];
       let debounceTimer = null;
+      let queryToken = 0;
 
       const clear = () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+        queryToken++;
         items = [];
         list.replaceChildren();
         list.hidden = true;
@@ -366,7 +374,19 @@ export function createChronometer({
       input.addEventListener('input', () => {
         clearTimeout(debounceTimer);
         const query = input.value;
-        debounceTimer = setTimeout(() => render(onQuery?.(query)), 150);
+        debounceTimer = setTimeout(async () => {
+          const token = ++queryToken;
+          let results = [];
+          try {
+            results = (await onQuery?.(query)) || [];
+          } catch (error) {
+            console.warn('[UAP:Chronometer] Search query failed', error);
+          }
+          // A newer query (a fresh keystroke, or Escape/clear) has since
+          // superseded this one: never let a slow, stale response overwrite
+          // whatever the panel is showing now.
+          if (token === queryToken) render(results);
+        }, 150);
       });
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {

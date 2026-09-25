@@ -11,6 +11,8 @@ import {
 import { registerNavigationAuthorityListener } from '../navigationPolicy.js';
 import { createPhenomenaMode } from '../app/phenomenaMode.js';
 import { searchCases } from '../app/caseSearch.js';
+import { createAnomalySource } from '../layers/anomalies/source.js';
+import { createAncientSource } from '../layers/ancientSites/source.js';
 /** Own manager subscriptions and the camera-entry events that outlive controls. */
 export class LayerBindings {
   constructor({
@@ -47,6 +49,10 @@ export class LayerBindings {
     this._navigationOwnerChangedRemover = null;
     this._awarenessSelectedHandler = null;
     this._awarenessClearedHandler = null;
+    this._anomalySearchSource = null;
+    this._ancientSearchSource = null;
+    this._skySearchRecords = null;
+    this._ancientSearchRecords = null;
   }
   get hud() {
     return this.readControls().hud;
@@ -197,8 +203,8 @@ export class LayerBindings {
         mode.active ? mode.exit() : mode.enter();
         return mode.active;
       },
-      searchCases: (query) =>
-        searchCases(query, this._buildCaseSearchRecords()),
+      searchCases: async (query) =>
+        searchCases(query, await this._buildCaseSearchRecords()),
       focusResult: (result) => this._focusCaseSearchResult(result),
     });
     this._anomaliesSetPhenomenaActive =
@@ -207,33 +213,79 @@ export class LayerBindings {
         : null;
   }
 
-  /**
-   * Records for the chronometer's cross-register search: the anomalies
-   * layer's own analyst rows (sky register) plus the ancient sites
-   * register, mapped into the shared search shape. Built lazily on every
-   * query, since either register's rows can change (a fresh dataset load,
-   * or the anomalies chronometer's own year window).
+  /** Base URL matching the `import.meta.env.BASE_URL` pattern the anomalies
+   * and ancient-sites application wrappers use (src/app/layers/anomalies.js,
+   * src/app/layers/ancientSites.js), so the search's own source fetches the
+   * same bundled dataset from the same place.
    */
-  _buildCaseSearchRecords() {
-    const manager = this._dataManager;
-    if (!manager) return [];
-    const anomalies = manager.layers?.get('anomalies')?.module;
-    const ancient = manager.layers?.get('ancient-sites')?.module;
-    const sky = (anomalies?.getAnalystRecords?.() || []).map((r) => ({
-      id: r.id,
-      register: 'sky',
-      title: r.title,
-      year: r.year,
-      craft: r.craft,
-    }));
-    const ancientSites = (ancient?.getAnalystRecords?.() || []).map((r) => ({
-      id: r.id,
-      register: 'ancient',
-      title: r.name,
-      type: r.type,
-      period: r.period,
-    }));
-    return [...sky, ...ancientSites];
+  _caseSearchBaseUrl(suffix) {
+    return `${import.meta.env?.BASE_URL ?? '/'}${suffix}`;
+  }
+
+  /**
+   * Sky register records for the cross-register search, read through the
+   * anomalies layer's own portable source module directly rather than
+   * through its `getAnalystRecords()` (which returns `[]` while the layer
+   * is disabled, defeating a search meant to find a case whose layer the
+   * user never turned on). Fetched once and cached on this instance; a
+   * failed fetch is not cached, so the next query tries again.
+   */
+  async _getSkySearchRecords() {
+    if (this._skySearchRecords) return this._skySearchRecords;
+    this._anomalySearchSource ||= createAnomalySource({
+      baseUrl: this._caseSearchBaseUrl('anomalies/'),
+    });
+    try {
+      const rows = await this._anomalySearchSource.getSnapshot();
+      this._skySearchRecords = rows.map((r) => ({
+        id: r.id,
+        register: 'sky',
+        title: r.title,
+        year: r.year,
+        craft: r.craft,
+      }));
+    } catch (error) {
+      console.warn('[UI:CaseSearch] Sky dataset unavailable', error);
+      return [];
+    }
+    return this._skySearchRecords;
+  }
+
+  /** Ancient-sites register records, same independence and caching as above. */
+  async _getAncientSearchRecords() {
+    if (this._ancientSearchRecords) return this._ancientSearchRecords;
+    this._ancientSearchSource ||= createAncientSource({
+      baseUrl: this._caseSearchBaseUrl('ancient-sites/'),
+    });
+    try {
+      const rows = await this._ancientSearchSource.getSnapshot();
+      this._ancientSearchRecords = rows.map((r) => ({
+        id: r.id,
+        register: 'ancient',
+        title: r.name,
+        type: r.type,
+        period: r.period,
+      }));
+    } catch (error) {
+      console.warn('[UI:CaseSearch] Ancient sites dataset unavailable', error);
+      return [];
+    }
+    return this._ancientSearchRecords;
+  }
+
+  /**
+   * Records for the chronometer's cross-register search: the sky register
+   * plus the ancient-sites register, mapped into the shared search shape.
+   * Each register is fetched once, independent of whether its own layer is
+   * currently enabled, and the mapped result is cached for reuse on every
+   * subsequent query; only a prior failed fetch triggers a refetch.
+   */
+  async _buildCaseSearchRecords() {
+    const [sky, ancient] = await Promise.all([
+      this._getSkySearchRecords(),
+      this._getAncientSearchRecords(),
+    ]);
+    return [...sky, ...ancient];
   }
 
   /**

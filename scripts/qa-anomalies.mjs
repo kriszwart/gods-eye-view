@@ -218,52 +218,92 @@ try {
   check('focusCase opens the dossier', dossier.open === true);
   check('Escape closes the dossier', dossier.closed === true);
 
-  // Cross-register case search: enable ancient sites so its register has
-  // data to search, then drive the chronometer's search box to find a site
-  // and a sky report in turn, crossing from one layer's dossier to the
-  // other's.
-  await page.evaluate(() =>
-    window.__godsEyeView.dataManager.setEnabled('ancient-sites', true, {
-      origin: 'user',
-    }),
-  );
-  await page.waitForFunction(
-    () =>
-      window.__godsEyeView.dataManager.layers
-        .get('ancient-sites')
-        ?.module?.getStats?.().count === 20,
-    { timeout: 30000 },
+  // Escape during the debounce window must cancel the pending query: no
+  // stale render should land even after the 150 ms debounce would have
+  // fired had it not been cancelled.
+  const escapeDuringDebounce = await page.evaluate(async () => {
+    const input = document.querySelector('.uap-search');
+    input.value = 'Roswell';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    await new Promise((r) => setTimeout(r, 400));
+    return {
+      rowCount: document.querySelectorAll('.uap-search-results li').length,
+      hidden: document.querySelector('.uap-search-results')?.hidden,
+      value: input.value,
+    };
+  });
+  check(
+    'Escape during the debounce window cancels the pending query',
+    escapeDuringDebounce.rowCount === 0 &&
+      escapeDuringDebounce.hidden === true &&
+      escapeDuringDebounce.value === '',
+    JSON.stringify(escapeDuringDebounce),
   );
 
-  const siteSearch = await page.evaluate(async () => {
+  // Cross-register case search: at this point only the anomalies layer has
+  // ever been enabled in this session -- ancient sites is still off. The
+  // search corpus must still find a site whose own layer is disabled, and
+  // picking that result must enable ancient sites itself (the shell's
+  // enable-then-focus path) before opening its dossier.
+  const siteQuery = await page.evaluate(() => {
+    const m = window.__godsEyeView.dataManager;
+    const beforeEnabled = m.isEnabled('ancient-sites');
     const input = document.querySelector('.uap-search');
     input.value = 'Stonehenge';
     input.dispatchEvent(new Event('input', { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 400));
+    return { beforeEnabled };
+  });
+  await page
+    .waitForFunction(
+      () => document.querySelectorAll('.uap-search-results li').length > 0,
+      { timeout: 10000 },
+    )
+    .catch(() => {});
+  const siteClick = await page.evaluate(() => {
     const rows = [...document.querySelectorAll('.uap-search-results li')];
     rows[0]?.click();
-    await new Promise((r) => setTimeout(r, 3500));
+    return { rowCount: rows.length };
+  });
+  check(
+    'search finds Stonehenge while ancient sites is off',
+    siteQuery.beforeEnabled === false && siteClick.rowCount > 0,
+    JSON.stringify({ ...siteQuery, ...siteClick }),
+  );
+  await page
+    .waitForFunction(
+      () => {
+        const d = document.querySelector('.uap-dossier.ancient');
+        return d && !d.hidden;
+      },
+      { timeout: 15000 },
+    )
+    .catch(() => {});
+  const siteResult = await page.evaluate(() => {
+    const m = window.__godsEyeView.dataManager;
     const d = document.querySelector('.uap-dossier.ancient');
     const open = d && !d.hidden;
     const text = d ? d.textContent : '';
     d?.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
     );
-    return { rowCount: rows.length, open, text };
+    return { enabled: m.isEnabled('ancient-sites'), open, text };
   });
   check(
-    'search finds Stonehenge and opens the ancient dossier',
-    siteSearch.rowCount > 0 &&
-      siteSearch.open === true &&
-      siteSearch.text.includes('Stonehenge'),
-    JSON.stringify({ rowCount: siteSearch.rowCount, open: siteSearch.open }),
+    'picking the result enables ancient sites and opens its dossier',
+    siteResult.enabled === true &&
+      siteResult.open === true &&
+      siteResult.text.includes('Stonehenge'),
+    JSON.stringify({ enabled: siteResult.enabled, open: siteResult.open }),
   );
 
   const caseSearch = await page.evaluate(async () => {
     const input = document.querySelector('.uap-search');
     input.value = 'Phoenix';
     input.dispatchEvent(new Event('input', { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((r) => setTimeout(r, 500));
     const rows = [...document.querySelectorAll('.uap-search-results li')];
     rows[0]?.click();
     await new Promise((r) => setTimeout(r, 800));

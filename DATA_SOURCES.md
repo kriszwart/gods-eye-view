@@ -216,7 +216,7 @@ they ship; raw source files stay local under `pipeline/local_data/raw/` and are 
 (see [DATA_PIPELINE.md](anomaly-atlas-kit/docs/DATA_PIPELINE.md)).
 
 - **GEIPAN** (Groupe d'Études et d'Information sur les Phénomènes Aérospatiaux Non
-  identifiés, CNES — the French space agency). Case data reused under GEIPAN's own open
+  identifiés, CNES, the French space agency). Case data reused under GEIPAN's own open
   reuse notice; confirm current terms on the site before any redistribution beyond this
   app. 3,381 cases at August 2026, pulled from geipan.fr's own export endpoints,
   `https://geipan.fr/fr/cnes/export/cas` (cases) and `https://geipan.fr/fr/cnes/export/temoignages`

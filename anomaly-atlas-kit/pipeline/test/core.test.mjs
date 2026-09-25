@@ -99,10 +99,55 @@ test('toCases carries the wikipedia field through for hero records, leaving non-
   const heroWithoutWikipedia = { ...base, id: 'case-hero-without-wikipedia', wikipedia: null };
   const nonHero = { ...base, id: 'not-a-hero', hero: false, wikipedia: 'https://en.wikipedia.org/wiki/Ignored' };
   const cases = toCases([heroWithWikipedia, heroWithoutWikipedia, nonHero]);
-  assert.equal(cases.length, 2, 'non-hero records are still excluded from the dossier output');
+  assert.equal(cases.length, 2, 'a non-hero record with no source_url still emits nothing');
   assert.equal(
     cases.find((c) => c.id === 'case-hero-with-wikipedia').wikipedia,
     'https://en.wikipedia.org/wiki/Example',
   );
   assert.equal(cases.find((c) => c.id === 'case-hero-without-wikipedia').wikipedia, null);
+});
+
+test('toCases emits a compact { id, source_url } entry for every non-hero record with a source_url; heroes keep their full shape; a non-hero without a source_url emits nothing', () => {
+  const heroBase = {
+    id: 'case-hero', title: 'Hero case', hero: true,
+    date: { iso: '1997-03-13', precision: 'day', days: 9933 },
+    location: { lat: 33, lon: -112, precision_km: 50 },
+    craft_id: 'boomerang', shape_raw: 'V shape',
+    grade: { scheme: 'sample', value: null, status: 'contested', score: 0.5 },
+    explanation: null, summary: 'A neutral summary.', source: 'sample',
+    source_ref: 'ref-1', source_url: 'https://example.org/hero', source_note: 'note',
+    wikipedia: 'https://en.wikipedia.org/wiki/Example',
+    attribution: 'Sample', media: [], tags: ['tag'], related: ['other-id'],
+  };
+  const nonHeroWithUrl = {
+    id: 'geipan-with-url', title: 'Should never appear', hero: false,
+    date: { iso: '1981-06-01', precision: 'day', days: 1234 },
+    location: { lat: 45, lon: 2, precision_km: 5 },
+    craft_id: 'orb', shape_raw: null,
+    grade: { scheme: 'geipan', value: 'D', status: 'unresolved', score: 0.8 },
+    explanation: null, summary: null, source: 'geipan',
+    source_ref: null, source_url: 'https://www.geipan.fr/fr/cas/12345', source_note: null,
+    wikipedia: null,
+    attribution: 'GEIPAN (CNES)', media: [], tags: [], related: [],
+  };
+  const nonHeroWithoutUrl = { ...nonHeroWithUrl, id: 'geipan-without-url', source_url: null };
+
+  const cases = toCases([heroBase, nonHeroWithUrl, nonHeroWithoutUrl]);
+  assert.equal(cases.length, 2, 'the non-hero without a source_url emits nothing');
+
+  const heroEntry = cases.find((c) => c.id === 'case-hero');
+  assert.deepEqual(
+    Object.keys(heroEntry).sort(),
+    ['attribution', 'craft_id', 'date', 'explanation', 'grade', 'id', 'location', 'media', 'related', 'shape_raw', 'source', 'source_note', 'source_ref', 'source_url', 'summary', 'tags', 'title', 'wikipedia'],
+    'a hero entry keeps its full dossier shape',
+  );
+  assert.equal(heroEntry.title, 'Hero case');
+
+  const compactEntry = cases.find((c) => c.id === 'geipan-with-url');
+  assert.deepEqual(
+    Object.keys(compactEntry).sort(),
+    ['id', 'source_url'],
+    'a non-hero compact entry carries only id and source_url, nothing textual',
+  );
+  assert.deepEqual(compactEntry, { id: 'geipan-with-url', source_url: 'https://www.geipan.fr/fr/cas/12345' });
 });

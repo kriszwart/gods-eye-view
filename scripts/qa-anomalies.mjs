@@ -347,6 +347,53 @@ try {
     JSON.stringify({ wikiHost: caseSearch.wikiHost }),
   );
 
+  // Real (non-hero) GEIPAN cases now carry a compact { id, source_url } dossier
+  // entry too, so their "Open record" link works the same way a hero case's
+  // does. A bare year query ('1981') matches by year rather than by title, so
+  // its top result is an ordinary GEIPAN case, not one of the 24 sample heroes.
+  const geipanRecordLink = await page.evaluate(async () => {
+    const input = document.querySelector('.uap-search');
+    input.value = '1981';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 500));
+    const rows = [...document.querySelectorAll('.uap-search-results li')];
+    rows[0]?.click();
+    await new Promise((r) => setTimeout(r, 800));
+    const d = document.querySelector('.uap-dossier:not(.ancient)');
+    const open = d && !d.hidden;
+    const text = d ? d.textContent : '';
+    const openRecordLink = [
+      ...(d?.querySelectorAll('.uap-source a') || []),
+    ].find((a) => a.textContent === 'Open record');
+    const host = openRecordLink ? new URL(openRecordLink.href).host : null;
+    d?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    return {
+      rowCount: rows.length,
+      open,
+      host,
+      hasUndefined: /undefined/.test(text),
+    };
+  });
+  check(
+    'search finds a real GEIPAN case for the year query 1981',
+    geipanRecordLink.rowCount > 0 && geipanRecordLink.open === true,
+    JSON.stringify({
+      rowCount: geipanRecordLink.rowCount,
+      open: geipanRecordLink.open,
+    }),
+  );
+  check(
+    'its dossier carries an Open record link to www.geipan.fr, with no undefined text',
+    geipanRecordLink.host === 'www.geipan.fr' &&
+      geipanRecordLink.hasUndefined === false,
+    JSON.stringify({
+      host: geipanRecordLink.host,
+      hasUndefined: geipanRecordLink.hasUndefined,
+    }),
+  );
+
   // Ancient sites match by country as well as by name (Gobekli Tepe and
   // Derinkuyu are both Turkey rows in public/ancient-sites/sites.v1.json).
   const countrySearch = await page.evaluate(async () => {

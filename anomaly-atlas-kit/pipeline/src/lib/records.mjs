@@ -110,15 +110,30 @@ export function toAppDataset(records, { sources }) {
   };
 }
 
-/** Dossier records for hero cases, loaded on demand by the detail card. */
+/**
+ * Dossier records loaded on demand by the detail card. Hero cases keep their
+ * full curated shape. Every other record that carries a source_url gets a
+ * compact { id, source_url } entry -- just enough for the dossier's "Open
+ * record" link, with no textual fields (title, summary, place names) that
+ * would need their own redaction and honesty checks. A record with neither
+ * hero status nor a source_url contributes nothing.
+ */
 export function toCases(records) {
-  return records.filter((r) => r.hero).map((r) => ({
-    id: r.id, title: r.title, date: r.date, location: r.location, craft_id: r.craft_id, shape_raw: r.shape_raw ?? null,
-    grade: r.grade, explanation: r.explanation ?? null, summary: r.summary ?? null, source: r.source,
-    source_ref: r.source_ref ?? null, source_url: r.source_url ?? null, source_note: r.source_note ?? null,
-    wikipedia: r.wikipedia ?? null,
-    attribution: r.attribution, media: r.media || [], tags: r.tags || [], related: r.related || [],
-  }));
+  const out = [];
+  for (const r of records) {
+    if (r.hero) {
+      out.push({
+        id: r.id, title: r.title, date: r.date, location: r.location, craft_id: r.craft_id, shape_raw: r.shape_raw ?? null,
+        grade: r.grade, explanation: r.explanation ?? null, summary: r.summary ?? null, source: r.source,
+        source_ref: r.source_ref ?? null, source_url: r.source_url ?? null, source_note: r.source_note ?? null,
+        wikipedia: r.wikipedia ?? null,
+        attribution: r.attribution, media: r.media || [], tags: r.tags || [], related: r.related || [],
+      });
+    } else if (r.source_url) {
+      out.push({ id: r.id, source_url: r.source_url });
+    }
+  }
+  return out;
 }
 
 export const writeJson = (file, value) => writeFile(file, JSON.stringify(value));

@@ -1,5 +1,26 @@
 # Changelog
 
+- Phenomena phase 3c: a street view vantage on every dossier and a hotspot
+  heat layer, both on the free tier throughout.
+
+  Every dossier, sky and ancient alike, now carries a "Street view" link
+  that opens the witness's ground vantage using the keyless Google Maps
+  URL scheme, reusing the same guard path already trusted for hotlinked
+  imagery.
+
+  A new hotspot heat layer bins report density onto a 720 by 360
+  equirectangular grid, box-blurs it, and draws the result ion to magenta
+  on a 1440 by 720 texture as a Cesium imagery overlay at 0.55 alpha. It
+  toggles from the chronometer, follows the year dial and the status
+  filters with a 250 ms debounce, and only ever renders one-shot rather
+  than holding a continuous render. The legend states plainly, "Heat
+  shows report density, not credibility", so the layer cannot be misread
+  as a truth map.
+
+  Agreed next step: phase 5b, a local-only TMA layer for the owner's
+  machine, alongside the Wikidata CC0 public sweep with the deep-time
+  dial.
+
 - Phenomena phase 3b: ancient site imagery and cross-source links, on the
   free tier throughout, with no LLM anywhere in the pipeline.
 

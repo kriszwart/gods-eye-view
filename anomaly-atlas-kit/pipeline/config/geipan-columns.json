@@ -1,9 +1,13 @@
 {
-  "note": "Guesses until someone inspects the real export. Run: node src/adapters/geipan.mjs --inspect, then list the true header names first in each array.",
-  "id": ["cas_numero", "numero", "id_cas", "numero_cas"],
-  "date": ["cas_date", "date_observation", "date_obs", "date"],
-  "commune": ["cas_commune", "commune", "lieu"],
-  "departement": ["cas_dpt", "departement", "dpt", "code_departement"],
-  "classification": ["cas_classification", "classification", "classe"],
-  "summary": ["cas_resume", "resume", "description"]
+  "note": "Real header from the August 2026 XLSX/CSV export of cas_pub.csv (checked with: node src/adapters/geipan.mjs --inspect). temoignages_pub.csv has a different, per-testimony shape and is not read by this adapter. Old guesses kept as fallbacks in case a future export renames a column.",
+  "id": ["ID Etude de Cas", "cas_numero", "numero", "id_cas", "numero_cas"],
+  "title": ["Titre du Cas"],
+  "date": ["Date d'observation", "cas_date", "date_observation", "date_obs", "date"],
+  "year": ["Année", "annee", "year"],
+  "departement": ["Département", "cas_dpt", "departement", "dpt"],
+  "classification": ["Classification", "cas_classification", "classe"],
+  "phenomene": ["Phénomène", "phenomene"],
+  "identification": ["Identification", "cas_resume", "resume", "description"],
+  "latitude": ["Latitude", "lat"],
+  "longitude": ["Longitude", "lon", "lng"]
 }

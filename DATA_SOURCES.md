@@ -221,7 +221,7 @@ they ship; raw source files stay local under `pipeline/local_data/raw/` and are 
   app. 3,381 cases at August 2026, pulled from geipan.fr's own export endpoints,
   `https://geipan.fr/fr/cnes/export/cas` (cases) and `https://geipan.fr/fr/cnes/export/temoignages`
   (testimonies). Both endpoints serve XLSX despite their historical CSV naming, and both
-  need a browser user agent — the default `curl` user agent gets a 429; converted locally
+  need a browser user agent: the default `curl` user agent gets a 429; converted locally
   to `cas_pub.csv` and `temoignages_pub.csv` before the adapter reads them. See
   [DATA_PIPELINE.md](anomaly-atlas-kit/docs/DATA_PIPELINE.md) for the fuller pipeline
   reference. Attribution: "GEIPAN, CNES".

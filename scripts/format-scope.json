@@ -868,5 +868,6 @@
   "src/layers/ancientSites/rendering.js",
   "src/layers/ancientSites/index.js",
   "scripts/qa-ancient-sites.mjs",
-  "src/app/layers/ancientSites.js"
+  "src/app/layers/ancientSites.js",
+  "scripts/qa-spotter.mjs"
 ]

@@ -10,6 +10,7 @@
     "sample": "node src/build-dataset.mjs --sample --out out",
     "build": "node src/build-dataset.mjs --out out",
     "geipan": "node src/adapters/geipan.mjs",
+    "bluebook:download": "node src/adapters/nara-download.mjs",
     "bluebook:index": "node src/adapters/bluebook.mjs index",
     "bluebook:requests": "node src/adapters/bluebook.mjs requests",
     "bluebook:ingest": "node src/adapters/bluebook.mjs ingest",

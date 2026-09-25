@@ -37,6 +37,7 @@ export class LayerBindings {
     this._weatherShellModules = [];
     this._anomaliesShellModule = null;
     this._anomaliesMode = null;
+    this._anomaliesSetPhenomenaActive = null;
     this._cctvRequestFocusHandler = null;
     this._removeCctvRequestFocusListener = null;
     this._worldRequestFocusHandler = null;
@@ -150,11 +151,21 @@ export class LayerBindings {
    * A live mode is exited before it is ever discarded (teardown, a changed
    * anomalies module, or a fresh mode for a reconnected manager), so a
    * manager swap while Phenomena mode is active restores the layers it had
-   * hidden instead of stranding them off.
+   * hidden instead of stranding them off. That is a forced exit: the layer
+   * never asked for it, so its `attachShellServices` return value (recorded
+   * the last time it was attached) is used to tell the layer to reset its
+   * own button, since the mode restoring layers and style says nothing
+   * about the button's aria-pressed state by itself.
    */
   _connectAnomaliesShell() {
-    this._anomaliesMode?.exit?.();
+    if (this._anomaliesMode?.active) {
+      this._anomaliesMode.exit();
+      this._anomaliesSetPhenomenaActive?.(false);
+    } else {
+      this._anomaliesMode?.exit?.();
+    }
     this._anomaliesMode = null;
+    this._anomaliesSetPhenomenaActive = null;
     if (!this._dataManager) {
       this._anomaliesShellModule?.attachShellServices?.(null);
       this._anomaliesShellModule = null;
@@ -173,14 +184,23 @@ export class LayerBindings {
       isEnabled: (id) => manager.isEnabled(id),
       setEnabled: (id, on) => manager.setEnabled(id, on, { origin: 'user' }),
       keep: ['anomalies', 'ancient-sites'],
+      getStyle: this.services.getStyle,
+      setStyle: this.services.setStyle,
     });
     this._anomaliesMode = mode;
-    anomalies.attachShellServices({
+    // Cyclones' and the weather layers' attachShellServices calls also
+    // ignore their return value, so returning one here is safe everywhere
+    // else it is called.
+    const attached = anomalies.attachShellServices({
       togglePhenomenaMode: () => {
         mode.active ? mode.exit() : mode.enter();
         return mode.active;
       },
     });
+    this._anomaliesSetPhenomenaActive =
+      typeof attached?.setPhenomenaActive === 'function'
+        ? attached.setPhenomenaActive
+        : null;
   }
 
   _persistAwarenessSelection(event, cleared = false) {

@@ -79,6 +79,7 @@ export function createAnomaliesLayer({
   let tourBtn = null;
   let activeStatuses = null;
   let togglePhenomenaMode = null;
+  let phenomenaBtn = null;
 
   const visibleCount = () =>
     rows.filter(
@@ -258,7 +259,7 @@ export function createAnomaliesLayer({
         });
         btn.setAttribute('aria-pressed', 'true');
       }
-      const phenomenaBtn = chrono.addAction('Phenomena mode', (btn) => {
+      phenomenaBtn = chrono.addAction('Phenomena mode', (btn) => {
         if (typeof togglePhenomenaMode !== 'function') return;
         btn.setAttribute('aria-pressed', String(togglePhenomenaMode()));
       });
@@ -267,12 +268,22 @@ export function createAnomaliesLayer({
       console.log('[Data:Anomalies] Initialized');
     },
 
-    /** The shell supplies the Phenomena mode toggle; the layer only exposes the button. */
+    /**
+     * The shell supplies the Phenomena mode toggle; the layer only exposes
+     * the button. Returns `{ setPhenomenaActive }` so the shell can reset
+     * the button's `aria-pressed` when it force-exits a live mode (manager
+     * reconnect or teardown) without the layer having asked for it.
+     */
     attachShellServices(services) {
       togglePhenomenaMode =
         typeof services?.togglePhenomenaMode === 'function'
           ? services.togglePhenomenaMode
           : null;
+      return {
+        setPhenomenaActive(on) {
+          phenomenaBtn?.setAttribute('aria-pressed', String(Boolean(on)));
+        },
+      };
     },
 
     enable() {

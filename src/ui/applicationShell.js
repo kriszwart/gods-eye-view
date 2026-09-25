@@ -257,6 +257,8 @@ export class StyleManager extends ShellFacade {
         cachedGroundFloor: services.cachedGroundFloor,
         warmGroundFloor: services.warmGroundFloor,
         cctvLayer: services.cctvLayer,
+        getStyle: () => this.activeStyle,
+        setStyle: (...args) => this.setStyle(...args),
       },
       readControls: () => ({
         hud: this.hud,

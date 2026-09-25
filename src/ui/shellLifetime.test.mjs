@@ -157,10 +157,16 @@ test('weather shell supplies live imagery hosts to wind and observations and rel
 function anomaliesManager(tag, layerIds) {
   const enabledSet = new Set(layerIds);
   const setCalls = [];
+  const phenomenaActiveCalls = [];
   let services;
   const manager = {
     layers: new Map(layerIds.map(id => [id, { module: id === 'anomalies' ? {
-      attachShellServices(value) { services = value; },
+      attachShellServices(value) {
+        services = value;
+        return value
+          ? { setPhenomenaActive: on => phenomenaActiveCalls.push([tag, on]) }
+          : undefined;
+      },
     } : {} }])),
     isEnabled: id => enabledSet.has(id),
     setEnabled: (id, on) => {
@@ -169,7 +175,12 @@ function anomaliesManager(tag, layerIds) {
     },
     subscribe: () => () => {},
   };
-  return { manager, setCalls, toggle: () => services.togglePhenomenaMode() };
+  return {
+    manager,
+    setCalls,
+    phenomenaActiveCalls,
+    toggle: () => services.togglePhenomenaMode(),
+  };
 }
 
 test('a manager reconnect while Phenomena mode is active restores the layers it hid', (t) => {
@@ -191,6 +202,8 @@ test('a manager reconnect while Phenomena mode is active restores the layers it 
     ['old', 'flights', true],
     ['old', 'weather-radar', true],
   ]);
+  // The layer never asked to exit, so the shell resets its button itself.
+  assert.deepEqual(old.phenomenaActiveCalls, [['old', false]]);
 });
 
 test('disconnecting while Phenomena mode is active restores the layers it hid', (t) => {
@@ -204,4 +217,5 @@ test('disconnecting while Phenomena mode is active restores the layers it hid', 
   owner.disconnect();
 
   assert.deepEqual(stub.setCalls.at(-1), ['shell', 'flights', true]);
+  assert.deepEqual(stub.phenomenaActiveCalls, [['shell', false]]);
 });

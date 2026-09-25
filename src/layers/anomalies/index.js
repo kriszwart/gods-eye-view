@@ -60,6 +60,12 @@ const CREDIT_ROWS = [
     url: 'https://www.themodernantiquarian.com',
     label: 'themodernantiquarian.com',
   },
+  {
+    name: 'Wikimedia Commons and Wikidata',
+    text: 'Site photographs and links in the ancient register, each shown with its own per-image credit in the dossier.',
+    url: 'https://commons.wikimedia.org',
+    label: 'commons.wikimedia.org',
+  },
 ];
 
 /** Project the Earth's disc into window space so the dial can wrap it. */

@@ -138,6 +138,10 @@ test('stripHtml drops tags and decodes entities (textContent semantics)', () => 
   assert.equal(stripHtml(undefined), '');
 });
 
+test('stripHtml decodes &amp; last, so a double-escaped entity decodes only one step', () => {
+  assert.equal(stripHtml('&amp;lt;'), '&lt;');
+});
+
 test('isFreeLicence accepts only the licences we may ship', () => {
   for (const lic of ['CC0', 'CC BY 4.0', 'CC BY-SA 2.5', 'cc-by-sa-3.0', 'Public domain', 'PDM']) {
     assert.ok(isFreeLicence(lic), lic);
@@ -149,6 +153,12 @@ test('isFreeLicence accepts only the licences we may ship', () => {
 
 test('isFreeLicence rejects every non-commercial and no-derivatives variant', () => {
   for (const lic of ['CC BY-NC 4.0', 'CC BY-ND 4.0', 'CC BY-NC-SA 4.0', 'CC BY-NC-ND 4.0']) {
+    assert.ok(!isFreeLicence(lic), lic);
+  }
+});
+
+test('isFreeLicence rejects NC/ND variants past the optional -SA group, and prefixes glued to trailing text', () => {
+  for (const lic of ['CC BY-SA-NC 1.0', 'CC BY-SA-ND 2.0', 'CC BYX junk', 'Public domain? no']) {
     assert.ok(!isFreeLicence(lic), lic);
   }
 });

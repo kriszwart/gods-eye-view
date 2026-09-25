@@ -46,14 +46,15 @@ export function createAncientSitesLayer({
     if (!row || !dossier) return;
     const sourceUrl = safeSourceUrl(row.source_url);
     const wikipediaUrl = safeSourceUrl(row.wikipedia);
-    const imageUrl = safeImageUrl(row.image);
     const credit = row.image_attribution;
+    const attributed = !!(credit?.author && credit?.licence);
+    const imageUrl = attributed ? safeImageUrl(row.image) : null;
     dossier.innerHTML = `
       <button type="button" class="uap-close" aria-label="Close site">Close</button>
       <h2>${escapeHtml(row.name)}</h2>
       <img class="uap-glyph" alt="" src="${assetBase}glyphs/${escapeHtml(row.glyph)}.svg">
       ${imageUrl ? `<img class="uap-photo" alt="${escapeHtml(row.name)}" loading="lazy" src="${escapeHtml(imageUrl)}">` : ''}
-      ${imageUrl && credit?.author && credit?.licence ? `<p class="uap-photo-credit">Photo: ${escapeHtml(credit.author)}, ${escapeHtml(credit.licence)}</p>` : ''}
+      ${imageUrl ? `<p class="uap-photo-credit">Photo: ${escapeHtml(credit.author)}, ${escapeHtml(credit.licence)}</p>` : ''}
       <dl>
         <dt>Period</dt><dd>${escapeHtml(row.period)}</dd>
         <dt>Country</dt><dd>${escapeHtml(row.country)}</dd>

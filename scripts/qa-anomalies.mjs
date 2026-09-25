@@ -349,26 +349,36 @@ try {
 
   // Real (non-hero) GEIPAN cases now carry a compact { id, source_url } dossier
   // entry too, so their "Open record" link works the same way a hero case's
-  // does. A bare year query ('1981') matches by year rather than by title, so
-  // its top result is an ordinary GEIPAN case, not one of the 24 sample heroes.
+  // does. A bare year query ('1981') matches by year rather than by title,
+  // and sample hero cases can also carry 1981, so more than one result can
+  // tie-order first after a rebuild. Rather than trust the top result
+  // blindly, walk the results in order and use the first whose dossier's
+  // Open record link actually points at www.geipan.fr.
   const geipanRecordLink = await page.evaluate(async () => {
     const input = document.querySelector('.uap-search');
     input.value = '1981';
     input.dispatchEvent(new Event('input', { bubbles: true }));
     await new Promise((r) => setTimeout(r, 500));
     const rows = [...document.querySelectorAll('.uap-search-results li')];
-    rows[0]?.click();
-    await new Promise((r) => setTimeout(r, 800));
-    const d = document.querySelector('.uap-dossier:not(.ancient)');
-    const open = d && !d.hidden;
-    const text = d ? d.textContent : '';
-    const openRecordLink = [
-      ...(d?.querySelectorAll('.uap-source a') || []),
-    ].find((a) => a.textContent === 'Open record');
-    const host = openRecordLink ? new URL(openRecordLink.href).host : null;
-    d?.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
-    );
+    let open = false;
+    let text = '';
+    let host = null;
+    for (const row of rows) {
+      row.click();
+      await new Promise((r) => setTimeout(r, 800));
+      const d = document.querySelector('.uap-dossier:not(.ancient)');
+      open = !!(d && !d.hidden);
+      text = d ? d.textContent : '';
+      const openRecordLink = [
+        ...(d?.querySelectorAll('.uap-source a') || []),
+      ].find((a) => a.textContent === 'Open record');
+      host = openRecordLink ? new URL(openRecordLink.href).host : null;
+      d?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      );
+      await new Promise((r) => setTimeout(r, 100));
+      if (host === 'www.geipan.fr') break;
+    }
     return {
       rowCount: rows.length,
       open,

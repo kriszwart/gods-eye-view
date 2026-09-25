@@ -14,7 +14,8 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { root, loadJson } from '../lib/cli.mjs';
 
-const USER_AGENT = 'AnomalyAtlasPipeline/1.0 (contact: kris@zwartifydesign.com)';
+const CONTACT = process.env.WIKIMEDIA_CONTACT || 'phenomena-atlas (contact via repository)';
+const USER_AGENT = `AnomalyAtlasPipeline/1.0 (contact: ${CONTACT})`;
 const WIKIDATA_API = 'https://www.wikidata.org/w/api.php';
 const COMMONS_API = 'https://commons.wikimedia.org/w/api.php';
 const IMAGE_WIDTH = 640;
@@ -22,29 +23,46 @@ const DELAY_MS = 1000;
 
 // Matches CC0, "CC BY 2.5", "CC BY-SA 4.0" (any case/spacing/dash), Public
 // domain and PDM. Deliberately does not match variants that lack the "BY"
-// component (e.g. "CC SA 1.0"), vague statements like "No restrictions", or
-// any non-commercial/no-derivatives variant (CC BY-NC*, CC BY-ND*): the
-// negative lookahead rejects an "-nc" or "-nd" component wherever it would
-// otherwise be free to appear before the version number.
-const FREE_LICENCE_RE = /^(cc0|cc[\s-]?by(?:[\s-]?sa)?(?![\s-]?(?:nc|nd))[\s-]?[\d.]*|public domain|pdm|pd[\s-]?us)/i;
+// component (e.g. "CC SA 1.0") or vague statements like "No restrictions".
+// The trailing lookahead anchors the token: whatever alternative matched
+// must end at a version number, whitespace/dash or the end of the string,
+// so a licence token glued to trailing text ("CC BYX junk", "Public
+// domain? no") cannot match a mere prefix of itself.
+const FREE_LICENCE_RE = /^(cc0|cc[\s-]?by(?:[\s-]?sa)?(?![\s-]?(?:nc|nd))[\s-]?[\d.]*|public domain|pdm|pd[\s-]?us)(?=$|[\s-])/i;
 
-/** Strip HTML tags and decode the handful of entities Commons emits, textContent-style. */
+// Any non-commercial or no-derivatives component, anywhere in the string,
+// bounded by whitespace/dash or the string's edges (so it also catches
+// "CC BY-SA-NC 1.0" and "CC BY-SA-ND 2.0", which backtracking around the
+// optional "-SA" group in FREE_LICENCE_RE could otherwise let slip past
+// the inline negative lookahead there). Checked unconditionally, before
+// the allow pattern, as the source of truth for "never free".
+const NON_FREE_COMPONENT_RE = /(^|[\s-])(nc|nd)($|[\s-])/i;
+
+/**
+ * Strip HTML tags and decode the handful of entities Commons emits,
+ * textContent-style. &amp; decodes last, after every other entity, so a
+ * double-escaped entity such as "&amp;lt;" decodes only one step (to the
+ * literal text "&lt;") rather than cascading all the way to "<".
+ */
 export function stripHtml(html) {
   if (html == null) return '';
   const text = String(html)
     .replace(/<[^>]*>/g, '')
-    .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#0?39;/g, "'")
-    .replace(/&nbsp;/g, ' ');
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&');
   return text.replace(/\s+/g, ' ').trim();
 }
 
 /** True when a Commons LicenseShortName is a free licence we may ship. */
 export function isFreeLicence(shortName) {
-  return !!shortName && FREE_LICENCE_RE.test(String(shortName).trim());
+  if (!shortName) return false;
+  const value = String(shortName).trim();
+  if (NON_FREE_COMPONENT_RE.test(value)) return false;
+  return FREE_LICENCE_RE.test(value);
 }
 
 /**

@@ -7,6 +7,7 @@ import {
   ANOMALY_LAYER_ID,
 } from './model.js';
 import { binRows, blurBins, heatAlpha } from './hotspots.js';
+import { resolveImageryHost, NO_IMAGERY_HOST } from '../../maps/imageryHost.js';
 
 // Thin-film sheen for hero craft: strongest at grazing angles, drifting slowly.
 const SPECTRAL_FS = /* glsl */ `
@@ -41,7 +42,11 @@ const hashDeg = (s) =>
  */
 export function createAnomalyRenderer(
   viewer,
-  { assetBase = '/anomalies/', render } = {},
+  {
+    assetBase = '/anomalies/',
+    render,
+    host = () => resolveImageryHost({ viewer }),
+  } = {},
 ) {
   const scene = viewer.scene;
   const bright = new Map();
@@ -83,7 +88,7 @@ export function createAnomalyRenderer(
 
   // Heat overlay: reports binned onto hotspots.js's default grid (so
   // blurBins's radius keeps the real-world extent it was tuned for), then
-  // drawn ion-to-magenta and upsampled (bilinear) onto a 1440x720 canvas —
+  // drawn ion-to-magenta and upsampled (bilinear) onto a 1440x720 canvas:
   // a smoother glow than binning at full canvas resolution, for a fraction
   // of the blur cost. Cesium-side only: no portability constraint here.
   const HEAT_BIN_WIDTH = 720;
@@ -110,6 +115,13 @@ export function createAnomalyRenderer(
   let heatOn = false;
   let heatFilter;
   let heatLayer = null;
+  // The collection the current heatLayer actually lives on, so it is
+  // removed from the same place it was added, even if the map stack (and
+  // so the resolved host) changed in between.
+  let heatHostCollection = null;
+  // NO_IMAGERY_HOST while the active map stack has nowhere to drape heat
+  // (host().kind === 'none'); null once a globe or tileset host resolves.
+  let heatStatus = null;
   let heatTimer = null;
 
   /** Paint the density ramp (ion low, magenta high) and return a data: URL. */
@@ -152,22 +164,38 @@ export function createAnomalyRenderer(
   }
 
   /**
-   * Repaint the heat texture and swap it in. SingleTileImageryProvider is
-   * immutable once created, so a fresh provider is added and the old layer
-   * removed once the new one is in place; a one-shot governed render covers
-   * the swap (the overlay never holds continuous render).
+   * Repaint the heat texture and swap it in on whatever surface the active
+   * map stack can host draped imagery on (a globe, or a 3D tileset's own
+   * imageryLayers), resolved fresh on every swap through imageryHost.js's
+   * `host()` so a map-stack change is picked up at the next toggle or dial
+   * step rather than staying stuck on a stale collection. When the stack
+   * has nowhere to drape imagery, no layer is created and `heatStatus`
+   * carries `NO_IMAGERY_HOST` instead, so the caller can surface it.
+   * SingleTileImageryProvider is immutable once created, so a fresh
+   * provider is added and the old layer removed (from whichever collection
+   * it actually lives on) once the new one is in place; a one-shot
+   * governed render covers the swap (the overlay never holds continuous
+   * render).
    */
   function swapHeatLayer(filter) {
-    const provider = new Cesium.SingleTileImageryProvider({
-      url: paintHeat(filter),
-      tileWidth: HEAT_CANVAS_WIDTH,
-      tileHeight: HEAT_CANVAS_HEIGHT,
-      rectangle: Cesium.Rectangle.fromDegrees(-180, -90, 180, 90),
-    });
+    const { collection } = host() || {};
     const old = heatLayer;
-    heatLayer = viewer.imageryLayers.addImageryProvider(provider);
-    heatLayer.alpha = HEAT_ALPHA;
-    if (old) viewer.imageryLayers.remove(old, true);
+    const oldCollection = heatHostCollection;
+    heatLayer = null;
+    heatHostCollection = null;
+    heatStatus = collection ? null : NO_IMAGERY_HOST;
+    if (collection) {
+      const provider = new Cesium.SingleTileImageryProvider({
+        url: paintHeat(filter),
+        tileWidth: HEAT_CANVAS_WIDTH,
+        tileHeight: HEAT_CANVAS_HEIGHT,
+        rectangle: Cesium.Rectangle.fromDegrees(-180, -90, 180, 90),
+      });
+      heatLayer = collection.addImageryProvider(provider);
+      heatLayer.alpha = HEAT_ALPHA;
+      heatHostCollection = collection;
+    }
+    if (old && oldCollection) oldCollection.remove(old, true);
     requestFrame('anomalies-heat');
   }
 
@@ -180,20 +208,27 @@ export function createAnomalyRenderer(
 
   /**
    * Add or remove the heat imagery layer. Turning on repaints and swaps in
-   * immediately (using the last known filter), so the layer never lags the
-   * toggle; turning off cancels any pending debounced swap.
+   * immediately, so the layer never lags the toggle; turning off cancels
+   * any pending debounced swap. `filter` is the row predicate for the
+   * immediate paint (the same shape `refreshHeat` takes) so the first
+   * frame already honours the dial instead of briefly showing every row;
+   * when omitted, the last filter passed to `refreshHeat` is reused.
    * @param {boolean} on
+   * @param {(row: object) => boolean} [filter]
    */
-  function setHeat(on) {
+  function setHeat(on, filter) {
     const next = !!on;
+    if (filter !== undefined) heatFilter = filter;
     if (next === heatOn) return;
     heatOn = next;
     cancelHeatDebounce();
     if (!heatOn) {
-      if (heatLayer) {
-        viewer.imageryLayers.remove(heatLayer, true);
-        heatLayer = null;
-      }
+      const old = heatLayer;
+      const oldCollection = heatHostCollection;
+      heatLayer = null;
+      heatHostCollection = null;
+      heatStatus = null;
+      if (old && oldCollection) oldCollection.remove(old, true);
       requestFrame('anomalies-heat');
       return;
     }
@@ -409,9 +444,10 @@ export function createAnomalyRenderer(
     for (const h of heroes) scene.primitives.remove(h.model);
     heroes = [];
     cancelHeatDebounce();
-    if (heatLayer) {
-      viewer.imageryLayers.remove(heatLayer, true);
+    if (heatLayer && heatHostCollection) {
+      heatHostCollection.remove(heatLayer, true);
       heatLayer = null;
+      heatHostCollection = null;
     }
     syncHold();
   }
@@ -425,6 +461,9 @@ export function createAnomalyRenderer(
     pulse,
     setHeat,
     refreshHeat,
+    /** NO_IMAGERY_HOST while heat is on but the active map stack has
+     * nowhere to drape it; null otherwise. */
+    getHeatStatus: () => heatStatus,
     destroy,
   };
 }

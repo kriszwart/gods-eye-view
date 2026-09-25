@@ -242,6 +242,11 @@ export class LayerBindings {
       // tearing down) closes the plate the shell owns, instead of leaving
       // it orphaned with a dead Spotter button behind it.
       closeSpotter: () => this._closeSpotter(),
+      // Same channel the weather layers use (_connectWeatherCamera above)
+      // so the Hotspots heat overlay drapes on whatever surface the active
+      // map stack can host imagery on, globe or 3D tileset, instead of
+      // reaching for viewer.imageryLayers directly.
+      imageryHost: this.services.imageryHost,
     });
     this._anomaliesSetPhenomenaActive =
       typeof attached?.setPhenomenaActive === 'function'

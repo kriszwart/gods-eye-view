@@ -895,7 +895,8 @@
       "src/layers/anomalies/hotspots.js",
       "src/layers/anomalies/atmosphere.js",
       "src/layers/anomalies/chronometer.js",
-      "src/sources/safeUrl.js"
+      "src/sources/safeUrl.js",
+      "src/maps/imageryHost.js"
     ],
     "external": ["cesium"]
   },

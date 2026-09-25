@@ -13,6 +13,7 @@ import { createAnomalyRenderer } from './rendering.js';
 import { createChronometer } from './chronometer.js';
 import { applyAtlasAtmosphere } from './atmosphere.js';
 import { safeSourceUrl } from '../../sources/safeUrl.js';
+import { resolveImageryHost } from '../../maps/imageryHost.js';
 export * from './model.js';
 export { normalizeAnomalySnapshot, yearHistogram } from './records.js';
 export { createAnomalySource } from './source.js';
@@ -131,6 +132,10 @@ export function createAnomaliesLayer({
   let activeStatuses = null;
   let heatOn = false;
   let heatBtn = null;
+  // Shell-supplied resolver for the active map stack's imagery host (globe
+  // or 3D tileset); null until attachShellServices connects it, and the
+  // renderer falls back to resolving against the viewer alone until then.
+  let getImageryHost = null;
   let togglePhenomenaMode = null;
   let phenomenaBtn = null;
   let toggleSpotter = null;
@@ -146,6 +151,21 @@ export function createAnomaliesLayer({
         inWindow(r, chrono?.year, chrono?.mode) &&
         (!activeStatuses || activeStatuses.has(r.status)),
     ).length;
+  /** The row predicate the dial currently implies, shared by heat's immediate
+   * paint (setHeat) and its debounced repaint (refreshHeat) so both agree. */
+  const heatFilterFn = () =>
+    chrono
+      ? (r) =>
+          inWindow(r, chrono.year, chrono.mode) &&
+          (!activeStatuses || activeStatuses.has(r.status))
+      : undefined;
+  /** Reflect whether heat can actually render on the active map stack: the
+   * button stays pressed to record the user's choice (weather's own
+   * disable-with-guidance pattern for a hidden imagery host), but its title
+   * carries the reason when the stack has nowhere to drape it. */
+  const syncHeatStatus = () => {
+    if (heatBtn) heatBtn.title = (heatOn && renderer?.getHeatStatus()) || '';
+  };
   const refreshTime = () => {
     if (!renderer || !chrono) return;
     renderer.apply({
@@ -164,12 +184,10 @@ export function createAnomaliesLayer({
       );
     lastYear = chrono.year;
     chrono.setReadout(describeYear(chrono.year, visibleCount(), chrono.mode));
-    if (heatOn)
-      renderer.refreshHeat(
-        (r) =>
-          inWindow(r, chrono.year, chrono.mode) &&
-          (!activeStatuses || activeStatuses.has(r.status)),
-      );
+    if (heatOn) {
+      renderer.refreshHeat(heatFilterFn());
+      syncHeatStatus();
+    }
   };
   const relayout = () => {
     if (!chrono || !viewer) return;
@@ -201,6 +219,13 @@ export function createAnomaliesLayer({
     const streetViewUrl = safeSourceUrl(
       `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${row.lat.toFixed(4)},${row.lon.toFixed(4)}`,
     );
+    // Civilian reports carry a rounded location (data honesty, see
+    // DATA_PIPELINE.md); the ancient register's rows have no precisionKm,
+    // so its own Street view links keep the exact-coordinates default with
+    // no title added.
+    const streetViewTitle = row.precisionKm
+      ? ` title="${escapeHtml(`Approximate vantage: location rounded to within ${row.precisionKm} km`)}"`
+      : '';
     dossier.innerHTML = `
       <button type="button" class="uap-close" aria-label="Close case">Close</button>
       <p class="uap-code">${escapeHtml(row.source)} / ${escapeHtml(row.status)}</p>
@@ -216,7 +241,7 @@ export function createAnomaliesLayer({
       ${detail?.summary ? `<p class="uap-summary">${escapeHtml(detail.summary)}</p>` : ''}
       ${
         sourceUrl || wikipediaUrl || streetViewUrl
-          ? `<p class="uap-source">${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open record</a>` : ''}${wikipediaUrl ? `<a href="${escapeHtml(wikipediaUrl)}" target="_blank" rel="noopener noreferrer">Wikipedia</a>` : ''}${streetViewUrl ? `<a href="${escapeHtml(streetViewUrl)}" target="_blank" rel="noopener noreferrer">Street view</a>` : ''}</p>`
+          ? `<p class="uap-source">${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open record</a>` : ''}${wikipediaUrl ? `<a href="${escapeHtml(wikipediaUrl)}" target="_blank" rel="noopener noreferrer">Wikipedia</a>` : ''}${streetViewUrl ? `<a href="${escapeHtml(streetViewUrl)}" target="_blank" rel="noopener noreferrer"${streetViewTitle}>Street view</a>` : ''}</p>`
           : ''
       }`;
     dossier.hidden = false;
@@ -304,7 +329,18 @@ export function createAnomaliesLayer({
     init(v) {
       if (viewer) throw new Error('Anomaly layer is already initialized');
       viewer = v;
-      renderer = createAnomalyRenderer(viewer, { assetBase, render });
+      renderer = createAnomalyRenderer(viewer, {
+        assetBase,
+        render,
+        // A live closure over getImageryHost, not a snapshot: it keeps
+        // resolving through the shell's mapStackController once
+        // attachShellServices connects it (usually just after init), and
+        // falls back to resolving against the viewer alone until then.
+        host: () =>
+          typeof getImageryHost === 'function'
+            ? getImageryHost()
+            : resolveImageryHost({ viewer }),
+      });
       const host = container || viewer.container;
       chrono = createChronometer({
         container: host,
@@ -394,7 +430,11 @@ export function createAnomaliesLayer({
       heatBtn = chrono.addAction('Hotspots', (btn) => {
         heatOn = !heatOn;
         btn.setAttribute('aria-pressed', String(heatOn));
-        renderer.setHeat(heatOn);
+        // Pass the dial's current predicate straight in so the first paint
+        // already honours it, instead of a brief unfiltered frame before
+        // refreshTime()'s own (debounced) refreshHeat call lands.
+        renderer.setHeat(heatOn, heatFilterFn());
+        syncHeatStatus();
         refreshTime();
       });
       heatBtn.setAttribute('aria-pressed', 'false');
@@ -448,6 +488,11 @@ export function createAnomaliesLayer({
         typeof services?.closeSpotter === 'function'
           ? services.closeSpotter
           : null;
+      getImageryHost =
+        typeof services?.imageryHost === 'function'
+          ? services.imageryHost
+          : null;
+      syncHeatStatus();
       return {
         setPhenomenaActive(on) {
           phenomenaBtn?.setAttribute('aria-pressed', String(Boolean(on)));
@@ -498,6 +543,7 @@ export function createAnomaliesLayer({
       heatOn = false;
       heatBtn?.setAttribute('aria-pressed', 'false');
       renderer?.setHeat(false);
+      syncHeatStatus();
       if (legend) legend.hidden = true;
       restoreAtmosphere?.();
       restoreAtmosphere = null;

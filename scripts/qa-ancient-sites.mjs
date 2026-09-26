@@ -19,7 +19,11 @@
  * Also proves the local-only Modern Antiquarian register (phase 5b task 4)
  * is absent with PHENOMENA_LOCAL_TMA unset, which is how this gate's own
  * server always runs: its dev-only route serves the app shell rather than
- * TMA data, and enabling the layer never requests that route at all.
+ * TMA data, and enabling the layer never requests that route at all. Also
+ * proves the git-ignored TMA export is denied at the raw dev-server paths
+ * (the repository-relative path and its /@fs/<absolute-path> form), not
+ * just at the friendly /local-tma/ route, per the phase 5b task 4 fix
+ * round's server.fs.deny entry in build/vite.js.
  *
  * Needs the dev server on :4173 (QA_BASE_URL overrides).
  */
@@ -139,6 +143,43 @@ try {
     tmaProbe.looksLikeAppShell === true && tmaProbe.looksLikeTmaData !== true,
     JSON.stringify(tmaProbe),
   );
+
+  // The friendly /local-tma/ route above is a separate, Node-level
+  // fs.readFile (server/providers/local-tma.js); it is not proof that Vite's
+  // own static fallthrough is closed. Probe the raw repository path and its
+  // /@fs/<absolute-path> form directly: before the phase 5b task 4 fix
+  // round's server.fs.deny entry (build/vite.js), both served the
+  // git-ignored TMA jsonl straight off disk regardless of the env flag. A
+  // clean denial is typically a 403, but the contract this gate cares about
+  // is narrower and host-independent: never a 200 with a TMA-shaped body.
+  const rawFallthroughProbes = await page.evaluate(async () => {
+    const urls = [
+      '/anomaly-atlas-kit/pipeline/local_data/normalised/tma-sites.jsonl',
+      '/@fs/Users/kriszwart/gods-eye-view/anomaly-atlas-kit/pipeline/local_data/normalised/tma-sites.jsonl',
+    ];
+    const results = [];
+    for (const url of urls) {
+      try {
+        const res = await fetch(url);
+        const text = await res.text();
+        results.push({
+          url,
+          status: res.status,
+          servedTmaData: res.status === 200 && /^\s*\{"name"/.test(text),
+        });
+      } catch (error) {
+        results.push({ url, error: String(error) });
+      }
+    }
+    return results;
+  });
+  for (const probe of rawFallthroughProbes) {
+    check(
+      `raw dev-server path denies the TMA export: ${probe.url}`,
+      probe.servedTmaData !== true,
+      JSON.stringify(probe),
+    );
+  }
 
   const reenable = await page.evaluate(async () => {
     const m = window.__godsEyeView.dataManager;

@@ -63,7 +63,7 @@ function localProviderPlugins() {
     firePerimetersProxy(),
     keySetupEndpoint(),
   ];
-  if (process.env.PHENOMENA_LOCAL_TMA) plugins.push(localTmaProxy());
+  if (process.env.PHENOMENA_LOCAL_TMA === '1') plugins.push(localTmaProxy());
   return plugins;
 }
 

@@ -37,7 +37,20 @@ export function createBrowserViteConfig({
           ? true
           : ['localhost', '127.0.0.1', '.local'],
       fs: {
-        deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/ENVIRONMENT'],
+        // Vite's dev server serves any file under the project root by
+        // default (the friendly /local-tma/ route is a separate, Node-level
+        // fs.readFile in server/providers/local-tma.js and is unaffected by
+        // this deny list). Without this entry, the raw repository path and
+        // its /@fs/<absolute-path> form both serve the git-ignored TMA
+        // export regardless of PHENOMENA_LOCAL_TMA.
+        deny: [
+          '.env',
+          '.env.*',
+          '*.{crt,pem}',
+          '**/.git/**',
+          '**/ENVIRONMENT',
+          '**/anomaly-atlas-kit/pipeline/local_data/**',
+        ],
       },
       // These headers protect the document containing Provider Settings.
       headers: {
@@ -50,8 +63,10 @@ export function createBrowserViteConfig({
       'import.meta.env.CESIUM_ION_TOKEN': JSON.stringify(cesiumToken),
       // Always a literal string (never undefined), so an unset flag folds
       // to `""` and a flag-off build can statically prove every
-      // `if (import.meta.env.PHENOMENA_LOCAL_TMA)` guard dead (see
-      // src/layers/ancientSites/tmaLocal.js and its callers).
+      // `import.meta.env.PHENOMENA_LOCAL_TMA === '1'` guard dead (see
+      // src/layers/ancientSites/tmaLocal.js and its callers). The raw value
+      // is passed through unchanged (not normalised to '1'/''); the client
+      // does the strict `=== '1'` comparison, so e.g. `=0` stays off too.
       'import.meta.env.PHENOMENA_LOCAL_TMA': JSON.stringify(
         phenomenaLocalTma || '',
       ),

@@ -16,9 +16,10 @@ export { createAncientSource } from './source.js';
  * Local-only Modern Antiquarian register (see tmaLocal.js): every reference
  * to it below sits behind this constant, folded to a literal `false` when
  * `PHENOMENA_LOCAL_TMA` is unset, so a production build can prove the whole
- * branch dead and drop it, its dossier text included.
+ * branch dead and drop it, its dossier text included. Strict `=== '1'`
+ * (rather than a plain truthy check) so `PHENOMENA_LOCAL_TMA=0` stays off.
  */
-const LOCAL_TMA_ENABLED = import.meta.env?.PHENOMENA_LOCAL_TMA;
+const LOCAL_TMA_ENABLED = import.meta.env?.PHENOMENA_LOCAL_TMA === '1';
 
 const escapeHtml = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);

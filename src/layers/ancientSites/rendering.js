@@ -14,8 +14,10 @@ import {
  * `import.meta.env.PHENOMENA_LOCAL_TMA`'s build-time define when the flag
  * is unset, so a production build can prove the whole register (its
  * primitive collection, its pick branch, its point data) dead and drop it.
+ * Strict `=== '1'` (rather than a plain truthy check) so
+ * `PHENOMENA_LOCAL_TMA=0` stays off.
  */
-const LOCAL_TMA_ENABLED = import.meta.env?.PHENOMENA_LOCAL_TMA;
+const LOCAL_TMA_ENABLED = import.meta.env?.PHENOMENA_LOCAL_TMA === '1';
 
 /** Throttle for the camera-height-band sweep recompute (postRender fires at
  * up to render cadence during camera motion; this bounds how often the ~81k
@@ -239,11 +241,18 @@ export function createAncientRenderer(viewer, { render } = {}) {
 
   /**
    * Render the local-only Modern Antiquarian rows as one-shot, unclustered
-   * gold points: no camera-height banding (the register is small enough,
-   * ~17k rows, that plain points are cheap, and it is a dev-only owner
-   * convenience, not a shipped register). A flag-off build never reaches
-   * past the guard below, so this is the only place TMA point data or its
-   * `tma` pick kind ever exists.
+   * gold points: no camera-height banding of its own (the register is small
+   * enough, ~17k rows, that plain points are cheap, and it is a dev-only
+   * owner convenience, not a shipped register). Measured rather than
+   * assumed (phase 5b task 4 fix report): 17,388 points cost ~8.7ms to
+   * batch-build once on load, and add no measurable per-frame render cost
+   * at world zoom (scene.render() sampled over 60 calls: ~0.015ms mean with
+   * the register on vs ~0.012ms off, both effectively noise) — comfortably
+   * inside a single frame budget either way, so folding this small a
+   * register through the sweep's clustering path would add complexity
+   * without a performance reason. A flag-off build never reaches past the
+   * guard below, so this is the only place TMA point data or its `tma`
+   * pick kind ever exists.
    */
   function setTma(rows) {
     if (!LOCAL_TMA_ENABLED || !tmaPoints) return;

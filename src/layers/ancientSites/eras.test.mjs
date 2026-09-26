@@ -57,16 +57,34 @@ test('sweepTypeInEraBand: cumulative mode includes a type once the dial reaches 
   );
 });
 
-test('sweepTypeInEraBand: window mode is span-bounded around the window start, inclusive at the edge', () => {
-  const { startBce } = TYPE_ERA_WINDOWS.circle;
+test('sweepTypeInEraBand: window mode is an overlap test against the type window, span-padded at both ends, inclusive at the edges', () => {
+  const { startBce, endBce } = TYPE_ERA_WINDOWS.circle;
+  // Just inside the window itself: always a match, regardless of span.
+  assert.equal(sweepTypeInEraBand('circle', startBce - 1, 'window', 0), true);
+  // The padded upper edge (startBce + span) and one past it.
   assert.equal(
-    sweepTypeInEraBand('circle', startBce - 500, 'window', 500),
+    sweepTypeInEraBand('circle', startBce + 500, 'window', 500),
     true,
   );
   assert.equal(
-    sweepTypeInEraBand('circle', startBce - 501, 'window', 500),
+    sweepTypeInEraBand('circle', startBce + 501, 'window', 500),
     false,
   );
+  // The padded lower edge (endBce - span) and one past it.
+  assert.equal(sweepTypeInEraBand('circle', endBce - 500, 'window', 500), true);
+  assert.equal(
+    sweepTypeInEraBand('circle', endBce - 501, 'window', 500),
+    false,
+  );
+});
+
+test('sweepTypeInEraBand: window mode matches a type whose window is wide relative to the span - "around 2500 BCE" must not hide a megalith (regression: the old distance-from-startBce expression hid it, since |5000 - 2500| = 2500 is well outside the default 500-year span, even though the type window runs to -1000)', () => {
+  const { startBce, endBce } = TYPE_ERA_WINDOWS.megalith;
+  assert.ok(
+    2500 < startBce && 2500 > endBce,
+    'sanity: 2500 BCE sits inside the megalith window',
+  );
+  assert.equal(sweepTypeInEraBand('megalith', 2500, 'window'), true);
 });
 
 test('heroInEraBand: an unknown (null) date only ever shows in all-years mode', () => {
@@ -108,6 +126,12 @@ test('formatBceYear renders the sign convention as sentence-case BCE/CE labels',
   assert.equal(formatBceYear(9500), '9,500 BCE');
   assert.equal(formatBceYear(-1200), '1,200 CE');
   assert.equal(formatBceYear(1), '1 BCE');
+});
+
+test('formatBceYear never renders "0 CE": there is no year zero', () => {
+  assert.equal(formatBceYear(0), '1 BCE');
+  assert.equal(formatBceYear(-0.4), '1 BCE');
+  assert.equal(formatBceYear(0.4), '1 BCE');
 });
 
 test('describeEraBand mirrors the sky chronometer’s readout, singular and plural', () => {

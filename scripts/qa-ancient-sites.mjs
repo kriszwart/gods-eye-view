@@ -28,6 +28,7 @@
  * Needs the dev server on :4173 (QA_BASE_URL overrides).
  */
 import puppeteer from 'puppeteer';
+import path from 'node:path';
 const base = process.env.QA_BASE_URL || 'http://localhost:4173';
 const browser = await puppeteer.launch({
   headless: true,
@@ -152,10 +153,16 @@ try {
   // git-ignored TMA jsonl straight off disk regardless of the env flag. A
   // clean denial is typically a 403, but the contract this gate cares about
   // is narrower and host-independent: never a 200 with a TMA-shaped body.
-  const rawFallthroughProbes = await page.evaluate(async () => {
+  // Computed from process.cwd() rather than hardcoded, so this probe still
+  // means something on a checkout at a different path than this machine's.
+  const tmaAbsolutePath = path.join(
+    process.cwd(),
+    'anomaly-atlas-kit/pipeline/local_data/normalised/tma-sites.jsonl',
+  );
+  const rawFallthroughProbes = await page.evaluate(async (fsAbsolutePath) => {
     const urls = [
       '/anomaly-atlas-kit/pipeline/local_data/normalised/tma-sites.jsonl',
-      '/@fs/Users/kriszwart/gods-eye-view/anomaly-atlas-kit/pipeline/local_data/normalised/tma-sites.jsonl',
+      `/@fs${fsAbsolutePath}`,
     ];
     const results = [];
     for (const url of urls) {
@@ -172,7 +179,7 @@ try {
       }
     }
     return results;
-  });
+  }, tmaAbsolutePath);
   for (const probe of rawFallthroughProbes) {
     check(
       `raw dev-server path denies the TMA export: ${probe.url}`,
@@ -416,7 +423,7 @@ try {
 
   // Click the densest badge: the camera should fly one band closer and the
   // grid should re-coarsen (a smaller cellDeg) at the new height. Re-centre
-  // the (still world-zoom) camera on the cluster's own coordinates first —
+  // the (still world-zoom) camera on the cluster's own coordinates first:
   // `cartesianToCanvasCoordinates` does not test globe occlusion, so a
   // cluster on the far side of the initial arbitrary vantage would otherwise
   // project to a plausible-looking but unclickable canvas point.

@@ -271,17 +271,30 @@ export class LayerBindings {
    * ancient layer's own next enable(). Mirrors `_connectAnomaliesShell`'s
    * own teardown-on-rewire dance (a changed or torn-down manager detaches
    * the outgoing module first).
+   *
+   * The outgoing module is detached with `isSkyActive: () => true`, never
+   * with `null`: the layer's own `attachShellServices(null)` falls back to
+   * `() => false` (see its doc comment), which would read as "the sky
+   * register is off" and briefly mount the deep-time dial even when it is
+   * genuinely on, for the instant between this detach and whatever
+   * reconnects next. Assuming the sky IS active on a detach we cannot
+   * verify keeps the dial down, the conservative failure mode, rather than
+   * mounting it on a guess.
    */
   _connectAncientSitesShell() {
     if (!this._dataManager) {
-      this._ancientShellModule?.attachShellServices?.(null);
+      this._ancientShellModule?.attachShellServices?.({
+        isSkyActive: () => true,
+      });
       this._ancientShellModule = null;
       this._ancientNotifySkyChanged = null;
       return;
     }
     const ancient = this._dataManager.layers?.get('ancient-sites')?.module;
     if (this._ancientShellModule !== ancient) {
-      this._ancientShellModule?.attachShellServices?.(null);
+      this._ancientShellModule?.attachShellServices?.({
+        isSkyActive: () => true,
+      });
       this._ancientShellModule = null;
       this._ancientNotifySkyChanged = null;
     }
@@ -480,7 +493,7 @@ export class LayerBindings {
   /**
    * Ancient-sites register records, same independence and caching as above.
    * Hero tier only: the worldwide sweep (~81k rows) is deliberately left out
-   * of this in-memory matcher to avoid bloating it — a searchable sweep
+   * of this in-memory matcher to avoid bloating it, a searchable sweep
    * needs its own index, ledgered as a phase 5b follow-up.
    */
   async _getAncientSearchRecords() {

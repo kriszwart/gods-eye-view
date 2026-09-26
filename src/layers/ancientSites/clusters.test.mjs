@@ -190,7 +190,7 @@ test('SKYWARD_FALLBACK_CELL_DEG is the near band grid, coarser than the closest 
 });
 
 test('clusterSweep at the skyward fallback cellDeg, unbounded, still collapses a dense sweep into far fewer primitives', () => {
-  // Simulate a dense sweep (many sites) with no bounds at all — the exact
+  // Simulate a dense sweep (many sites) with no bounds at all: the exact
   // shape a sky/horizon fallback must handle safely.
   const points = [];
   for (let i = 0; i < 500; i += 1)

@@ -20,7 +20,7 @@ export function mapAnalystRecord(row) {
 /**
  * Analyst record for a worldwide-sweep site. `sweep` is the typed accessor
  * returned by `normalizeAncientSitesV2`; `index` selects the row. Sweep
- * sites carry no `period` (the sweep ships no era column — see
+ * sites carry no `period` (the sweep ships no era column, see
  * `anomaly-atlas-kit/docs/DATA_PIPELINE.md` and the phase 5b task 2 report)
  * and no dossier photo or debate, unlike the curated hero tier.
  */

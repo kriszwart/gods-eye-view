@@ -24,7 +24,7 @@ export const CAMERA_BANDS = Object.freeze([
 /**
  * Whole-world clustering grid (degrees) a renderer can fall back to when the
  * closest band (`cellDeg === 0`, unclustered singles bounded to the current
- * view rectangle) has no view rectangle to bound against — the camera is
+ * view rectangle) has no view rectangle to bound against: the camera is
  * pitched above the horizon, a routine state at close range. Every band
  * coarser than the closest one clusters the *entire* sweep with no viewport
  * bound at all (see `clusterSweep`'s whole-world path), so it is already a
@@ -32,7 +32,7 @@ export const CAMERA_BANDS = Object.freeze([
  * one immediately coarser than "closest". Mirrors the FIRMS renderer's own
  * sky/horizon handling (`aggregateFires`/`renderDetections` in
  * `src/layers/firms/rendering.js`), which never renders its full dataset
- * when `bounds` is null — it falls back to a still-bounded, globally-ranked
+ * when `bounds` is null: it falls back to a still-bounded, globally-ranked
  * selection instead. The sweep has no ranking signal (no FRP-like score) to
  * take a "top N" from, so stepping up to the next coarser band's grid is the
  * bounded fallback that reads cleanest here, rather than inventing a ranking.
@@ -95,7 +95,7 @@ function inBounds(lat, lon, bounds) {
  * exactly one site becomes a `single` `{ index }` instead, so a lone site
  * never carries a misleading count badge. `cellDeg <= 0` disables grid
  * clustering: every in-bounds site is its own single (the caller should pair
- * this with a tight `bounds` — the current view rectangle — to keep the
+ * this with a tight `bounds` (the current view rectangle) to keep the
  * result small at close camera range).
  *
  * `filter`, when given, is called with each candidate index and skips any

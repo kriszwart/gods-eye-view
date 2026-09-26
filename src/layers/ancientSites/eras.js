@@ -70,15 +70,25 @@ export function typeEraWindow(typeName) {
 
 /**
  * Whether a value on the `period_start_bce` timeline shows for the dial's
- * current position: at or before it (cumulative, "up to"), within
- * `spanBce` of it (window, "around"), or always (all). Larger values are
+ * current position: at or before it (cumulative, "up to"), overlapping a
+ * span-padded window (window, "around"), or always (all). Larger values are
  * earlier, so cumulative membership is `startBce >= bceValue`, mirroring
  * the sky chronometer's own `row.year <= year` with the timeline read
  * backwards.
+ *
+ * `startBce` and `endBce` bound the thing being tested (a type's typological
+ * window, earlier to later) and window mode is an overlap test between that
+ * bound and `[bceValue - spanBce, bceValue + spanBce]`: `bceValue` must not
+ * sit past the padded earlier edge (`startBce + spanBce`) nor short of the
+ * padded later edge (`endBce - spanBce`). A hero's own point date has no
+ * separate "later" end, so its caller passes the same value for both
+ * `startBce` and `endBce`, which collapses this to the point's own
+ * distance-from-`bceValue` test.
  */
-function withinBand(startBce, bceValue, mode, spanBce) {
+function withinBand(startBce, endBce, bceValue, mode, spanBce) {
   if (mode === 'all' || bceValue == null) return true;
-  if (mode === 'window') return Math.abs(startBce - bceValue) <= spanBce;
+  if (mode === 'window')
+    return bceValue <= startBce + spanBce && bceValue >= endBce - spanBce;
   return startBce >= bceValue;
 }
 
@@ -87,7 +97,10 @@ function withinBand(startBce, bceValue, mode, spanBce) {
  * current position. Reads only the type's typological window, never
  * anything about the individual site - see the honesty rule above.
  * An unrecognised type is never hidden by a heuristic it has no window
- * for.
+ * for. Window mode overlaps the dial's span-padded position against the
+ * type's FULL window (`startBce` to `endBce`), not just its earlier end, so
+ * "around 2500 BCE" correctly includes a type such as megalith whose window
+ * (5000 to -1000) spans well past any single span around that one date.
  */
 export function sweepTypeInEraBand(
   typeName,
@@ -95,9 +108,15 @@ export function sweepTypeInEraBand(
   mode = 'cumulative',
   spanBce = DEFAULT_SPAN_BCE,
 ) {
-  const window = typeEraWindow(typeName);
-  if (!window) return true;
-  return withinBand(window.startBce, bceValue, mode, spanBce);
+  const eraWindow = typeEraWindow(typeName);
+  if (!eraWindow) return true;
+  return withinBand(
+    eraWindow.startBce,
+    eraWindow.endBce,
+    bceValue,
+    mode,
+    spanBce,
+  );
 }
 
 /**
@@ -105,7 +124,10 @@ export function sweepTypeInEraBand(
  * OWN `period_start_bce` - heroes always filter by their real date, never
  * a type heuristic (see the honesty rule above; note this function takes
  * no type argument at all). A null (unknown) date can only be honestly
- * placed in "all eras" mode.
+ * placed in "all eras" mode. Window mode stays a plain distance-from-date
+ * test (the hero has one date, not a window), which falls out of
+ * `withinBand` by passing the same value as both its `startBce` and
+ * `endBce` arguments.
  */
 export function heroInEraBand(
   periodStartBce,
@@ -114,13 +136,17 @@ export function heroInEraBand(
   spanBce = DEFAULT_SPAN_BCE,
 ) {
   if (periodStartBce == null) return mode === 'all';
-  return withinBand(periodStartBce, bceValue, mode, spanBce);
+  return withinBand(periodStartBce, periodStartBce, bceValue, mode, spanBce);
 }
 
 /** Sentence-case BCE/CE label for a `period_start_bce` value, for the
- * deep-time dial's ticks, needle and readout. */
+ * deep-time dial's ticks, needle and readout. There is no year zero on this
+ * timeline, so a value that rounds to 0 (the boundary the sign convention
+ * itself has no side for) reads as "1 BCE" rather than the nonsensical
+ * "0 CE". */
 export function formatBceYear(bceValue) {
   const n = Math.round(Number(bceValue));
+  if (n === 0) return '1 BCE';
   return n > 0
     ? `${n.toLocaleString('en-GB')} BCE`
     : `${Math.abs(n).toLocaleString('en-GB')} CE`;

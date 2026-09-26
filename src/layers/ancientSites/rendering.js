@@ -42,11 +42,11 @@ function formatClusterCount(count) {
  *
  * The curated hero tier renders exactly as before: one static gold point per
  * site, unclustered. The worldwide sweep (~81k sites) never becomes ~81k
- * primitives — it renders through camera-height-banded grid clustering
+ * primitives: it renders through camera-height-banded grid clustering
  * (`clusters.js`, portable): coarse grid badges (a larger gold point plus a
  * `LabelCollection` count) at world/continent/country zoom, individual
- * "singles" gold points for cells holding exactly one site, and — below the
- * closest clustering band — unclustered singles bounded to the current view
+ * "singles" gold points for cells holding exactly one site, and, below the
+ * closest clustering band, unclustered singles bounded to the current view
  * rectangle instead of the whole sweep.
  *
  * A local-only Modern Antiquarian register (`tmaLocal.js`) can add a third,
@@ -106,6 +106,13 @@ export function createAncientRenderer(viewer, { render } = {}) {
   let moveEndRemover = null;
   let moveEndSettleTimer = null;
   let lastRecomputeAt = 0;
+  // The inputs the last successful recomputeSweep() actually clustered
+  // against (see recomputeSweep's own nothing-changed guard below).
+  // `undefined` sentinels so the very first call always proceeds.
+  let lastRecomputeSweep;
+  let lastRecomputeCellDeg;
+  let lastRecomputeBoundsKey;
+  let lastRecomputeEraKey;
 
   const requestFrame = (reason) =>
     render ? render.governorRequestRender(reason) : scene.requestRender();
@@ -208,6 +215,20 @@ export function createAncientRenderer(viewer, { render } = {}) {
     requestFrame('ancient-sweep');
   }
 
+  /** Stable string key for a bounds rectangle (or its absence), for the
+   * nothing-changed guard below; not for geometry. */
+  function boundsKeyOf(bounds) {
+    return bounds
+      ? `${bounds.west.toFixed(3)},${bounds.south.toFixed(3)},${bounds.east.toFixed(3)},${bounds.north.toFixed(3)}`
+      : null;
+  }
+
+  /** Stable string key for an era band (or its absence), for the
+   * nothing-changed guard below. */
+  function eraKeyOf(band) {
+    return band ? `${band.mode}:${band.bceValue}` : null;
+  }
+
   function recomputeSweep() {
     if (!sweep) return;
     const height = cameraHeight();
@@ -216,22 +237,44 @@ export function createAncientRenderer(viewer, { render } = {}) {
     if (cellDeg <= 0) {
       bounds = paddedViewBoundsDeg();
       // The closest band renders unclustered singles bounded to the current
-      // view rectangle — but a camera pitched above the horizon (a routine
+      // view rectangle, but a camera pitched above the horizon (a routine
       // state at close range) has no view rectangle at all. Rendering every
       // ~81k sweep site in that case would defeat the whole point of banding
       // by camera height. Step up to the finest whole-world-clustering band
       // instead: every band coarser than "closest" clusters the entire
-      // sweep with no bounds needed (already proven bounded and cheap — see
+      // sweep with no bounds needed (already proven bounded and cheap, see
       // the task report's perf numbers), so it is a safe, always-available
       // fallback. This mirrors the FIRMS renderer's own sky/horizon handling
       // (`aggregateFires`/`renderDetections` in
       // `src/layers/firms/rendering.js`), which never renders its unbounded
-      // dataset when `bounds` is null either — it falls back to a still
+      // dataset when `bounds` is null either: it falls back to a still
       // -bounded, globally-ranked selection instead. The sweep has no
       // ranking signal to take a "top N" from, so a coarser grid is the
       // cleaner bounded fallback here, not a fabricated ranking.
       if (!bounds) cellDeg = SKYWARD_FALLBACK_CELL_DEG;
     }
+    const boundsKey = boundsKeyOf(bounds);
+    const eraKey = eraKeyOf(eraBand);
+    // No per-frame work while the camera is parked: a postRender tick (or a
+    // throttled era-filter request, see requestSweepRecompute below) whose
+    // camera-height band, view rectangle and era band are all identical to
+    // the last successful recompute has nothing new to cluster, so it skips
+    // straight past the ~81k-row scan and the primitive rebuild. Without
+    // this, another layer holding continuous render (sky hero craft) with
+    // the camera parked reruns an unchanged recompute every throttle window
+    // forever.
+    if (
+      sweep === lastRecomputeSweep &&
+      cellDeg === lastRecomputeCellDeg &&
+      boundsKey === lastRecomputeBoundsKey &&
+      eraKey === lastRecomputeEraKey
+    ) {
+      return;
+    }
+    lastRecomputeSweep = sweep;
+    lastRecomputeCellDeg = cellDeg;
+    lastRecomputeBoundsKey = boundsKey;
+    lastRecomputeEraKey = eraKey;
     // The deep-time dial's era band, applied upstream of clustering (see
     // eras.js): only sites whose TYPE's typological window matches the
     // dial's current position ever reach a bucket or a single, so a
@@ -253,6 +296,25 @@ export function createAncientRenderer(viewer, { render } = {}) {
     renderSweepPrimitives();
   }
 
+  /**
+   * Recompute now if the throttle window has elapsed since the last one,
+   * otherwise defer to the moveEnd-style settle timer (`scheduleRecompute`)
+   * so a flood of requests inside the same window - dragging the era dial,
+   * same as panning the camera - collapses into at most one settle
+   * recompute rather than one per pointer event. A no-op while the register
+   * is not visible.
+   */
+  function requestSweepRecompute() {
+    if (!visible) return;
+    const now = performance.now();
+    if (now - lastRecomputeAt < SWEEP_RECOMPUTE_THROTTLE_MS) {
+      scheduleRecompute();
+      return;
+    }
+    lastRecomputeAt = now;
+    recomputeSweep();
+  }
+
   function setSweep(accessor) {
     sweep = accessor;
     if (visible) recomputeSweep();
@@ -260,13 +322,15 @@ export function createAncientRenderer(viewer, { render } = {}) {
 
   /**
    * Set or clear the deep-time dial's era band: `{ bceValue, mode }` or
-   * null to disengage (every sweep site shows again). Triggers one
-   * recompute so the sweep re-clusters against the new band immediately;
-   * a no-op while the register is not visible, mirroring `setSweep`.
+   * null to disengage (every sweep site shows again). Routes its recompute
+   * through the same throttle/settle machinery as camera motion (see
+   * `requestSweepRecompute`), so pointer-dragging the dial does not run the
+   * ~81k-row scan at pointermove cadence; a no-op while the register is not
+   * visible, mirroring `setSweep`.
    */
   function setEraFilter(band) {
     eraBand = band;
-    if (visible) recomputeSweep();
+    requestSweepRecompute();
   }
 
   /**
@@ -315,7 +379,7 @@ export function createAncientRenderer(viewer, { render } = {}) {
   function installBandWatcher() {
     if (bandRemover || !viewer) return;
     // Seed the throttle clock now, before the caller's own explicit
-    // recomputeSweep() runs (see apply()) — otherwise the first postRender
+    // recomputeSweep() runs (see apply()): otherwise the first postRender
     // that follows sees a stale (zero) lastRecomputeAt, treats the throttle
     // window as already elapsed, and fires an immediate redundant second
     // recompute right after enable.

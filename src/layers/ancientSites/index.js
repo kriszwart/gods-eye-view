@@ -26,7 +26,7 @@ import {
   heroInEraBand,
 } from './eras.js';
 export * from './model.js';
-export { normalizeAncientSites, normalizeAncientSitesV2 } from './records.js';
+export { normalizeAncientSitesV2 } from './records.js';
 export { createAncientSource } from './source.js';
 
 /**
@@ -88,8 +88,8 @@ const DEEP_TIME_HONESTY_LINE =
  * addressable by id, exactly as before this layer carried the sweep. The
  * sweep never clusters by identity: `rendering.js` bands it by camera height
  * into grid clusters and singles, so ~81k sites do not become ~81k
- * primitives at once. A sweep site's dossier is compact — name, type,
- * country, a Wikidata link and a Wikipedia link when the sweep flagged one —
+ * primitives at once. A sweep site's dossier is compact (name, type,
+ * country, a Wikidata link and a Wikipedia link when the sweep flagged one)
  * because the sweep carries no photo, debate or era column (see the phase
  * 5b task 2 report on the omitted `bce` column).
  *
@@ -243,13 +243,17 @@ export function createAncientSitesLayer({
    * stay in lockstep with which heroes are actually rendered, so a
    * filtered-out hero's label never floats with no point beneath it.
    * Safe to call before any data has loaded (an empty `heroRows`) or
-   * before the renderer exists at all.
+   * before the renderer exists at all. "All eras" mode passes a null band,
+   * same as the dial being absent altogether: every site already shows in
+   * that mode (see eras.js's `withinBand`), so a non-null band there would
+   * only cost the sweep an 81k-row closure scan that always answers true.
    */
   function syncEraState() {
     if (!renderer) return;
-    const band = deepChrono
-      ? { bceValue: deepChrono.year, mode: deepChrono.mode }
-      : null;
+    const band =
+      deepChrono && deepChrono.mode !== 'all'
+        ? { bceValue: deepChrono.year, mode: deepChrono.mode }
+        : null;
     renderer.setEraFilter(band);
     const rows = band
       ? heroRows.filter((r) =>
@@ -455,6 +459,14 @@ export function createAncientSitesLayer({
 
     enable() {
       enabled = true;
+      // Establish the deep-time dial - and its initial era band, if one
+      // mounts - before the renderer becomes visible. The renderer is not
+      // visible yet, so this call's own setEraFilter (inside syncEraState)
+      // only records the era band and recomputes nothing (see
+      // rendering.js's setEraFilter); the visibility-driven recompute below
+      // then runs exactly once, already carrying the correct band, rather
+      // than once unfiltered and then again immediately re-filtered.
+      syncDeepTime();
       renderer?.apply({ visible: true });
       overlayHost?.setVisible?.(ANCIENT_LAYER_ID, true);
       if (!clickHandler) {
@@ -465,11 +477,12 @@ export function createAncientSitesLayer({
         );
       }
       picking?.registerPickOwner?.(ANCIENT_LAYER_ID, isOwnedPickId);
-      // After renderer.apply({visible: true}) above, so the dial's own
-      // first setEraFilter (inside syncEraState) already sees a visible
-      // renderer and recomputes immediately rather than waiting for a
-      // later, unrelated trigger.
-      syncDeepTime();
+      // Refresh heroes, overlay labels and the dial's readout against the
+      // renderer's now-current diagnostics. setEraFilter's own recompute
+      // here is a no-op (the era band already matches what syncDeepTime()
+      // set above, and rendering.js's recomputeSweep skips a request whose
+      // inputs are unchanged since the last one it actually ran).
+      syncEraState();
     },
 
     disable() {
@@ -480,11 +493,14 @@ export function createAncientSitesLayer({
       if (dossier) dossier.hidden = true;
       clickHandler?.destroy();
       clickHandler = null;
-      // Tears the deep-time dial down (enabled is now false) before the
-      // renderer itself goes invisible below, so a later re-enable never
-      // finds a stale dial left over from a previous session.
-      syncDeepTime();
+      // Hide the renderer first, so the deep-time dial's teardown below
+      // (which clears the era band via setEraFilter) finds the register
+      // already invisible and skips its own recompute entirely, rather than
+      // running one last, wholly wasted scan just before everything is
+      // hidden anyway. `enabled` is already false above, so the dial still
+      // tears down correctly regardless of this ordering.
       renderer?.apply({ visible: false });
+      syncDeepTime();
       overlayHost?.setVisible?.(ANCIENT_LAYER_ID, false);
     },
 

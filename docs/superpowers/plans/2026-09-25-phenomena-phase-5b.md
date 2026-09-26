@@ -50,6 +50,7 @@
 **Files:**
 - Modify: `src/layers/ancientSites/{records,source,model,rendering,index}.js` (v2 decode: heroes keep dossier richness; sweep points render as smaller gold points with QID dossiers: name, type, country, era, wikidata link, wikipedia when flagged; labels stay hero-only; search corpus gains sweep names via the shared channel), delete public/ancient-sites/sites.v1.json, qa-ancient-sites updated (count check becomes dynamic vs the v2 count; heroes still photographed; a sweep site dossier opens)
 - Perf check: qa-perf green; measure frame cost with the sweep on and record numbers; if degraded, cap rendered sweep points by camera distance (LOD note, not full GPU work).
+- Cluster badges (user-approved scope): when many sweep points share a screen region at distance, collapse them into a single gold badge with a count (grid-cluster in screen or geographic space; declutter threshold by camera height); clicking a badge zooms toward the cluster; heroes never collapse. Portable clustering maths with tests where practical; qa: at world zoom the rendered primitive count is far below the site count and a badge shows a plausible number; zoomed to a cluster the individual points return.
 
 - [ ] Commit `feat(ancient): the atlas carries the worldwide sweep`
 

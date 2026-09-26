@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
 import { mkdtemp, readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -17,6 +18,8 @@ import {
   USER_AGENT,
 } from '../src/adapters/wikidata-sweep.mjs';
 import { readJsonl } from '../src/lib/records.mjs';
+
+const sweepConfig = JSON.parse(readFileSync(new URL('../config/ancient-sweep.json', import.meta.url), 'utf8'));
 
 // -- pure functions --------------------------------------------------------
 
@@ -146,6 +149,36 @@ test('buildPageQuery paginates one coordinate per item and carries the optional 
   assert.match(q, /OPTIONAL \{ \?item wdt:P571/);
   assert.match(q, /OPTIONAL \{ \?item wdt:P18/);
   assert.match(q, /isPartOf <https:\/\/en\.wikipedia\.org\/>/);
+});
+
+// -- the real config's class ordering ---------------------------------------
+
+test('config/ancient-sweep.json orders every specific class before its generic catch-all', () => {
+  // Confirmed live with an ASK query (see task-1-report.md): "stone circle"
+  // (Q1935728) is a transitive wdt:P31/wdt:P279* subclass of "megalith"
+  // (Q164240), so every stone circle also matches the generic megalith
+  // class query. dedupeByQid keeps whichever class comes FIRST in this
+  // list, so stone-circle MUST precede megalith, or every stone circle
+  // silently gets mistyped as "megalith" instead of "circle" -- exactly
+  // the bug found and fixed in this task. dolmen is not a P279* subclass
+  // of megalith at all, and menhir is, but both already map to type
+  // "megalith" so their position relative to the catch-all cannot change
+  // the outcome either way -- they are pinned here too, for the same
+  // "specific class ahead of its catch-all" principle, so a future re-sort
+  // cannot separate them from the pattern without this test failing.
+  const ids = sweepConfig.classes.map((c) => c.id);
+  const indexOfMegalith = ids.indexOf('megalith');
+  assert.notEqual(indexOfMegalith, -1, 'the generic megalith catch-all class must be configured');
+  assert.ok(ids.indexOf('stone-circle') < indexOfMegalith, 'stone-circle must precede megalith, or stone circles get mistyped as megalith');
+  assert.ok(ids.indexOf('dolmen') < indexOfMegalith, 'dolmen must precede megalith');
+  assert.ok(ids.indexOf('menhir') < indexOfMegalith, 'menhir must precede megalith');
+
+  // The type mapping itself must still disagree for stone-circle vs.
+  // megalith -- otherwise the ordering assertions above would be pinning
+  // an order that no longer matters.
+  const byId = Object.fromEntries(sweepConfig.classes.map((c) => [c.id, c.type]));
+  assert.equal(byId['stone-circle'], 'circle');
+  assert.equal(byId.megalith, 'megalith');
 });
 
 // -- paging, resume and politeness (fixture SPARQL endpoint) ---------------

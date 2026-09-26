@@ -1,5 +1,61 @@
 # Changelog
 
+- Phenomena phase 5b: the ancient sites register grows from a curated
+  sample to a worldwide sweep, the Modern Antiquarian position is
+  restated rather than changed, and the chronometer gains a second,
+  deep-time scale for a register a 1940 to 2026 dial was never built to
+  represent.
+
+  `sites.v2.json` now carries 81,313 sites: the 20 curated heroes keep
+  their photographs, debated lines and attributions exactly as phase 2b
+  and 3b left them, joined by 81,293 compact sweep rows drawn from
+  Wikidata under a CC0 licence, each label checked before being kept.
+  The file is 4,630,567 bytes raw, about 1.04 MB gzipped, held to that
+  size by keeping sweep rows to the fields a dossier actually needs
+  rather than the hero tier's fuller shape.
+
+  Rendering 81,293 unclustered points would flood world zoom with
+  primitives, so the sweep clusters into a camera-height-banded grid
+  with count badges instead, leaving 182 primitives on screen at world
+  zoom (clusterSweep itself costs about 11 to 12 ms) and re-clustering
+  as the camera moves in. Heroes never cluster, so the curated tier
+  stays individually clickable at every zoom. A camera pitched skyward
+  at close range, which would otherwise see the sweep's full extent at
+  once, is caught by a fallback that keeps the worst case bounded at
+  2,295 primitives.
+
+  The Modern Antiquarian licence position is restated, not changed: its
+  17,392 sites still never ship publicly, for want of a redistribution
+  licence the project does not hold. They exist only behind
+  `PHENOMENA_LOCAL_TMA=1`, an env flag dead-code eliminated from every
+  production bundle, and the dev server's own `fs.deny` list blocks
+  every raw path to the underlying export, so the data cannot leak even
+  from a dev session. Per-site reference links stay allowed, but only on
+  the owner's own machine. Frame cost was measured rather than assumed:
+  batch-building the layer's roughly 17,388 loadable points costs about
+  8.7 ms once, on load, with no measurable per-frame cost afterwards.
+
+  The chronometer's dial now carries two scales on one widget: 1940 to
+  2026 for sky events, and a second, log-compressed scale running
+  10,000 BCE to 1500 CE for ancient sites, engaging automatically
+  whenever the ancient sites register is on and the sky register is
+  off. Hero cases filter against their own real `period_start_bce`; the
+  great majority of sweep sites carry no excavation date at all, so
+  those are banded by a typological table of what their type usually
+  dates to, with a visible line in the UI stating the honesty of that
+  choice: "Undated sites are placed by their type's typical period, not
+  their own dating." Phase 6's GPU point-cloud path stays reserved
+  rather than reached for here; this phase measures the CPU path's cost
+  before deciding whether replacing it is worth doing.
+
+  Gates: `npm run format:check` (1,124 files clean), `npm test` (5,133
+  tests, 5,132 passing, 1 skipped, 0 failed), `npm run check:boundaries`,
+  `npm run build`, `npm run test:track` against the dev server (109 of
+  109), `node scripts/qa-ancient-sites.mjs` (0 failures), `node
+  scripts/qa-anomalies.mjs` (0 failures), `node scripts/qa-spotter.mjs`
+  (0 failures) and `node scripts/qa-perf.mjs` (24 of 24 passed). Pipeline
+  suite: `cd anomaly-atlas-kit/pipeline && npm test` (97 of 97).
+
 - Phenomena phase 3c: a street view vantage on every dossier and a hotspot
   heat layer, both on the free tier throughout.
 

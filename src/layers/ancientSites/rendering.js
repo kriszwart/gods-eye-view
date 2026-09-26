@@ -5,6 +5,7 @@ import {
   cellDegForHeight,
   nextBandTargetHeight,
   wrapLon,
+  SKYWARD_FALLBACK_CELL_DEG,
 } from './clusters.js';
 
 /** Throttle for the camera-height-band sweep recompute (postRender fires at
@@ -177,8 +178,27 @@ export function createAncientRenderer(viewer, { render } = {}) {
   function recomputeSweep() {
     if (!sweep) return;
     const height = cameraHeight();
-    const cellDeg = cellDegForHeight(height);
-    const bounds = cellDeg > 0 ? null : paddedViewBoundsDeg();
+    let cellDeg = cellDegForHeight(height);
+    let bounds = null;
+    if (cellDeg <= 0) {
+      bounds = paddedViewBoundsDeg();
+      // The closest band renders unclustered singles bounded to the current
+      // view rectangle — but a camera pitched above the horizon (a routine
+      // state at close range) has no view rectangle at all. Rendering every
+      // ~81k sweep site in that case would defeat the whole point of banding
+      // by camera height. Step up to the finest whole-world-clustering band
+      // instead: every band coarser than "closest" clusters the entire
+      // sweep with no bounds needed (already proven bounded and cheap — see
+      // the task report's perf numbers), so it is a safe, always-available
+      // fallback. This mirrors the FIRMS renderer's own sky/horizon handling
+      // (`aggregateFires`/`renderDetections` in
+      // `src/layers/firms/rendering.js`), which never renders its unbounded
+      // dataset when `bounds` is null either — it falls back to a still
+      // -bounded, globally-ranked selection instead. The sweep has no
+      // ranking signal to take a "top N" from, so a coarser grid is the
+      // cleaner bounded fallback here, not a fabricated ranking.
+      if (!bounds) cellDeg = SKYWARD_FALLBACK_CELL_DEG;
+    }
     const { clusters, singles } = clusterSweep(sweep, { cellDeg, bounds });
     currentClusters = clusters;
     currentSingles = singles;
@@ -194,12 +214,22 @@ export function createAncientRenderer(viewer, { render } = {}) {
   function scheduleRecompute() {
     clearTimeout(moveEndSettleTimer);
     moveEndSettleTimer = setTimeout(() => {
+      // Same throttle variable the postRender watcher below reads: without
+      // this, the very next postRender tick after a settle recompute sees a
+      // stale lastRecomputeAt and immediately fires a redundant second one.
+      lastRecomputeAt = performance.now();
       recomputeSweep();
     }, SWEEP_RECOMPUTE_THROTTLE_MS + 40);
   }
 
   function installBandWatcher() {
     if (bandRemover || !viewer) return;
+    // Seed the throttle clock now, before the caller's own explicit
+    // recomputeSweep() runs (see apply()) — otherwise the first postRender
+    // that follows sees a stale (zero) lastRecomputeAt, treats the throttle
+    // window as already elapsed, and fires an immediate redundant second
+    // recompute right after enable.
+    lastRecomputeAt = performance.now();
     bandRemover = scene.postRender.addEventListener(() => {
       if (!visible) return;
       const now = performance.now();

@@ -21,6 +21,25 @@ export const CAMERA_BANDS = Object.freeze([
   Object.freeze({ minHeight: 0, cellDeg: 0, targetHeight: 150_000 }),
 ]);
 
+/**
+ * Whole-world clustering grid (degrees) a renderer can fall back to when the
+ * closest band (`cellDeg === 0`, unclustered singles bounded to the current
+ * view rectangle) has no view rectangle to bound against — the camera is
+ * pitched above the horizon, a routine state at close range. Every band
+ * coarser than the closest one clusters the *entire* sweep with no viewport
+ * bound at all (see `clusterSweep`'s whole-world path), so it is already a
+ * bounded, safe substitute: this is simply the finest of those bands, the
+ * one immediately coarser than "closest". Mirrors the FIRMS renderer's own
+ * sky/horizon handling (`aggregateFires`/`renderDetections` in
+ * `src/layers/firms/rendering.js`), which never renders its full dataset
+ * when `bounds` is null — it falls back to a still-bounded, globally-ranked
+ * selection instead. The sweep has no ranking signal (no FRP-like score) to
+ * take a "top N" from, so stepping up to the next coarser band's grid is the
+ * bounded fallback that reads cleanest here, rather than inventing a ranking.
+ */
+export const SKYWARD_FALLBACK_CELL_DEG =
+  CAMERA_BANDS[CAMERA_BANDS.length - 2].cellDeg;
+
 function bandIndexForHeight(height) {
   const h = Number.isFinite(height) ? height : 0;
   const index = CAMERA_BANDS.findIndex((band) => h >= band.minHeight);

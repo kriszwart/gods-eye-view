@@ -283,6 +283,7 @@ try {
     closeZoom?.cellDeg === 0 && closeZoom?.singleCount > 0,
     JSON.stringify(closeZoom),
   );
+
   let sweepDossier = { open: false };
   if (sweepClick) {
     await page.mouse.click(sweepClick.x, sweepClick.y);
@@ -337,6 +338,42 @@ try {
       String(sweepDossier.wikipediaHref),
     );
   }
+
+  // Regression: at close range with the camera pitched above the horizon,
+  // computeViewRectangle() returns nothing to bound unclustered singles
+  // against. Without a fallback this used to render all ~81k sweep sites as
+  // individual primitives in one frame, defeating the whole banding scheme.
+  // Run after the sweep-dossier click above (not interleaved with it) since
+  // this repositions the camera and would otherwise invalidate that click's
+  // precomputed canvas coordinates.
+  await page.evaluate(() => {
+    const viewer = window.__godsEyeView.viewer;
+    const ellipsoid = viewer.scene.globe.ellipsoid;
+    viewer.camera.cancelFlight();
+    viewer.camera.setView({
+      destination: ellipsoid.cartographicToCartesian({
+        longitude: 0,
+        latitude: (15 * Math.PI) / 180,
+        height: 100_000,
+      }),
+      orientation: { heading: 0, pitch: (10 * Math.PI) / 180, roll: 0 },
+    });
+  });
+  await new Promise((r) => setTimeout(r, 700));
+  const skywardZoom = await page.evaluate(() =>
+    window.__godsEyeView.dataManager.layers
+      .get('ancient-sites')
+      ?.module?.getRenderDiagnostics?.(),
+  );
+  const skywardPrimitives =
+    (skywardZoom?.heroCount || 0) +
+    (skywardZoom?.clusterCount || 0) +
+    (skywardZoom?.singleCount || 0);
+  check(
+    'camera pitched skyward at close range never renders the unbounded sweep',
+    skywardPrimitives < 5000,
+    JSON.stringify({ ...skywardZoom, skywardPrimitives, expectedCount }),
+  );
 
   const dossier = await page.evaluate(async () => {
     const m = window.__godsEyeView.dataManager;

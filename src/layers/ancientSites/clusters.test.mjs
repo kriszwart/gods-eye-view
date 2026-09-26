@@ -5,6 +5,7 @@ import {
   cellDegForHeight,
   nextBandTargetHeight,
   CAMERA_BANDS,
+  SKYWARD_FALLBACK_CELL_DEG,
 } from './clusters.js';
 
 /** Build a sweep accessor over plain [lat, lon] pairs, for test fixtures. */
@@ -138,4 +139,30 @@ test('nextBandTargetHeight just zooms in further when already at the closest ban
   const target = nextBandTargetHeight(100_000);
   assert.ok(target < 100_000);
   assert.ok(target > 0);
+});
+
+test('SKYWARD_FALLBACK_CELL_DEG is the near band grid, coarser than the closest (unclustered) band', () => {
+  assert.equal(
+    SKYWARD_FALLBACK_CELL_DEG,
+    CAMERA_BANDS[CAMERA_BANDS.length - 2].cellDeg,
+  );
+  assert.ok(SKYWARD_FALLBACK_CELL_DEG > 0);
+});
+
+test('clusterSweep at the skyward fallback cellDeg, unbounded, still collapses a dense sweep into far fewer primitives', () => {
+  // Simulate a dense sweep (many sites) with no bounds at all — the exact
+  // shape a sky/horizon fallback must handle safely.
+  const points = [];
+  for (let i = 0; i < 500; i += 1)
+    points.push([10 + (i % 5) * 0.01, 20 + Math.floor(i / 5) * 0.01]);
+  const sweep = {
+    length: points.length,
+    lat: (i) => points[i][0],
+    lon: (i) => points[i][1],
+  };
+  const { clusters, singles } = clusterSweep(sweep, {
+    cellDeg: SKYWARD_FALLBACK_CELL_DEG,
+    bounds: null,
+  });
+  assert.ok(clusters.length + singles.length < points.length);
 });

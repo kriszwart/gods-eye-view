@@ -1,0 +1,15 @@
+{
+  "note": "Full worldwide sweep of ancient-site classes from Wikidata (query.wikidata.org/sparql). Each class is items with wdt:P31/wdt:P279* the QID (instance or subclass, transitively) that carry a P625 coordinate. Wikidata's own data is CC0 (see https://www.wikidata.org/wiki/Wikidata:Licensing); per-image Commons licences are resolved separately, as for the curated sample (wikidata-enrich.mjs). Classes are listed in dedupe precedence order: an item matching more than one class keeps the earlier class's type. Confirmed by an ASK query: stone circle (Q1935728) is a transitive subclass of megalith (Q164240), so the specific classes that map to a DIFFERENT type than the generic megalith catch-all (stone-circle -> circle) must come before it, or every stone circle would be swallowed into type megalith. dolmen is not a P279* subclass of megalith at all; menhir is, but menhir also maps to megalith, so its position relative to the catch-all does not matter. type maps onto the existing glyph taxonomy in public/ancient-sites (megalith renders as the trilith glyph; circle, mound, settlement and geoglyph glyphs match their type name). QIDs were verified by label against the Wikidata search API on 26 September 2026 -- see task-1-report.md for the ones the initial brief had wrong.",
+  "endpoint": "https://query.wikidata.org/sparql",
+  "pageSize": 2000,
+  "delayMs": 2000,
+  "classes": [
+    { "id": "dolmen", "qid": "Q101659", "label": "dolmen", "type": "megalith" },
+    { "id": "menhir", "qid": "Q193475", "label": "menhir", "type": "megalith" },
+    { "id": "stone-circle", "qid": "Q1935728", "label": "stone circle", "type": "circle" },
+    { "id": "megalith", "qid": "Q164240", "label": "megalith", "type": "megalith" },
+    { "id": "tumulus", "qid": "Q34023", "label": "tumulus", "type": "mound" },
+    { "id": "hillfort", "qid": "Q744099", "label": "hillfort", "type": "settlement" },
+    { "id": "geoglyph", "qid": "Q45791", "label": "geoglyph", "type": "geoglyph" }
+  ]
+}

@@ -21,6 +21,7 @@
     "nuforc": "node src/adapters/nuforc-licensed.mjs",
     "ancient:tma": "node src/adapters/tma-kml.mjs",
     "ancient:enrich": "node src/adapters/wikidata-enrich.mjs",
+    "ancient:sweep": "node src/adapters/wikidata-sweep.mjs",
     "batch": "node src/extract/batch.mjs"
   }
 }

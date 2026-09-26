@@ -247,7 +247,7 @@ export function createAncientRenderer(viewer, { render } = {}) {
    * assumed (phase 5b task 4 fix report): 17,388 points cost ~8.7ms to
    * batch-build once on load, and add no measurable per-frame render cost
    * at world zoom (scene.render() sampled over 60 calls: ~0.015ms mean with
-   * the register on vs ~0.012ms off, both effectively noise) — comfortably
+   * the register on vs ~0.012ms off, both effectively noise), comfortably
    * inside a single frame budget either way, so folding this small a
    * register through the sweep's clustering path would add complexity
    * without a performance reason. A flag-off build never reaches past the

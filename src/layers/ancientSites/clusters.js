@@ -98,11 +98,20 @@ function inBounds(lat, lon, bounds) {
  * this with a tight `bounds` — the current view rectangle — to keep the
  * result small at close camera range).
  *
+ * `filter`, when given, is called with each candidate index and skips any
+ * index it returns false for before that site ever reaches a bucket or a
+ * single - the deep-time dial's era band (see `eras.js`'s
+ * `sweepTypeInEraBand`) applies here, upstream of clustering, so a badge's
+ * count only ever reflects sites the current era band actually includes.
+ *
  * @param {{length:number, lat:(i:number)=>number, lon:(i:number)=>number}} sweep
- * @param {{cellDeg?: number, bounds?: {west:number,south:number,east:number,north:number}|null}} [options]
+ * @param {{cellDeg?: number, bounds?: {west:number,south:number,east:number,north:number}|null, filter?: ((index:number)=>boolean)|null}} [options]
  * @returns {{clusters: Array<{lat:number, lon:number, count:number, sampleIndex:number}>, singles: Array<{index:number}>}}
  */
-export function clusterSweep(sweep, { cellDeg = 5, bounds = null } = {}) {
+export function clusterSweep(
+  sweep,
+  { cellDeg = 5, bounds = null, filter = null } = {},
+) {
   const length = sweep?.length || 0;
   const clusters = [];
   const singles = [];
@@ -114,6 +123,7 @@ export function clusterSweep(sweep, { cellDeg = 5, bounds = null } = {}) {
       const lon = sweep.lon(i);
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
       if (!inBounds(lat, lon, bounds)) continue;
+      if (filter && !filter(i)) continue;
       singles.push({ index: i });
     }
     return { clusters, singles };
@@ -124,6 +134,7 @@ export function clusterSweep(sweep, { cellDeg = 5, bounds = null } = {}) {
     const lon = sweep.lon(i);
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
     if (!inBounds(lat, lon, bounds)) continue;
+    if (filter && !filter(i)) continue;
     const latIndex = Math.floor((lat + 90) / cell);
     const lonIndex = Math.floor((wrapLon(lon) + 180) / cell);
     const key = `${latIndex}:${lonIndex}`;

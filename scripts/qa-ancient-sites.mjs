@@ -185,6 +185,13 @@ try {
     const m = window.__godsEyeView.dataManager;
     await m.setEnabled('ancient-sites', false, { origin: 'user' });
     await m.setEnabled('ancient-sites', true, { origin: 'user' });
+    // The deep-time dial engages fresh on this re-enable (the sky register
+    // is still off at this point in the script) and defaults to "up to
+    // era" mode, which honestly excludes Yonaguni (no known date - see
+    // eras.js's heroInEraBand). Switch to "All eras" so this check
+    // measures toggle survival, not era filtering (its own checks follow
+    // below).
+    document.querySelector('[data-mode="all"]')?.click();
     const { getWorldOverlayDiagnostics } =
       await import('/src/overlays/worldOverlay.js');
     return {
@@ -207,6 +214,103 @@ try {
     'site overlay labels survive an off/on toggle, hero tier only',
     reenable.overlayEntries === 20,
     JSON.stringify(reenable),
+  );
+
+  // ── deep-time dial: engagement, honesty line, era-band filtering ──
+  //
+  // A fresh enable with the sky (anomalies) register still off (untouched
+  // so far in this script): the deep-time dial engages automatically, at
+  // its default "up to era" mode and its newest-end starting position
+  // (1500 CE).
+  await page.evaluate(async () => {
+    const m = window.__godsEyeView.dataManager;
+    await m.setEnabled('ancient-sites', false, { origin: 'user' });
+    await m.setEnabled('ancient-sites', true, { origin: 'user' });
+  });
+  const deepEngaged = await page.evaluate(() => {
+    const slider = document.querySelector('.uap-slider');
+    return slider
+      ? {
+          found: true,
+          ariaLabel: slider.getAttribute('aria-label'),
+          min: slider.getAttribute('aria-valuemin'),
+          max: slider.getAttribute('aria-valuemax'),
+        }
+      : { found: false };
+  });
+  check(
+    'deep-time mode engages when the ancient layer is on and the sky layer is off',
+    deepEngaged.found &&
+      deepEngaged.ariaLabel === 'Era' &&
+      deepEngaged.min === '-1500' &&
+      deepEngaged.max === '10000',
+    JSON.stringify(deepEngaged),
+  );
+  check(
+    "the deep-time dial states its honesty line ('undated sites are placed by their type's typical period') visibly in the UI",
+    await page.evaluate(() => {
+      const note = [...document.querySelectorAll('.uap-legend.ancient')].find(
+        (el) => el.textContent.includes("type's typical period"),
+      );
+      return !!note && !note.hidden;
+    }),
+  );
+
+  // A known world-zoom camera first: the default boot camera can start
+  // anywhere, including a close-up view whose padded bounds cover an area
+  // with few or no sweep sites at all, which would make a before/after
+  // delta meaningless regardless of era filtering. World zoom clusters the
+  // whole sweep with no bounds, so the count genuinely reflects the era
+  // band alone.
+  await page.evaluate(() => {
+    const viewer = window.__godsEyeView.viewer;
+    const ellipsoid = viewer.scene.globe.ellipsoid;
+    viewer.camera.cancelFlight?.();
+    viewer.camera.setView({
+      destination: ellipsoid.cartographicToCartesian({
+        longitude: 0,
+        latitude: (15 * Math.PI) / 180,
+        height: 20_000_000,
+      }),
+      orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 },
+    });
+  });
+  await new Promise((r) => setTimeout(r, 700));
+
+  const eraBand = await page.evaluate(async () => {
+    const m = window.__godsEyeView.dataManager;
+    const before = m.layers
+      .get('ancient-sites')
+      ?.module?.getRenderDiagnostics?.();
+    const slider = document.querySelector('.uap-slider');
+    slider.focus();
+    slider.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'End', bubbles: true }),
+    );
+    await new Promise((r) => setTimeout(r, 300));
+    const after = m.layers
+      .get('ancient-sites')
+      ?.module?.getRenderDiagnostics?.();
+    return {
+      sweepBefore: before?.sweepVisibleCount,
+      sweepAfter: after?.sweepVisibleCount,
+      heroesBefore: before?.heroCount,
+      heroesAfter: after?.heroCount,
+    };
+  });
+  check(
+    'moving the deep-time dial changes the visible sweep count',
+    Number.isFinite(eraBand.sweepBefore) &&
+      Number.isFinite(eraBand.sweepAfter) &&
+      eraBand.sweepBefore !== eraBand.sweepAfter,
+    JSON.stringify(eraBand),
+  );
+  check(
+    "heroes with an out-of-band period_start_bce disappear at the dial's far (oldest) end",
+    Number.isFinite(eraBand.heroesBefore) &&
+      Number.isFinite(eraBand.heroesAfter) &&
+      eraBand.heroesAfter < eraBand.heroesBefore,
+    JSON.stringify(eraBand),
   );
 
   // Year-dial decoupling: bring the anomalies chronometer up alongside the

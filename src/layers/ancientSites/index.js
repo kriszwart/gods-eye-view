@@ -8,6 +8,23 @@ import {
 import { createAncientRenderer } from './rendering.js';
 import { safeSourceUrl, safeImageUrl } from '../../sources/safeUrl.js';
 import { createTmaLocalSource, TMA_ID_PREFIX } from './tmaLocal.js';
+// The chronometer widget lives in the anomalies package (see CLAUDE.md's
+// "Where things are"); it is reused here, unmodified in its own default
+// behaviour, for the deep-time dial's second scale (see chronometer.js's
+// own `scale` option and eras.js below). Declared in the "ancient-sites"
+// package boundary (scripts/package-boundaries.json) since this package's
+// own build now reaches it.
+import { createChronometer } from '../anomalies/chronometer.js';
+import {
+  DEEP_TIME_MAX_BCE,
+  DEEP_TIME_MIN_BCE,
+  DEEP_TIME_TICKS,
+  deepTimeT,
+  bceFromT,
+  formatBceYear,
+  describeEraBand,
+  heroInEraBand,
+} from './eras.js';
 export * from './model.js';
 export { normalizeAncientSites, normalizeAncientSitesV2 } from './records.js';
 export { createAncientSource } from './source.js';
@@ -25,11 +42,44 @@ const escapeHtml = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
 /**
+ * The honesty line the deep-time dial's era band requires wherever it
+ * surfaces (see eras.js's own top-of-file note): undated sweep sites are
+ * placed by their type's typical worldwide period, never by anything
+ * about the individual site, and this line says so plainly next to the
+ * dial itself. British English, sentence case.
+ */
+const DEEP_TIME_HONESTY_LINE =
+  "Undated sites are placed by their type's typical period, not their own dating.";
+
+/**
  * Curated ancient and disputed-archaeology sites, shown as a static gold
  * register with a dossier per site, plus a worldwide Wikidata sweep of tens
  * of thousands more. Implements the standard GEV layer contract, without the
- * anomalies layer's chronometer, atmosphere, tour or craft: this is a calm,
- * unmoving companion register with no year-dial coupling.
+ * anomalies layer's atmosphere, tour or craft: this is a calm, unmoving
+ * companion register.
+ *
+ * Deep-time dial: when this layer is on and the sky (anomalies) layer is
+ * off, this layer builds its own second instance of the anomalies
+ * package's chronometer widget, configured with a 10,000 BCE to 1500 CE
+ * log-compressed scale (see chronometer.js's `scale` option and eras.js).
+ * The sky scale always wins when both layers are on - the ancient register
+ * ignores the year dial entirely then, exactly as before the deep-time
+ * dial existed. `attachShellServices` below receives the live sky-active
+ * signal from the shell; the dial is created and destroyed on demand
+ * (never left mounted-but-hidden) so the two chronometer instances - this
+ * one and the sky layer's own - are never both in the DOM at once, which
+ * would make every `.uap-chrono`/`.uap-slider` query in the sky layer's own
+ * gates ambiguous.
+ *
+ * Heroes filter by their own real `period_start_bce`; the worldwide sweep
+ * carries no per-site dating, so it is banded by its TYPE's typological
+ * era window instead (`eras.js`), never presented as the individual site's
+ * own dating - the honesty line next to the dial says so.
+ *
+ * Bounded-render guarantees (camera-height clustering bands, the skyward
+ * fallback) are unaffected: the era band is an extra filter applied to the
+ * clustering inputs (`clusters.js`'s `filter` option), not a change to how
+ * `cellDeg`/`bounds` are chosen.
  *
  * The hero tier (curated, photographed, debated) is unclustered and always
  * addressable by id, exactly as before this layer carried the sweep. The
@@ -70,6 +120,18 @@ export function createAncientSitesLayer({
   let lastUpdate = null;
   let lastError = null;
   let clickHandler = null;
+  // Deep-time dial: `host` is stashed at init() for reuse (the dial mounts
+  // and unmounts on demand, long after init() has returned). `isSkyActive`
+  // is the shell's live signal (attachShellServices below); it defaults to
+  // "sky is off" so the dial can still work before any shell ever attaches
+  // it (a plain unit or integration harness, or the moment before
+  // layerBindings.js connects at boot).
+  let host = null;
+  let isSkyActive = () => false;
+  let deepChrono = null;
+  let deepTimeNote = null;
+  let deepRelayoutRemover = null;
+  let lastDeepLayoutKey = '';
 
   function openHeroDossier(id) {
     const row = heroRows.find((r) => r.id === id);
@@ -170,6 +232,115 @@ export function createAncientSitesLayer({
     dossier.querySelector('.uap-close').focus();
   }
 
+  /**
+   * Apply the deep-time dial's current era band (or its absence) to the
+   * renderer and the hero tier, and refresh the dial's readout. Heroes
+   * filter by their own `period_start_bce`; the sweep is banded by type
+   * inside `rendering.js`'s `setEraFilter` (see eras.js). Overlay labels
+   * stay in lockstep with which heroes are actually rendered, so a
+   * filtered-out hero's label never floats with no point beneath it.
+   * Safe to call before any data has loaded (an empty `heroRows`) or
+   * before the renderer exists at all.
+   */
+  function syncEraState() {
+    if (!renderer) return;
+    const band = deepChrono
+      ? { bceValue: deepChrono.year, mode: deepChrono.mode }
+      : null;
+    renderer.setEraFilter(band);
+    const rows = band
+      ? heroRows.filter((r) =>
+          heroInEraBand(r.period_start_bce, band.bceValue, band.mode),
+        )
+      : heroRows;
+    renderer.setHeroes(rows);
+    overlayHost?.setEntries?.(
+      ANCIENT_LAYER_ID,
+      rows.map((r) =>
+        createAncientOverlayEntry({
+          id: r.id,
+          position: Cesium.Cartesian3.fromDegrees(r.lon, r.lat, 200),
+          name: r.name,
+        }),
+      ),
+      { moving: false },
+    );
+    if (deepChrono) {
+      const diagnostics = renderer.getDiagnostics();
+      const count = rows.length + (diagnostics?.sweepVisibleCount ?? 0);
+      deepChrono.setReadout(
+        describeEraBand(deepChrono.year, count, deepChrono.mode),
+      );
+    }
+  }
+
+  /** Keep the deep-time dial's band layout current as the canvas resizes,
+   * mirroring the sky chronometer's own postRender-driven relayout - a
+   * passive listener (never itself requests a render), memoised so an
+   * unchanged canvas size is a no-op. Always band layout (never the ring
+   * that wraps the globe): a secondary, less central time control, kept
+   * simple by design. */
+  function relayoutDeepChrono() {
+    if (!deepChrono || !viewer) return;
+    const canvas = viewer.scene.canvas;
+    const key = `${canvas.clientWidth}x${canvas.clientHeight}`;
+    if (key === lastDeepLayoutKey) return;
+    lastDeepLayoutKey = key;
+    deepChrono.layout(null, {
+      width: canvas.clientWidth,
+      height: canvas.clientHeight,
+    });
+  }
+
+  /**
+   * Build or tear down the deep-time dial: it shows only while this layer
+   * is enabled and the sky (anomalies) layer is not - the sky scale always
+   * wins when both are on (ruling: preserves today's decoupled behaviour).
+   * The dial is a second, independent instance of the anomalies package's
+   * chronometer widget, created and destroyed on demand rather than kept
+   * mounted-but-hidden, so the sky layer's own `.uap-chrono`/`.uap-slider`
+   * queries (its own qa gate) are never made ambiguous by a second such
+   * element sitting in the DOM at the same time.
+   */
+  function syncDeepTime() {
+    const shouldShow = enabled && !isSkyActive();
+    if (shouldShow && !deepChrono) {
+      deepChrono = createChronometer({
+        container: host,
+        from: DEEP_TIME_MIN_BCE,
+        to: DEEP_TIME_MAX_BCE,
+        labels: { year: 'Era', modes: 'Era filter' },
+        scale: {
+          initial: DEEP_TIME_MIN_BCE,
+          posOf: deepTimeT,
+          fromPos: bceFromT,
+          values: () => DEEP_TIME_TICKS,
+          isMajor: () => true,
+          format: formatBceYear,
+          step: 50,
+          pageStep: 500,
+          histogram: false,
+        },
+        onChange: syncEraState,
+        onModeChange: syncEraState,
+      });
+      deepChrono.setVisible(true);
+      lastDeepLayoutKey = '';
+      relayoutDeepChrono();
+      deepRelayoutRemover ||=
+        viewer.scene.postRender.addEventListener(relayoutDeepChrono);
+      if (deepTimeNote) deepTimeNote.hidden = false;
+      syncEraState();
+    } else if (!shouldShow && deepChrono) {
+      deepChrono.destroy();
+      deepChrono = null;
+      deepRelayoutRemover?.();
+      deepRelayoutRemover = null;
+      if (deepTimeNote) deepTimeNote.hidden = true;
+      syncEraState();
+    }
+  }
+
   /** Clicking a badge flies the camera one band closer, centred on it. */
   async function flyToCluster(index) {
     const cluster = renderer?.getCluster(index);
@@ -222,7 +393,7 @@ export function createAncientSitesLayer({
       if (viewer) throw new Error('Ancient sites layer is already initialized');
       viewer = v;
       renderer = createAncientRenderer(viewer, { render });
-      const host = container || viewer.container;
+      host = container || viewer.container;
       dossier = document.createElement('aside');
       dossier.className = 'uap-dossier ancient';
       dossier.hidden = true;
@@ -236,8 +407,38 @@ export function createAncientSitesLayer({
         (e) => e.key === 'Escape' && (dossier.hidden = true),
       );
       host.appendChild(dossier);
+      // The deep-time dial's honesty line: created once, hidden until the
+      // dial itself is showing (syncDeepTime toggles it alongside the
+      // dial's own lifecycle).
+      deepTimeNote = document.createElement('p');
+      deepTimeNote.className = 'uap-legend ancient';
+      deepTimeNote.hidden = true;
+      deepTimeNote.textContent = DEEP_TIME_HONESTY_LINE;
+      host.appendChild(deepTimeNote);
       overlayHost?.setVisible?.(ANCIENT_LAYER_ID, false);
       console.log('[Data:AncientSites] Initialized');
+    },
+
+    /**
+     * The shell supplies the live "is the sky register active" signal the
+     * deep-time dial needs (see syncDeepTime above): `isSkyActive()` is a
+     * pull query the dial checks whenever it might need to change state,
+     * and the returned `notifySkyChanged` is the push side - the shell
+     * calls it whenever the sky (anomalies) layer's own enabled state
+     * settles, so the dial reacts immediately rather than only at this
+     * layer's next enable().
+     */
+    attachShellServices(services) {
+      isSkyActive =
+        typeof services?.isSkyActive === 'function'
+          ? services.isSkyActive
+          : () => false;
+      syncDeepTime();
+      return {
+        notifySkyChanged() {
+          syncDeepTime();
+        },
+      };
     },
 
     enable() {
@@ -252,6 +453,11 @@ export function createAncientSitesLayer({
         );
       }
       picking?.registerPickOwner?.(ANCIENT_LAYER_ID, isOwnedPickId);
+      // After renderer.apply({visible: true}) above, so the dial's own
+      // first setEraFilter (inside syncEraState) already sees a visible
+      // renderer and recomputes immediately rather than waiting for a
+      // later, unrelated trigger.
+      syncDeepTime();
     },
 
     disable() {
@@ -262,6 +468,10 @@ export function createAncientSitesLayer({
       if (dossier) dossier.hidden = true;
       clickHandler?.destroy();
       clickHandler = null;
+      // Tears the deep-time dial down (enabled is now false) before the
+      // renderer itself goes invisible below, so a later re-enable never
+      // finds a stale dial left over from a previous session.
+      syncDeepTime();
       renderer?.apply({ visible: false });
       overlayHost?.setVisible?.(ANCIENT_LAYER_ID, false);
     },
@@ -281,7 +491,6 @@ export function createAncientSitesLayer({
         heroRows = next.heroes;
         sweepAccessor = next.sweep;
         totalCount = next.count;
-        renderer.setHeroes(heroRows);
         renderer.setSweep(sweepAccessor);
         if (LOCAL_TMA_ENABLED) {
           // Best-effort: a missing or unreachable local file never fails the
@@ -304,18 +513,12 @@ export function createAncientSitesLayer({
         }
         // Overlay labels stay hero-only: the sweep is far too dense for the
         // ambient-label lane, and its cluster badges already carry their own
-        // Cesium-native count text (see rendering.js).
-        overlayHost?.setEntries?.(
-          ANCIENT_LAYER_ID,
-          heroRows.map((r) =>
-            createAncientOverlayEntry({
-              id: r.id,
-              position: Cesium.Cartesian3.fromDegrees(r.lon, r.lat, 200),
-              name: r.name,
-            }),
-          ),
-          { moving: false },
-        );
+        // Cesium-native count text (see rendering.js). syncEraState() sets
+        // the renderer's heroes and these labels together, filtered by the
+        // deep-time dial's era band when it is engaged, or the full hero
+        // tier when it is not - exactly the set this call used to pass
+        // unconditionally before the deep-time dial existed.
+        syncEraState();
         loaded = true;
         lastUpdate = Date.now();
         lastError = null;
@@ -335,12 +538,21 @@ export function createAncientSitesLayer({
 
     destroy() {
       layer.disable();
+      // disable() above already tears the deep-time dial down (enabled is
+      // false by then); defensive here in case a future edit ever stops
+      // destroy() delegating to disable() first, mirroring the anomalies
+      // layer's own defensive Spotter-close call in its destroy().
+      deepChrono?.destroy();
+      deepChrono = null;
+      deepTimeNote?.remove();
+      deepTimeNote = null;
       overlayHost?.clearSource?.(ANCIENT_LAYER_ID);
       renderer?.destroy();
       dossier?.remove();
       renderer = null;
       dossier = null;
       viewer = null;
+      host = null;
       heroRows = [];
       sweepAccessor = null;
       tmaRows = [];

@@ -109,6 +109,30 @@ try {
     JSON.stringify(chrono),
   );
 
+  // Phase 5b deep-time dial: the sky register's own dial must behave
+  // exactly as it did before the ancient layer gained a second scale.
+  // Ancient sites is still off at this point in this script, so the only
+  // chronometer in the DOM is the sky one, at its original plain calendar
+  // bounds.
+  const skyDialUnaffected = await page.evaluate(() => {
+    const m = window.__godsEyeView.dataManager;
+    const slider = document.querySelector('.uap-slider');
+    return {
+      ancientEnabled: m.isEnabled('ancient-sites'),
+      min: slider?.getAttribute('aria-valuemin'),
+      max: slider?.getAttribute('aria-valuemax'),
+      ariaLabel: slider?.getAttribute('aria-label'),
+    };
+  });
+  check(
+    'sky mode is unaffected: the 1940-2026 dial still drives the anomalies layer with ancient off',
+    skyDialUnaffected.ancientEnabled === false &&
+      skyDialUnaffected.min === '1940' &&
+      skyDialUnaffected.max === '2026' &&
+      skyDialUnaffected.ariaLabel === 'Year',
+    JSON.stringify(skyDialUnaffected),
+  );
+
   const arrow = await page.evaluate(() => {
     const slider = document.querySelector('.uap-slider');
     const before = slider.getAttribute('aria-valuenow');

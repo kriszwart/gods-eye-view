@@ -7,6 +7,7 @@ import {
   wrapLon,
   SKYWARD_FALLBACK_CELL_DEG,
 } from './clusters.js';
+import { sweepTypeInEraBand } from './eras.js';
 
 /**
  * Local-only Modern Antiquarian overlay (see tmaLocal.js): every reference
@@ -97,6 +98,10 @@ export function createAncientRenderer(viewer, { render } = {}) {
   let currentClusters = [];
   let currentSingles = [];
   let currentCellDeg = null;
+  // The deep-time dial's current era band (see eras.js), or null when the
+  // dial is not engaged (either register default: every sweep site shows,
+  // exactly as before the deep-time dial existed).
+  let eraBand = null;
   let bandRemover = null;
   let moveEndRemover = null;
   let moveEndSettleTimer = null;
@@ -227,7 +232,21 @@ export function createAncientRenderer(viewer, { render } = {}) {
       // cleaner bounded fallback here, not a fabricated ranking.
       if (!bounds) cellDeg = SKYWARD_FALLBACK_CELL_DEG;
     }
-    const { clusters, singles } = clusterSweep(sweep, { cellDeg, bounds });
+    // The deep-time dial's era band, applied upstream of clustering (see
+    // eras.js): only sites whose TYPE's typological window matches the
+    // dial's current position ever reach a bucket or a single, so a
+    // cluster badge's count already reflects the filtered total. `null`
+    // (the dial disengaged) filters nothing, exactly as before the
+    // deep-time dial existed.
+    const filter = eraBand
+      ? (i) =>
+          sweepTypeInEraBand(sweep.typeName(i), eraBand.bceValue, eraBand.mode)
+      : null;
+    const { clusters, singles } = clusterSweep(sweep, {
+      cellDeg,
+      bounds,
+      filter,
+    });
     currentClusters = clusters;
     currentSingles = singles;
     currentCellDeg = cellDeg;
@@ -236,6 +255,17 @@ export function createAncientRenderer(viewer, { render } = {}) {
 
   function setSweep(accessor) {
     sweep = accessor;
+    if (visible) recomputeSweep();
+  }
+
+  /**
+   * Set or clear the deep-time dial's era band: `{ bceValue, mode }` or
+   * null to disengage (every sweep site shows again). Triggers one
+   * recompute so the sweep re-clusters against the new band immediately;
+   * a no-op while the register is not visible, mirroring `setSweep`.
+   */
+  function setEraFilter(band) {
+    eraBand = band;
     if (visible) recomputeSweep();
   }
 
@@ -356,13 +386,20 @@ export function createAncientRenderer(viewer, { render } = {}) {
 
   function getDiagnostics() {
     let topCluster = null;
+    let sweepVisibleCount = currentSingles.length;
     for (const cluster of currentClusters) {
+      sweepVisibleCount += cluster.count;
       if (!topCluster || cluster.count > topCluster.count) topCluster = cluster;
     }
     return {
       heroCount: heroPoints.length,
       clusterCount: clusterPoints.length,
       singleCount: sweepPoints.length,
+      // The true filtered sweep total currently represented on screen,
+      // clustered or not - unlike clusterCount/singleCount (primitive
+      // counts, which shrink as clustering coarsens), this is what the
+      // deep-time dial's era band actually changes as it moves.
+      sweepVisibleCount,
       cellDeg: currentCellDeg,
       cameraHeight: cameraHeight(),
       topCluster: topCluster
@@ -383,6 +420,7 @@ export function createAncientRenderer(viewer, { render } = {}) {
   const api = {
     setHeroes,
     setSweep,
+    setEraFilter,
     apply,
     pick,
     getCluster,

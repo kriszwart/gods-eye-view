@@ -45,6 +45,8 @@ export class LayerBindings {
     this._anomaliesMode = null;
     this._anomaliesSetPhenomenaActive = null;
     this._anomaliesSetSpotterOpen = null;
+    this._ancientShellModule = null;
+    this._ancientNotifySkyChanged = null;
     this._spotter = null;
     this._cctvRequestFocusHandler = null;
     this._removeCctvRequestFocusListener = null;
@@ -255,6 +257,43 @@ export class LayerBindings {
     this._anomaliesSetSpotterOpen =
       typeof attached?.setSpotterOpen === 'function'
         ? attached.setSpotterOpen
+        : null;
+  }
+
+  /**
+   * Give the ancient-sites layer the live "is the sky register active"
+   * signal its deep-time dial needs (see the layer's own
+   * `attachShellServices`): `isSkyActive` is a pull query backed directly
+   * by the data manager's `isEnabled('anomalies')`, and the returned
+   * `notifySkyChanged` is the push side this class calls from the
+   * `dataManager.subscribe` callback below whenever either layer's enabled
+   * state settles, so the dial reacts immediately rather than only at the
+   * ancient layer's own next enable(). Mirrors `_connectAnomaliesShell`'s
+   * own teardown-on-rewire dance (a changed or torn-down manager detaches
+   * the outgoing module first).
+   */
+  _connectAncientSitesShell() {
+    if (!this._dataManager) {
+      this._ancientShellModule?.attachShellServices?.(null);
+      this._ancientShellModule = null;
+      this._ancientNotifySkyChanged = null;
+      return;
+    }
+    const ancient = this._dataManager.layers?.get('ancient-sites')?.module;
+    if (this._ancientShellModule !== ancient) {
+      this._ancientShellModule?.attachShellServices?.(null);
+      this._ancientShellModule = null;
+      this._ancientNotifySkyChanged = null;
+    }
+    if (typeof ancient?.attachShellServices !== 'function') return;
+    this._ancientShellModule = ancient;
+    const manager = this._dataManager;
+    const attached = ancient.attachShellServices({
+      isSkyActive: () => manager.isEnabled('anomalies'),
+    });
+    this._ancientNotifySkyChanged =
+      typeof attached?.notifySkyChanged === 'function'
+        ? attached.notifySkyChanged
         : null;
   }
 
@@ -589,6 +628,17 @@ export class LayerBindings {
       this._dataManagerUnsubscribe = this._dataManager.subscribe((change) => {
         this._feedback._loadingFeedbackEvent = change;
         this._updateGlobalLoadingFeedback(performance.now());
+        // The deep-time dial's activation signal: whenever either
+        // register's own enabled state settles, tell the ancient layer to
+        // re-check whether the sky register is now active (see
+        // _connectAncientSitesShell above and the layer's own
+        // attachShellServices doc comment).
+        if (
+          change?.type === 'visibility' &&
+          (change.layerId === 'anomalies' || change.layerId === 'ancient-sites')
+        ) {
+          this._ancientNotifySkyChanged?.();
+        }
       });
     }
     this._updateGlobalLoadingFeedback(performance.now());
@@ -598,6 +648,7 @@ export class LayerBindings {
     this._connectDirectionsCamera();
     this._connectWeatherCamera();
     this._connectAnomaliesShell();
+    this._connectAncientSitesShell();
     if (!this._awarenessSelectedHandler) {
       this._awarenessSelectedHandler = (event) =>
         this._persistAwarenessSelection(event, false);
@@ -653,5 +704,6 @@ export class LayerBindings {
     this._dataManager = null;
     this._connectWeatherCamera();
     this._connectAnomaliesShell();
+    this._connectAncientSitesShell();
   }
 }

@@ -102,6 +102,46 @@ test('clusterSweep on an empty sweep returns empty results', () => {
   assert.deepEqual(singles, []);
 });
 
+test('clusterSweep applies an era-band filter before bucketing, so a cluster count only reflects included sites', () => {
+  const sweep = fixtureSweep([
+    [51.0, -1.0],
+    [51.1, -1.1],
+    [51.2, -1.2],
+  ]);
+  // Index 1 fails the filter: only indices 0 and 2 should ever reach a
+  // bucket or a single, so the resulting cluster count is 2, not 3.
+  const { clusters, singles } = clusterSweep(sweep, {
+    cellDeg: 5,
+    filter: (i) => i !== 1,
+  });
+  assert.equal(clusters.length, 1);
+  assert.equal(singles.length, 0);
+  assert.equal(clusters[0].count, 2);
+});
+
+test('clusterSweep applies an era-band filter in the unclustered (cellDeg <= 0) path too', () => {
+  const sweep = fixtureSweep([
+    [10, 10],
+    [20, 20],
+    [30, 30],
+  ]);
+  const { clusters, singles } = clusterSweep(sweep, {
+    cellDeg: 0,
+    filter: (i) => i !== 1,
+  });
+  assert.equal(clusters.length, 0);
+  assert.deepEqual(singles.map((s) => s.index).sort(), [0, 2]);
+});
+
+test('clusterSweep with no filter behaves exactly as before (all sites included)', () => {
+  const sweep = fixtureSweep([
+    [51.0, -1.0],
+    [51.1, -1.1],
+  ]);
+  const { clusters } = clusterSweep(sweep, { cellDeg: 5 });
+  assert.equal(clusters[0].count, 2);
+});
+
 test('cellDegForHeight selects the coarsest band at world altitude', () => {
   assert.equal(cellDegForHeight(9_000_000), 5);
   assert.equal(cellDegForHeight(8_000_000), 5);

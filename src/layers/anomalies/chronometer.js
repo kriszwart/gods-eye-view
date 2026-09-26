@@ -12,6 +12,20 @@ const el = (tag, attrs = {}, parent) => {
   return node;
 };
 
+/**
+ * `scale` swaps in a different value domain and layout for the same dial
+ * widget (the deep-time dial): `{ initial, posOf(value), fromPos(pos),
+ * values(), isMajor(value), format(value), step, pageStep, histogram }`.
+ * `posOf` maps a domain value to a normalised [0,1] position (0 the dial's
+ * oldest/starting value, 1 its newest/ending one); `fromPos` is its
+ * approximate inverse for pointer interaction; `values()` lists every tick
+ * to draw (the sky scale draws one per year, the deep-time scale a fixed
+ * set of milestones); `histogram` says whether the yearly bar chart applies
+ * (the worldwide sweep carries no per-site dating, so the deep-time dial
+ * never draws one - see `src/layers/ancientSites/eras.js`). Omitted (the
+ * only use before the deep-time dial), the calendar-year scale below
+ * applies exactly as it always has.
+ */
 export function createChronometer({
   container,
   from,
@@ -19,10 +33,11 @@ export function createChronometer({
   onChange,
   onModeChange,
   labels = {},
+  scale = null,
 }) {
   const years = to - from + 1;
   let hist = new Array(years).fill(0);
-  let year = to;
+  let year = scale ? scale.initial : to;
   let mode = 'cumulative';
   let layout = null;
   let playTimer = null;
@@ -72,12 +87,25 @@ export function createChronometer({
   const playBtn = panel.querySelector('.uap-play');
   const readout = panel.querySelector('.uap-readout');
 
+  /** Every tick value to draw: one per year for the calendar scale, or the
+   * scale's own fixed milestone list. */
+  const tickValues = () => {
+    if (scale) return scale.values();
+    const values = new Array(years);
+    for (let i = 0; i < years; i++) values[i] = from + i;
+    return values;
+  };
+
   const angleOf = (y) =>
-    -Math.PI / 2 + ((y - from + 0.5) / years) * Math.PI * 2;
+    -Math.PI / 2 +
+    (scale ? scale.posOf(y) : (y - from + 0.5) / years) * Math.PI * 2;
   const yearFromAngle = (a) => {
     let f = (a + Math.PI / 2) / (Math.PI * 2);
     f -= Math.floor(f);
-    return Math.min(to, Math.max(from, from + Math.floor(f * years)));
+    return Math.min(
+      to,
+      Math.max(from, scale ? scale.fromPos(f) : from + Math.floor(f * years)),
+    );
   };
 
   function draw() {
@@ -93,10 +121,9 @@ export function createChronometer({
       const { cx, cy } = layout;
       const R = layout.r + 18;
       el('circle', { cx, cy, r: R, class: 'ring' }, gTicks);
-      for (let i = 0; i < years; i++) {
-        const y = from + i;
+      for (const y of tickValues()) {
         const a = angleOf(y);
-        const major = y % 10 === 0;
+        const major = scale ? scale.isMajor(y) : y % 10 === 0;
         const r0 = R - (major ? 7 : 3);
         el(
           'line',
@@ -120,21 +147,24 @@ export function createChronometer({
             },
             gTicks,
           );
-          t.textContent = String(y);
+          t.textContent = scale ? scale.format(y) : String(y);
         }
-        if (hist[i]) {
-          const len = 4 + 34 * Math.sqrt(hist[i] / max);
-          el(
-            'line',
-            {
-              x1: cx + Math.cos(a) * (R + 3),
-              y1: cy + Math.sin(a) * (R + 3),
-              x2: cx + Math.cos(a) * (R + 3 + len),
-              y2: cy + Math.sin(a) * (R + 3 + len),
-              class: inRange(y) ? 'bar on' : 'bar',
-            },
-            gBars,
-          );
+        if (!scale || scale.histogram) {
+          const i = y - from;
+          if (hist[i]) {
+            const len = 4 + 34 * Math.sqrt(hist[i] / max);
+            el(
+              'line',
+              {
+                x1: cx + Math.cos(a) * (R + 3),
+                y1: cy + Math.sin(a) * (R + 3),
+                x2: cx + Math.cos(a) * (R + 3 + len),
+                y2: cy + Math.sin(a) * (R + 3 + len),
+                class: inRange(y) ? 'bar on' : 'bar',
+              },
+              gBars,
+            );
+          }
         }
       }
       const a = angleOf(year);
@@ -153,15 +183,16 @@ export function createChronometer({
       const left = 24;
       const right = width - 24;
       const base = height - 34;
-      const x = (y) => left + ((y - from + 0.5) / years) * (right - left);
+      const x = (y) =>
+        left +
+        (scale ? scale.posOf(y) : (y - from + 0.5) / years) * (right - left);
       el(
         'line',
         { x1: left, x2: right, y1: base, y2: base, class: 'ring' },
         gTicks,
       );
-      for (let i = 0; i < years; i++) {
-        const y = from + i;
-        const major = y % 10 === 0;
+      for (const y of tickValues()) {
+        const major = scale ? scale.isMajor(y) : y % 10 === 0;
         el(
           'line',
           {
@@ -179,20 +210,23 @@ export function createChronometer({
             { x: x(y), y: base + 20, 'text-anchor': 'middle', class: 'label' },
             gTicks,
           );
-          t.textContent = String(y);
+          t.textContent = scale ? scale.format(y) : String(y);
         }
-        if (hist[i])
-          el(
-            'line',
-            {
-              x1: x(y),
-              x2: x(y),
-              y1: base - 2,
-              y2: base - 2 - (3 + 26 * Math.sqrt(hist[i] / max)),
-              class: inRange(y) ? 'bar on' : 'bar',
-            },
-            gBars,
-          );
+        if (!scale || scale.histogram) {
+          const i = y - from;
+          if (hist[i])
+            el(
+              'line',
+              {
+                x1: x(y),
+                x2: x(y),
+                y1: base - 2,
+                y2: base - 2 - (3 + 26 * Math.sqrt(hist[i] / max)),
+                class: inRange(y) ? 'bar on' : 'bar',
+              },
+              gBars,
+            );
+        }
       }
       needleLine.setAttribute('x1', x(year));
       needleLine.setAttribute('x2', x(year));
@@ -206,7 +240,8 @@ export function createChronometer({
         `M ${left} ${base - 44} H ${right} V ${base + 12} H ${left} Z`,
       );
     }
-    needleText.textContent = mode === 'all' ? 'All' : String(year);
+    needleText.textContent =
+      mode === 'all' ? 'All' : scale ? scale.format(year) : String(year);
   }
 
   const inRange = (y) =>
@@ -223,7 +258,7 @@ export function createChronometer({
     slider.setAttribute('aria-valuenow', String(y));
     slider.setAttribute(
       'aria-valuetext',
-      mode === 'all' ? 'All years' : String(y),
+      mode === 'all' ? 'All years' : scale ? scale.format(y) : String(y),
     );
     draw();
     if (!silent) onChange?.(y);
@@ -243,9 +278,10 @@ export function createChronometer({
     playBtn.setAttribute('aria-pressed', String(on));
     playBtn.textContent = on ? 'Pause' : 'Play';
     if (!on) return;
+    const step = scale ? scale.step : 1;
     if (year >= to) setYear(from);
     playTimer = setInterval(
-      () => (year >= to ? setPlaying(false) : setYear(year + 1)),
+      () => (year >= to ? setPlaying(false) : setYear(year + step)),
       reduced ? 900 : 450,
     );
   }
@@ -256,7 +292,10 @@ export function createChronometer({
     const py = e.clientY - r.top;
     if (root.dataset.layout === 'ring')
       setYear(yearFromAngle(Math.atan2(py - layout.cy, px - layout.cx)));
-    else setYear(from + ((px - 24) / (layout.width - 48)) * years - 0.5);
+    else {
+      const f = (px - 24) / (layout.width - 48);
+      setYear(scale ? scale.fromPos(f) : from + f * years - 0.5);
+    }
   };
   let dragging = false;
   hit.addEventListener('pointerdown', (e) => {
@@ -269,13 +308,15 @@ export function createChronometer({
   hit.addEventListener('pointerup', () => (dragging = false));
   hit.addEventListener('pointercancel', () => (dragging = false));
   slider.addEventListener('keydown', (e) => {
+    const unit = scale ? scale.step : 1;
+    const page = scale ? scale.pageStep : 10;
     const step = {
-      ArrowRight: 1,
-      ArrowUp: 1,
-      ArrowLeft: -1,
-      ArrowDown: -1,
-      PageUp: 10,
-      PageDown: -10,
+      ArrowRight: unit,
+      ArrowUp: unit,
+      ArrowLeft: -unit,
+      ArrowDown: -unit,
+      PageUp: page,
+      PageDown: -page,
     }[e.key];
     if (step) setYear(year + step);
     else if (e.key === 'Home') setYear(from);

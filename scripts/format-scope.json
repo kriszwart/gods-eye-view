@@ -871,6 +871,8 @@
   "src/layers/ancientSites/records.test.mjs",
   "src/layers/ancientSites/rendering.js",
   "src/layers/ancientSites/index.js",
+  "src/layers/ancientSites/clusters.js",
+  "src/layers/ancientSites/clusters.test.mjs",
   "scripts/qa-ancient-sites.mjs",
   "src/app/layers/ancientSites.js",
   "scripts/qa-spotter.mjs"

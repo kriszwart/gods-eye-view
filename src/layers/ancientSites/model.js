@@ -17,6 +17,24 @@ export function mapAnalystRecord(row) {
   };
 }
 
+/**
+ * Analyst record for a worldwide-sweep site. `sweep` is the typed accessor
+ * returned by `normalizeAncientSitesV2`; `index` selects the row. Sweep
+ * sites carry no `period` (the sweep ships no era column — see
+ * `anomaly-atlas-kit/docs/DATA_PIPELINE.md` and the phase 5b task 2 report)
+ * and no dossier photo or debate, unlike the curated hero tier.
+ */
+export function mapSweepAnalystRecord(sweep, index) {
+  return {
+    id: `sweep:${sweep.qid(index)}`,
+    name: sweep.name(index),
+    lat: sweep.lat(index),
+    lon: sweep.lon(index),
+    type: sweep.typeName(index),
+    country: sweep.countryName(index),
+  };
+}
+
 /** Overlay label entry on the shared ambient-label lane, gold register. */
 export function createAncientOverlayEntry({ id, position, name }) {
   return {

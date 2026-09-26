@@ -1,10 +1,14 @@
 # Ancient sites bundled dataset
 
-The dataset the ancient sites register reads does not live in this
-directory. It ships in `public/ancient-sites/` (`sites.v1.json`) and, for
-now, is authored by hand rather than built by a pipeline script. This file
-records where that data comes from and on what terms, following the
-convention of the other `src/data/local_data/*/README.md` notes.
+The curated hero tier this file describes does not live in this directory.
+As of phase 5b it ships as the `heroes[]` array inside
+`public/ancient-sites/sites.v2.json`, alongside a worldwide Wikidata sweep
+merged in by `anomaly-atlas-kit/pipeline/src/build-ancient.mjs`. The hero
+rows themselves are still authored by hand, byte-identical to the earlier
+standalone `sites.v1.json` (deleted once the app moved to v2). This file
+records where that hand-curated data comes from and on what terms,
+following the convention of the other `src/data/local_data/*/README.md`
+notes.
 
 ## Current contents: a curated sample, needs review
 

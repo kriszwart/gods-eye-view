@@ -438,15 +438,20 @@ export class LayerBindings {
     return this._skySearchRecords;
   }
 
-  /** Ancient-sites register records, same independence and caching as above. */
+  /**
+   * Ancient-sites register records, same independence and caching as above.
+   * Hero tier only: the worldwide sweep (~81k rows) is deliberately left out
+   * of this in-memory matcher to avoid bloating it — a searchable sweep
+   * needs its own index, ledgered as a phase 5b follow-up.
+   */
   async _getAncientSearchRecords() {
     if (this._ancientSearchRecords) return this._ancientSearchRecords;
     this._ancientSearchSource ||= createAncientSource({
       baseUrl: this._caseSearchBaseUrl('ancient-sites/'),
     });
     try {
-      const rows = await this._ancientSearchSource.getSnapshot();
-      this._ancientSearchRecords = rows.map((r) => ({
+      const { heroes } = await this._ancientSearchSource.getSnapshot();
+      this._ancientSearchRecords = heroes.map((r) => ({
         id: r.id,
         register: 'ancient',
         title: r.name,

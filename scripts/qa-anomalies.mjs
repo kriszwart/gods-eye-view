@@ -429,7 +429,7 @@ try {
   );
 
   // Ancient sites match by country as well as by name (Gobekli Tepe and
-  // Derinkuyu are both Turkey rows in public/ancient-sites/sites.v1.json).
+  // Derinkuyu are both Turkey hero rows in public/ancient-sites/sites.v2.json).
   const countrySearch = await page.evaluate(async () => {
     const input = document.querySelector('.uap-search');
     input.value = 'Turkey';

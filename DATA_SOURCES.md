@@ -259,7 +259,9 @@ To see it on your own machine, set `PHENOMENA_LOCAL_TMA=1` in your local `.env` 
 it) and start the dev server. A dev-only middleware (`server/providers/local-tma.js`) then
 serves the jsonl at `/local-tma/tma-sites.jsonl`, and the ancient sites layer
 (`src/layers/ancientSites/tmaLocal.js`) adds it as an extra gold register alongside the public
-dataset: points only, no clustering, a compact dossier with the site's own record link.
+dataset: points only, no clustering, a compact dossier with the site's own record link. TMA's
+export carries no per-site date, so the deep-time dial does not filter this register: its
+points stay visible at every position of the dial, unlike the public sweep and hero tier.
 Leaving the flag unset (the default) keeps the layer, its source module and its identifiers
 entirely out of the built bundle; `npm run build` followed by `grep -ri 'tma'
 dist/assets/*.js` confirms none of it ships.

@@ -16,6 +16,11 @@
  * clicking it opens a compact dossier with a Wikidata link (and a Wikipedia
  * link when the sweep flagged one).
  *
+ * Also proves the local-only Modern Antiquarian register (phase 5b task 4)
+ * is absent with PHENOMENA_LOCAL_TMA unset, which is how this gate's own
+ * server always runs: its dev-only route serves the app shell rather than
+ * TMA data, and enabling the layer never requests that route at all.
+ *
  * Needs the dev server on :4173 (QA_BASE_URL overrides).
  */
 import puppeteer from 'puppeteer';
@@ -42,6 +47,14 @@ try {
   await page.setViewport({ width: 1440, height: 900 });
   const pageErrors = [];
   page.on('pageerror', (e) => pageErrors.push(e.message));
+  // The local-only Modern Antiquarian register (phase 5b task 4) must never
+  // be reached with PHENOMENA_LOCAL_TMA unset, which is how this gate's own
+  // :4173 server always runs. Watch for any request the app itself makes to
+  // the dev-only route before enabling the layer below.
+  const tmaRequests = [];
+  page.on('request', (req) => {
+    if (req.url().includes('/local-tma/')) tmaRequests.push(req.url());
+  });
   await page.goto(`${base}/?welcome=0`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__godsEyeView?.dataManager, {
     timeout: 60000,
@@ -90,6 +103,41 @@ try {
   check(
     `${expectedCount} sites (heroes + worldwide sweep) loaded after toggle on`,
     true,
+  );
+
+  // Local-only Modern Antiquarian register: absent with the flag unset.
+  // Snapshot the request tally now, before the deliberate probe fetch just
+  // below adds its own matching request to the same array.
+  const tmaRequestsFromTheApp = tmaRequests.length;
+  check(
+    'enabling the ancient sites layer never requests the local TMA route',
+    tmaRequestsFromTheApp === 0,
+    JSON.stringify(tmaRequests),
+  );
+
+  // The dev-only route falls through to the SPA shell rather than 404ing (no
+  // middleware is registered for it at all), so the proof is that the
+  // response is the app shell, not TMA's own NDJSON.
+  const tmaProbe = await page.evaluate(async () => {
+    try {
+      const res = await fetch('/local-tma/tma-sites.jsonl');
+      const contentType = res.headers.get('content-type') || '';
+      const text = await res.text();
+      return {
+        status: res.status,
+        contentType,
+        looksLikeAppShell: /<html/i.test(text),
+        looksLikeTmaData:
+          contentType.includes('ndjson') || /^\s*\{"name"/.test(text),
+      };
+    } catch (error) {
+      return { error: String(error) };
+    }
+  });
+  check(
+    'the local TMA route serves the app shell, not TMA data, without the env flag',
+    tmaProbe.looksLikeAppShell === true && tmaProbe.looksLikeTmaData !== true,
+    JSON.stringify(tmaProbe),
   );
 
   const reenable = await page.evaluate(async () => {

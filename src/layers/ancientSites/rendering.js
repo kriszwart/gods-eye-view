@@ -8,6 +8,15 @@ import {
   SKYWARD_FALLBACK_CELL_DEG,
 } from './clusters.js';
 
+/**
+ * Local-only Modern Antiquarian overlay (see tmaLocal.js): every reference
+ * to it below sits behind this constant, folded to a literal `false` by
+ * `import.meta.env.PHENOMENA_LOCAL_TMA`'s build-time define when the flag
+ * is unset, so a production build can prove the whole register (its
+ * primitive collection, its pick branch, its point data) dead and drop it.
+ */
+const LOCAL_TMA_ENABLED = import.meta.env?.PHENOMENA_LOCAL_TMA;
+
 /** Throttle for the camera-height-band sweep recompute (postRender fires at
  * up to render cadence during camera motion; this bounds how often the ~81k
  * row scan actually runs). */
@@ -37,9 +46,15 @@ function formatClusterCount(count) {
  * closest clustering band — unclustered singles bounded to the current view
  * rectangle instead of the whole sweep.
  *
- * The recompute is postRender-throttled and refreshed again on `moveEnd`
- * (mirroring the FIRMS layer's LOD watcher): no continuous render hold, and
- * no per-frame work while the camera is parked.
+ * A local-only Modern Antiquarian register (`tmaLocal.js`) can add a third,
+ * much smaller point set, gold like the rest, gated behind
+ * `LOCAL_TMA_ENABLED` above so it renders as one-shot unclustered points
+ * with no camera-height banding of its own and, when the flag is off,
+ * carries no primitives, pick branch or data into the build at all.
+ *
+ * The sweep recompute is postRender-throttled and refreshed again on
+ * `moveEnd` (mirroring the FIRMS layer's LOD watcher): no continuous render
+ * hold, and no per-frame work while the camera is parked.
  */
 export function createAncientRenderer(viewer, { render } = {}) {
   const scene = viewer.scene;
@@ -63,6 +78,17 @@ export function createAncientRenderer(viewer, { render } = {}) {
   sweepPoints.show = false;
   clusterPoints.show = false;
   clusterLabels.show = false;
+  // Local-only Modern Antiquarian register (see LOCAL_TMA_ENABLED above): a
+  // flag-off build never allocates this collection.
+  let tmaPoints = null;
+  if (LOCAL_TMA_ENABLED) {
+    tmaPoints = scene.primitives.add(
+      new Cesium.PointPrimitiveCollection({
+        blendOption: Cesium.BlendOption.TRANSLUCENT,
+      }),
+    );
+    tmaPoints.show = false;
+  }
 
   let sweep = null;
   let visible = false;
@@ -211,6 +237,31 @@ export function createAncientRenderer(viewer, { render } = {}) {
     if (visible) recomputeSweep();
   }
 
+  /**
+   * Render the local-only Modern Antiquarian rows as one-shot, unclustered
+   * gold points: no camera-height banding (the register is small enough,
+   * ~17k rows, that plain points are cheap, and it is a dev-only owner
+   * convenience, not a shipped register). A flag-off build never reaches
+   * past the guard below, so this is the only place TMA point data or its
+   * `tma` pick kind ever exists.
+   */
+  function setTma(rows) {
+    if (!LOCAL_TMA_ENABLED || !tmaPoints) return;
+    tmaPoints.removeAll();
+    for (const r of rows) {
+      tmaPoints.add({
+        id: { id: r.id, ancientKind: 'tma', tmaId: r.id },
+        position: Cesium.Cartesian3.fromDegrees(r.lon, r.lat, 0),
+        pixelSize: 3,
+        color: goldAlpha(0.5),
+        outlineColor: goldAlpha(0.2),
+        outlineWidth: 1,
+        scaleByDistance: new Cesium.NearFarScalar(2.0e5, 1.2, 2.0e7, 0.5),
+      });
+    }
+    requestFrame('ancient-tma');
+  }
+
   function scheduleRecompute() {
     clearTimeout(moveEndSettleTimer);
     moveEndSettleTimer = setTimeout(() => {
@@ -265,6 +316,7 @@ export function createAncientRenderer(viewer, { render } = {}) {
     sweepPoints.show = next;
     clusterPoints.show = next;
     clusterLabels.show = next;
+    if (tmaPoints) tmaPoints.show = next;
     if (next) {
       installBandWatcher();
       recomputeSweep();
@@ -283,6 +335,8 @@ export function createAncientRenderer(viewer, { render } = {}) {
       return { kind: 'sweep', index: id.ancientIndex };
     if (id.ancientKind === 'cluster')
       return { kind: 'cluster', index: id.clusterIndex };
+    if (LOCAL_TMA_ENABLED && id.ancientKind === 'tma')
+      return { kind: 'tma', id: id.tmaId };
     return null;
   }
 
@@ -314,9 +368,10 @@ export function createAncientRenderer(viewer, { render } = {}) {
     scene.primitives.remove(sweepPoints);
     scene.primitives.remove(clusterPoints);
     scene.primitives.remove(clusterLabels);
+    if (tmaPoints) scene.primitives.remove(tmaPoints);
   }
 
-  return {
+  const api = {
     setHeroes,
     setSweep,
     apply,
@@ -327,4 +382,8 @@ export function createAncientRenderer(viewer, { render } = {}) {
     nextBandTargetHeight: () => nextBandTargetHeight(cameraHeight()),
     destroy,
   };
+  // Kept off the API surface entirely on a flag-off build, so no caller can
+  // even name `setTma` there (see LOCAL_TMA_ENABLED above).
+  if (LOCAL_TMA_ENABLED) api.setTma = setTma;
+  return api;
 }

@@ -25,10 +25,16 @@ import { weatherProxy } from './weather.js';
 import { firePerimetersProxy } from './firePerimeters.js';
 import { cycloneProxy } from './cyclones.js';
 import { windProxy } from './wind.js';
+import { localTmaProxy } from './local-tma.js';
 
-/** Construct the local provider plugins in their established order. */
+/**
+ * Construct the local provider plugins in their established order. The
+ * local-only Modern Antiquarian route is appended only when
+ * `PHENOMENA_LOCAL_TMA` is set, so a normal checkout never serves it (see
+ * src/layers/ancientSites/tmaLocal.js and DATA_SOURCES.md's TMA note).
+ */
 function localProviderPlugins() {
-  return [
+  const plugins = [
     openSkyProxy(),
     celestrakProxy(),
     tomtomProxy(),
@@ -57,6 +63,8 @@ function localProviderPlugins() {
     firePerimetersProxy(),
     keySetupEndpoint(),
   ];
+  if (process.env.PHENOMENA_LOCAL_TMA) plugins.push(localTmaProxy());
+  return plugins;
 }
 
 export { localProviderPlugins };

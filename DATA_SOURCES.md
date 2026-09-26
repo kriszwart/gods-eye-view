@@ -245,6 +245,25 @@ they ship; raw source files stay local under `pipeline/local_data/raw/` and are 
 All three sources, plus the sample-case caveat, are also listed in the app itself: open the
 anomaly atlas and use the chronometer's "Sources" action.
 
+### The Modern Antiquarian (local-only, never bundled)
+
+`anomaly-atlas-kit/pipeline/local_data/normalised/tma-sites.jsonl` holds a 17,392-row
+export of [The Modern Antiquarian](https://www.themodernantiquarian.com/) (name, category,
+coordinates and a per-site record link). TMA's terms permit curation and per-site reference
+links only, not bulk redistribution (see
+[DATA_PIPELINE.md](anomaly-atlas-kit/docs/DATA_PIPELINE.md)), so this register never ships:
+`local_data/` is git-ignored, and the layer code that reads it is excluded from production
+builds at build time.
+
+To see it on your own machine, set `PHENOMENA_LOCAL_TMA=1` in your local `.env` (never commit
+it) and start the dev server. A dev-only middleware (`server/providers/local-tma.js`) then
+serves the jsonl at `/local-tma/tma-sites.jsonl`, and the ancient sites layer
+(`src/layers/ancientSites/tmaLocal.js`) adds it as an extra gold register alongside the public
+dataset: points only, no clustering, a compact dossier with the site's own record link.
+Leaving the flag unset (the default) keeps the layer, its source module and its identifiers
+entirely out of the built bundle; `npm run build` followed by `grep -ri 'tma'
+dist/assets/*.js` confirms none of it ships.
+
 ---
 
 ## Weather sources

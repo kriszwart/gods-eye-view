@@ -7,6 +7,7 @@ export function createBrowserViteConfig({
   publicDir,
   googleApiKey,
   cesiumToken,
+  phenomenaLocalTma,
   host = 'localhost',
   port = 4173,
   command,
@@ -47,6 +48,13 @@ export function createBrowserViteConfig({
     define: {
       'import.meta.env.GOOGLE_MAPS_API_KEY': JSON.stringify(googleApiKey),
       'import.meta.env.CESIUM_ION_TOKEN': JSON.stringify(cesiumToken),
+      // Always a literal string (never undefined), so an unset flag folds
+      // to `""` and a flag-off build can statically prove every
+      // `if (import.meta.env.PHENOMENA_LOCAL_TMA)` guard dead (see
+      // src/layers/ancientSites/tmaLocal.js and its callers).
+      'import.meta.env.PHENOMENA_LOCAL_TMA': JSON.stringify(
+        phenomenaLocalTma || '',
+      ),
     },
     build: { chunkSizeWarningLimit: 1500 },
   };

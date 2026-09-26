@@ -909,6 +909,7 @@
       "src/layers/ancientSites/source.js",
       "src/layers/ancientSites/rendering.js",
       "src/layers/ancientSites/clusters.js",
+      "src/layers/ancientSites/tmaLocal.js",
       "src/sources/safeUrl.js"
     ],
     "external": ["cesium"]
@@ -1354,6 +1355,7 @@
       "src/layers/ancientSites/source.js",
       "src/layers/ancientSites/rendering.js",
       "src/layers/ancientSites/clusters.js",
+      "src/layers/ancientSites/tmaLocal.js",
       "src/app/layers/firms.js",
       "src/app/layers/flights.js",
       "src/app/layers/militaryAwareness.js",
@@ -2087,6 +2089,7 @@
       "src/layers/ancientSites/source.js",
       "src/layers/ancientSites/rendering.js",
       "src/layers/ancientSites/clusters.js",
+      "src/layers/ancientSites/tmaLocal.js",
       "src/app/layers/firms.js",
       "src/app/layers/flights.js",
       "src/app/layers/militaryAwareness.js",

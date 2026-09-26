@@ -7,9 +7,18 @@ import {
 } from './model.js';
 import { createAncientRenderer } from './rendering.js';
 import { safeSourceUrl, safeImageUrl } from '../../sources/safeUrl.js';
+import { createTmaLocalSource, TMA_ID_PREFIX } from './tmaLocal.js';
 export * from './model.js';
 export { normalizeAncientSites, normalizeAncientSitesV2 } from './records.js';
 export { createAncientSource } from './source.js';
+
+/**
+ * Local-only Modern Antiquarian register (see tmaLocal.js): every reference
+ * to it below sits behind this constant, folded to a literal `false` when
+ * `PHENOMENA_LOCAL_TMA` is unset, so a production build can prove the whole
+ * branch dead and drop it, its dossier text included.
+ */
+const LOCAL_TMA_ENABLED = import.meta.env?.PHENOMENA_LOCAL_TMA;
 
 const escapeHtml = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
@@ -29,6 +38,13 @@ const escapeHtml = (s) =>
  * country, a Wikidata link and a Wikipedia link when the sweep flagged one —
  * because the sweep carries no photo, debate or era column (see the phase
  * 5b task 2 report on the omitted `bce` column).
+ *
+ * A third, local-only register, The Modern Antiquarian (`tmaLocal.js`), can
+ * add unclustered gold points with a compact dossier and record link when
+ * `PHENOMENA_LOCAL_TMA` is set at build time. TMA's terms permit curation
+ * and per-site links only, never bulk redistribution, so this register
+ * never ships: see `LOCAL_TMA_ENABLED` above, `server/providers/local-tma.js`
+ * for the dev server's own env gate, and DATA_SOURCES.md for the owner note.
  */
 export function createAncientSitesLayer({
   source,
@@ -45,6 +61,7 @@ export function createAncientSitesLayer({
   let dossier = null;
   let heroRows = [];
   let sweepAccessor = null;
+  let tmaRows = [];
   let totalCount = 0;
   let enabled = false;
   let loaded = false;
@@ -131,6 +148,27 @@ export function createAncientSitesLayer({
     dossier.querySelector('.uap-close').focus();
   }
 
+  /**
+   * Compact dossier for a local-only Modern Antiquarian row: name, category
+   * and its own record link, no photo or debate. Never reachable unless
+   * `LOCAL_TMA_ENABLED` gated this register on at build time.
+   */
+  function openTmaDossier(id) {
+    const row = tmaRows.find((r) => r.id === id);
+    if (!row || !dossier) return;
+    const sourceUrl = safeSourceUrl(row.url);
+    dossier.innerHTML = `
+      <button type="button" class="uap-close" aria-label="Close site">Close</button>
+      <h2>${escapeHtml(row.name)}</h2>
+      <dl>
+        <dt>Category</dt><dd>${escapeHtml(row.category || 'Unrecorded')}</dd>
+      </dl>
+      ${sourceUrl ? `<p class="uap-source"><a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open record</a></p>` : ''}
+      <p class="uap-attribution">Source: The Modern Antiquarian. Local reference only, not included in the shared dataset.</p>`;
+    dossier.hidden = false;
+    dossier.querySelector('.uap-close').focus();
+  }
+
   /** Clicking a badge flies the camera one band closer, centred on it. */
   async function flyToCluster(index) {
     const cluster = renderer?.getCluster(index);
@@ -150,11 +188,26 @@ export function createAncientSitesLayer({
     );
   }
 
+  /** Pick-registry ownership test: `ancient:` and `ancient-cluster:` always;
+   * `tma:` only when the local-only register is build-time enabled, so an
+   * unset flag never registers interest in an id prefix it never emits. */
+  function isOwnedPickId(pickedId) {
+    if (!enabled || typeof pickedId !== 'string') return false;
+    if (
+      pickedId.startsWith('ancient:') ||
+      pickedId.startsWith('ancient-cluster:')
+    )
+      return true;
+    return LOCAL_TMA_ENABLED && pickedId.startsWith(TMA_ID_PREFIX);
+  }
+
   function handlePick(picked) {
     if (!picked) return;
     if (picked.kind === 'hero') return openHeroDossier(picked.id);
     if (picked.kind === 'sweep') return openSweepDossier(picked.index);
     if (picked.kind === 'cluster') return void flyToCluster(picked.index);
+    if (LOCAL_TMA_ENABLED && picked.kind === 'tma')
+      return openTmaDossier(picked.id);
   }
 
   const layer = {
@@ -197,14 +250,7 @@ export function createAncientSitesLayer({
           Cesium.ScreenSpaceEventType.LEFT_CLICK,
         );
       }
-      picking?.registerPickOwner?.(
-        ANCIENT_LAYER_ID,
-        (pickedId) =>
-          enabled &&
-          typeof pickedId === 'string' &&
-          (pickedId.startsWith('ancient:') ||
-            pickedId.startsWith('ancient-cluster:')),
-      );
+      picking?.registerPickOwner?.(ANCIENT_LAYER_ID, isOwnedPickId);
     },
 
     disable() {
@@ -236,6 +282,25 @@ export function createAncientSitesLayer({
         totalCount = next.count;
         renderer.setHeroes(heroRows);
         renderer.setSweep(sweepAccessor);
+        if (LOCAL_TMA_ENABLED) {
+          // Best-effort: a missing or unreachable local file never fails the
+          // public dataset's own load, since this register is a dev-only
+          // owner convenience, not part of the layer's real contract.
+          try {
+            tmaRows = await createTmaLocalSource().getRows({
+              signal: current.signal,
+            });
+          } catch (error) {
+            tmaRows = [];
+            console.warn(
+              '[Data:AncientSites] Local TMA register unavailable:',
+              error,
+            );
+          }
+          if (current.signal.aborted || request !== current || !enabled)
+            return false;
+          renderer.setTma(tmaRows);
+        }
         // Overlay labels stay hero-only: the sweep is far too dense for the
         // ambient-label lane, and its cluster badges already carry their own
         // Cesium-native count text (see rendering.js).
@@ -277,6 +342,7 @@ export function createAncientSitesLayer({
       viewer = null;
       heroRows = [];
       sweepAccessor = null;
+      tmaRows = [];
       totalCount = 0;
       loaded = false;
     },

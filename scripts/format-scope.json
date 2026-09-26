@@ -873,6 +873,7 @@
   "src/layers/ancientSites/index.js",
   "src/layers/ancientSites/clusters.js",
   "src/layers/ancientSites/clusters.test.mjs",
+  "src/layers/ancientSites/tmaLocal.test.mjs",
   "scripts/qa-ancient-sites.mjs",
   "src/app/layers/ancientSites.js",
   "scripts/qa-spotter.mjs"

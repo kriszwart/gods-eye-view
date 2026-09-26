@@ -22,6 +22,7 @@
     "ancient:tma": "node src/adapters/tma-kml.mjs",
     "ancient:enrich": "node src/adapters/wikidata-enrich.mjs",
     "ancient:sweep": "node src/adapters/wikidata-sweep.mjs",
+    "ancient:build": "node src/build-ancient.mjs",
     "batch": "node src/extract/batch.mjs"
   }
 }

@@ -63,7 +63,7 @@ const CREDIT_ROWS = [
   },
   {
     name: 'Wikimedia Commons and Wikidata',
-    text: 'Site photographs and links in the ancient register, each shown with its own per-image credit in the dossier.',
+    text: "Wikidata supplies the ancient register's worldwide sweep of sites, CC0, plus site photographs and links, each shown with its own per-image credit in the dossier.",
     url: 'https://commons.wikimedia.org',
     label: 'commons.wikimedia.org',
   },

@@ -1,8 +1,17 @@
-// Merges the curated hero tier (public/ancient-sites/sites.v1.json, 20 rich
-// dossiers) with the worldwide Wikidata sweep (local_data/normalised/ancient-sweep.jsonl,
-// tens of thousands of rows) into the columnar dataset the atlas loads:
+// Merges the curated hero tier (the heroes[] already committed in
+// public/ancient-sites/sites.v2.json, 20 rich dossiers) with the worldwide
+// Wikidata sweep (local_data/normalised/ancient-sweep.jsonl, tens of
+// thousands of rows) into the columnar dataset the atlas loads:
 //   public/ancient-sites/sites.v2.json
 //   node src/build-ancient.mjs [--out ../../public/ancient-sites/sites.v2.json]
+//
+// The curated 20 are hand-authored once and then carried forward from build
+// to build: a rebuild reads them back out of the last-built v2 document
+// (heroFile defaults to the very file this script writes) rather than from
+// any standalone hero source, since sites.v1.json was retired once the app
+// moved to v2 (see the layer's records.js). A bare v1-shaped `{ sites: [...] }`
+// document is still accepted too, for fixtures and any future standalone
+// hero file.
 //
 // The hero tier keeps its full v1 shape verbatim -- image, attribution,
 // debated line, everything the dossier needs for a rich card. Sweep rows
@@ -39,6 +48,30 @@ export const HERO_PROXIMITY_KM = 1;
 export const BCE_COVERAGE_THRESHOLD = 0.05; // below this, the bce column is not worth shipping
 export const RAW_SIZE_BUDGET_BYTES = 3 * 1024 * 1024; // 3 MB, raw (uncompressed) committed file
 export const NAME_MAX_LENGTH = 60;
+
+// The worldwide sweep's own licence: Wikidata's own data is CC0 (see
+// https://www.wikidata.org/wiki/Wikidata:Licensing and config/ancient-sweep.json's
+// own note), so no attribution is legally required, but the dataset states
+// it anyway as a courtesy. The curated hero tier keeps its own per-site
+// source_url/attribution fields regardless; this block documents the sweep
+// only.
+export const SWEEP_LICENCE_SOURCE = 'Wikidata';
+export const SWEEP_LICENCE_NAME = 'CC0 1.0';
+export const SWEEP_LICENCE_ATTRIBUTION =
+  'Worldwide ancient sites sweep data from Wikidata, CC0 1.0. No attribution is legally required; credited here as a courtesy. Curated hero-tier sites keep their own per-site source and attribution.';
+
+/** The top-level `licence` block every v2 document carries (see
+ * `validateV2`). `retrievedAt` is the ISO timestamp the sweep was pulled
+ * from Wikidata, passed in by the caller when known, or the current build
+ * time otherwise. */
+export function sweepLicenceBlock(retrievedAt) {
+  return {
+    source: SWEEP_LICENCE_SOURCE,
+    licence: SWEEP_LICENCE_NAME,
+    retrieved: retrievedAt || new Date().toISOString(),
+    attribution: SWEEP_LICENCE_ATTRIBUTION,
+  };
+}
 
 /** Round a coordinate to 4 decimal places -- about 11 m at the equator, plenty for a public monument. */
 export function round4(n) {
@@ -132,15 +165,26 @@ export function toColumns(rows, types, { countryMode = 'strings', countries = nu
   return cols;
 }
 
-/** Validation errors for a v2 document: equal-length columns, in-range coordinates, valid type (and, when interned, country) indices, no empty names, no duplicate qids. */
+/** Validation errors for a v2 document: equal-length columns, in-range coordinates, valid type (and, when interned, country) indices, no empty names, no duplicate qids, a well-formed licence block. */
 export function validateV2(v2) {
   const errs = [];
   const need = (cond, msg) => {
     if (!cond) errs.push(msg);
   };
   need(v2.schema === SCHEMA, 'schema');
-  need(Array.isArray(v2.heroes) && v2.heroes.length === 20, 'heroes length');
+  // A non-empty hero tier, not a hardcoded count: the curated set has held
+  // 20 sites since the phase 5b sample, but that is a curation decision,
+  // not a schema invariant, and this check should not need editing every
+  // time a future curation pass adds or retires one.
+  need(Array.isArray(v2.heroes) && v2.heroes.length > 0, 'heroes length');
   need(Array.isArray(v2.types) && v2.types.length > 0, 'types');
+  need(v2.licence && typeof v2.licence === 'object', 'licence');
+  if (v2.licence && typeof v2.licence === 'object') {
+    need(typeof v2.licence.source === 'string' && v2.licence.source.length > 0, 'licence.source');
+    need(typeof v2.licence.licence === 'string' && v2.licence.licence.length > 0, 'licence.licence');
+    need(typeof v2.licence.retrieved === 'string' && v2.licence.retrieved.length > 0, 'licence.retrieved');
+    need(typeof v2.licence.attribution === 'string' && v2.licence.attribution.length > 0, 'licence.attribution');
+  }
   const s = v2.sites || {};
   const n = Array.isArray(s.qid) ? s.qid.length : -1;
   need(n >= 0, 'sites.qid');
@@ -183,13 +227,14 @@ const ENCODINGS = [
   { countryMode: 'index', wikiAsTitle: true, truncate: true, label: 'country interned, names over 60 characters shortened with an ellipsis' },
 ];
 
-function buildDoc(heroes, rows, types, encoding) {
+function buildDoc(heroes, rows, types, encoding, licence) {
   const encoded = encoding.truncate ? rows.map((r) => ({ ...r, name: truncateName(r.name) })) : rows;
   const countries = encoding.countryMode === 'index' ? countriesIndex(encoded) : null;
   const doc = {
     schema: SCHEMA,
     count: heroes.length + encoded.length,
     generatedAt: new Date().toISOString(),
+    licence,
     heroes,
     types,
     ...(countries ? { countries } : {}),
@@ -199,6 +244,14 @@ function buildDoc(heroes, rows, types, encoding) {
   return { doc, json, bytes: Buffer.byteLength(json) };
 }
 
+/** Extract the curated hero tier from a hero source document: the v2
+ * document's own `heroes[]` when it is one (the canonical source, since
+ * sites.v1.json was retired), or a bare v1-shaped `{ sites: [...] }`
+ * document otherwise (fixtures, or any future standalone hero file). */
+export function heroesFromDoc(heroDoc) {
+  return heroDoc?.schema === SCHEMA ? heroDoc.heroes : heroDoc.sites;
+}
+
 /**
  * Build the v2 dataset from the curated hero tier and the sweep: dedupe,
  * encode, validate and write it. Returns the numbers the task report needs:
@@ -206,14 +259,16 @@ function buildDoc(heroes, rows, types, encoding) {
  * validation errors (should be none) and the byte size actually written.
  */
 export async function build({
-  heroFile = root('../../public/ancient-sites/sites.v1.json'),
+  heroFile = root('../../public/ancient-sites/sites.v2.json'),
   sweepFile = root('local_data/normalised/ancient-sweep.jsonl'),
   outFile = root('../../public/ancient-sites/sites.v2.json'),
   sizeBudgetBytes = RAW_SIZE_BUDGET_BYTES,
+  retrievedAt = null,
   log = () => {},
 } = {}) {
   const heroDoc = JSON.parse(await readFile(heroFile, 'utf8'));
-  const heroes = heroDoc.sites;
+  const heroes = heroesFromDoc(heroDoc);
+  const licence = sweepLicenceBlock(retrievedAt);
   const sweepRaw = await readJsonl(sweepFile);
 
   const coverage = bceCoverage(sweepRaw);
@@ -227,7 +282,7 @@ export async function build({
   const attempts = [];
   let chosen = null;
   for (const encoding of ENCODINGS) {
-    const built = buildDoc(heroes, rows, types, encoding);
+    const built = buildDoc(heroes, rows, types, encoding, licence);
     attempts.push({ label: encoding.label, bytes: built.bytes });
     if (built.bytes <= sizeBudgetBytes) {
       chosen = { ...built, encoding };
@@ -240,7 +295,7 @@ export async function build({
   // silently or drop data a downstream task depends on.
   if (!chosen) {
     const encoding = ENCODINGS[ENCODINGS.length - 1];
-    chosen = { ...buildDoc(heroes, rows, types, encoding), encoding };
+    chosen = { ...buildDoc(heroes, rows, types, encoding, licence), encoding };
   }
 
   const errors = validateV2(chosen.doc);
@@ -264,6 +319,7 @@ export async function build({
     countries: chosen.doc.countries || null,
     bceCoverage: coverage,
     includeBce,
+    licence,
     errors,
   };
 }
@@ -279,6 +335,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   console.log(`Types: ${result.types.join(', ')}`);
   console.log(`Countries: ${result.countries ? `${result.countries.length} interned` : 'not interned'}`);
   console.log(`bce coverage: ${(result.bceCoverage * 100).toFixed(2)}% (threshold ${BCE_COVERAGE_THRESHOLD * 100}%) -- bce column ${result.includeBce ? 'included' : 'omitted'}`);
+  console.log(`Licence: ${result.licence.source}, ${result.licence.licence}, retrieved ${result.licence.retrieved}`);
   console.log(`Validation: ${result.errors.length === 0 ? 'zero invalid records' : `${result.errors.length} errors`}`);
   console.log(`Encoding chosen: ${result.encoding.label}`);
   for (const a of result.attempts) console.log(`  tried: ${a.label} -> ${a.bytes} bytes`);

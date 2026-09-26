@@ -5,7 +5,10 @@
 // wbgetentities call for every QID, then one Commons imageinfo call per
 // site that carries a P18 image (polite: 1 s between calls, a browser-ish
 // user agent), and writes image, image_attribution and wikipedia fields
-// into public/ancient-sites/sites.v1.json in place.
+// back into the curated hero tier: `heroes[]` in place in
+// public/ancient-sites/sites.v2.json (sites.v1.json was retired once the
+// app moved to v2 -- see build-ancient.mjs's own hero-source comment), or
+// `sites[]` in place for a bare v1-shaped document.
 //
 // Licence rule: an image ships only when its Commons LicenseShortName is a
 // free licence (CC0, CC BY*, CC BY-SA*, Public domain, PDM) and it carries
@@ -13,6 +16,7 @@
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { root, loadJson } from '../lib/cli.mjs';
+import { SCHEMA } from '../build-ancient.mjs';
 
 const CONTACT = process.env.WIKIMEDIA_CONTACT || 'phenomena-atlas (contact via repository)';
 const USER_AGENT = `AnomalyAtlasPipeline/1.0 (contact: ${CONTACT})`;
@@ -154,12 +158,16 @@ async function fetchImageInfo(filename) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const qidMap = await loadJson('config/ancient-wikidata.json');
-  const sitesFile = root('../../public/ancient-sites/sites.v1.json');
+  const sitesFile = root('../../public/ancient-sites/sites.v2.json');
   const dataset = JSON.parse(await readFile(sitesFile, 'utf8'));
+  // The v2 document keeps the curated tier in `heroes[]`; a bare v1-shaped
+  // document (a standalone hero file, or a fixture) keeps it in `sites[]`.
+  const isV2 = dataset.schema === SCHEMA;
+  const heroes = isV2 ? dataset.heroes : dataset.sites;
 
-  const qids = dataset.sites.map((s) => qidMap[s.id]).filter(Boolean);
-  if (qids.length !== dataset.sites.length) {
-    const missing = dataset.sites.filter((s) => !qidMap[s.id]).map((s) => s.id);
+  const qids = heroes.map((s) => qidMap[s.id]).filter(Boolean);
+  if (qids.length !== heroes.length) {
+    const missing = heroes.filter((s) => !qidMap[s.id]).map((s) => s.id);
     throw new Error(`No Wikidata QID configured for: ${missing.join(', ')}`);
   }
 
@@ -168,7 +176,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
   const enriched = [];
   const notes = [];
-  for (const site of dataset.sites) {
+  for (const site of heroes) {
     const qid = qidMap[site.id];
     const entity = entities[qid];
     if (!entity) {
@@ -197,8 +205,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     enriched.push(result);
   }
 
-  dataset.sites = enriched;
-  await writeFile(sitesFile, JSON.stringify(dataset, null, 2) + '\n');
+  if (isV2) dataset.heroes = enriched;
+  else dataset.sites = enriched;
+  // Compact for the v2 document (it also carries the ~81k-row sweep;
+  // pretty-printing that would balloon the file many times over), pretty
+  // for a bare v1-shaped document, matching how each was written before.
+  await writeFile(sitesFile, isV2 ? JSON.stringify(dataset) : JSON.stringify(dataset, null, 2) + '\n');
 
   console.log(`Wrote ${enriched.length} enriched sites to ${sitesFile}`);
   console.log(`Images shipped: ${enriched.filter((s) => s.image).length}/${enriched.length}`);

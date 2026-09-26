@@ -15,9 +15,13 @@ import {
   countriesIndex,
   toColumns,
   validateV2,
+  sweepLicenceBlock,
+  heroesFromDoc,
   build,
 } from '../src/build-ancient.mjs';
 import { writeJsonl } from '../src/lib/records.mjs';
+
+const LICENCE = sweepLicenceBlock('2026-09-26T00:00:00.000Z');
 
 // -- pure functions --------------------------------------------------------
 
@@ -118,6 +122,7 @@ test('validateV2 accepts a well-formed document and rejects broken ones', () => 
     schema: SCHEMA,
     count: 22,
     generatedAt: new Date().toISOString(),
+    licence: LICENCE,
     heroes,
     types: ['circle', 'mound'],
     sites: { qid: ['Q1', 'Q2'], name: ['A', 'B'], lat: [1, 2], lon: [3, 4], type: [0, 1], wiki: ['', ''] },
@@ -142,8 +147,16 @@ test('validateV2 accepts a well-formed document and rejects broken ones', () => 
   const outOfRangeLat = { ...good, sites: { ...good.sites, lat: [999, 2] } };
   assert.ok(validateV2(outOfRangeLat).some((e) => e.startsWith('lat[')));
 
-  const tooFewHeroes = { ...good, heroes: heroes.slice(0, 5) };
-  assert.ok(validateV2(tooFewHeroes).some((e) => e === 'heroes length'));
+  // Heroes length is not pinned to any specific number (see validateV2's own
+  // comment): an empty hero tier is what actually trips this check.
+  const noHeroes = { ...good, heroes: [] };
+  assert.ok(validateV2(noHeroes).some((e) => e === 'heroes length'));
+
+  const missingLicence = { ...good, licence: undefined };
+  assert.ok(validateV2(missingLicence).some((e) => e === 'licence'));
+
+  const incompleteLicence = { ...good, licence: { source: 'Wikidata' } };
+  assert.ok(incompleteLicence && validateV2(incompleteLicence).some((e) => e.startsWith('licence.')));
 });
 
 test('validateV2 checks country indices against countries[] when country is interned, and plain strings otherwise', () => {
@@ -152,6 +165,7 @@ test('validateV2 checks country indices against countries[] when country is inte
     schema: SCHEMA,
     count: 22,
     generatedAt: new Date().toISOString(),
+    licence: LICENCE,
     heroes,
     types: ['circle'],
     countries: ['Peru', 'Sweden'],
@@ -167,6 +181,24 @@ test('validateV2 checks country indices against countries[] when country is inte
 
   const wrongTypeCountry = { ...interned, countries: undefined, sites: { ...interned.sites, country: [0, 1] } };
   assert.ok(validateV2(wrongTypeCountry).some((e) => e.startsWith('country[')));
+});
+
+test('sweepLicenceBlock names Wikidata and CC0 1.0, and falls back to now when no retrieval date is given', () => {
+  const withDate = sweepLicenceBlock('2026-01-01T00:00:00.000Z');
+  assert.equal(withDate.source, 'Wikidata');
+  assert.equal(withDate.licence, 'CC0 1.0');
+  assert.equal(withDate.retrieved, '2026-01-01T00:00:00.000Z');
+  assert.ok(withDate.attribution.length > 0);
+
+  const before = Date.now();
+  const defaulted = sweepLicenceBlock();
+  assert.ok(Date.parse(defaulted.retrieved) >= before);
+});
+
+test('heroesFromDoc reads heroes[] from a v2 document and sites[] from a bare v1-shaped one', () => {
+  const heroes = [{ id: 'a' }, { id: 'b' }];
+  assert.deepEqual(heroesFromDoc({ schema: SCHEMA, heroes, sites: {} }), heroes);
+  assert.deepEqual(heroesFromDoc({ schema: 'ancient.sites.v1', sites: heroes }), heroes);
 });
 
 // -- the real build ---------------------------------------------------------
@@ -252,6 +284,32 @@ test('build honours a tight size budget by interning country and truncating long
     assert.equal(result.encoding.truncate, true, 'should have reached the last, smallest encoding that keeps country and the wiki title');
     assert.equal(result.encoding.countryMode, 'index');
     assert.equal(result.encoding.wikiAsTitle, true);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('build resolves its heroFile default to the committed sites.v2.json and extracts heroes[] from it (not sites.v1.json, which is retired)', async () => {
+  // sweepFile and outFile are still overridden: the real sweep JSONL is
+  // local-only and git-ignored (see DATA_PIPELINE.md), and this test must
+  // never overwrite the committed dataset. Only heroFile is left at its
+  // default, which is what this test is proving.
+  const dir = await mkdtemp(path.join(tmpdir(), 'ancient-build-defaults-'));
+  try {
+    const sweepFile = path.join(dir, 'ancient-sweep.jsonl');
+    const outFile = path.join(dir, 'sites.v2.json');
+    await writeJsonl(sweepFile, [
+      // Middle of the Pacific: nowhere near any curated hero site, so this
+      // row survives dedupeAgainstHeroes regardless of which 20 are current.
+      { qid: 'Q-mid-pacific', name: 'Mid-Pacific test row', lat: 0, lon: -160, type: 'mound' },
+    ]);
+
+    const result = await build({ sweepFile, outFile, sizeBudgetBytes: 10 * 1024 * 1024 });
+
+    assert.equal(result.heroesCount, 20, 'the committed dataset currently ships 20 curated heroes');
+    const written = JSON.parse(await readFile(outFile, 'utf8'));
+    assert.equal(written.heroes.length, 20);
+    assert.deepEqual(validateV2(written), []);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

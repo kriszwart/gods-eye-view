@@ -229,21 +229,24 @@ try {
   });
   const deepEngaged = await page.evaluate(() => {
     const slider = document.querySelector('.uap-slider');
+    const cumulativeMode = document.querySelector('[data-mode="cumulative"]');
     return slider
       ? {
           found: true,
           ariaLabel: slider.getAttribute('aria-label'),
           min: slider.getAttribute('aria-valuemin'),
           max: slider.getAttribute('aria-valuemax'),
+          modeLabel: cumulativeMode?.textContent.trim() || null,
         }
       : { found: false };
   });
   check(
-    'deep-time mode engages when the ancient layer is on and the sky layer is off',
+    'deep-time mode engages when the ancient layer is on and the sky layer is off, with era-mode copy',
     deepEngaged.found &&
       deepEngaged.ariaLabel === 'Era' &&
       deepEngaged.min === '-1500' &&
-      deepEngaged.max === '10000',
+      deepEngaged.max === '10000' &&
+      deepEngaged.modeLabel === 'Up to era',
     JSON.stringify(deepEngaged),
   );
   check(
@@ -311,6 +314,38 @@ try {
       Number.isFinite(eraBand.heroesAfter) &&
       eraBand.heroesAfter < eraBand.heroesBefore,
     JSON.stringify(eraBand),
+  );
+
+  // Fix round regression (finding 1): enabling the sky register for the
+  // first time lazily builds its own chronometer widget (see
+  // src/layers/anomalies/index.js's init()); disabling it again must not
+  // leave that widget behind in the DOM, even hidden, because the sky
+  // register turning off is exactly the ancient layer's own signal to bring
+  // its deep-time dial straight back up (see the ancient layer's
+  // attachShellServices doc comment). Before the fix, a stale hidden
+  // `.uap-chrono` sat in the DOM at the same time as the fresh, visible Era
+  // one, so every unqualified `.uap-slider`/`.uap-chrono` query below (this
+  // file uses `.uap-slider` unqualified six times) could resolve to the
+  // wrong, hidden widget. Ancient sites stays enabled throughout, so its
+  // own dial re-engages the instant the sky register settles off.
+  const oneChronoAfterSkyToggle = await page.evaluate(async () => {
+    const m = window.__godsEyeView.dataManager;
+    await m.setEnabled('anomalies', true, { origin: 'user' });
+    await m.setEnabled('anomalies', false, { origin: 'user' });
+    const chronos = [...document.querySelectorAll('.uap-chrono')];
+    const slider = document.querySelector('.uap-slider');
+    return {
+      chronoCount: chronos.length,
+      hiddenCount: chronos.filter((c) => c.hidden).length,
+      sliderAriaLabel: slider?.getAttribute('aria-label') || null,
+    };
+  });
+  check(
+    'exactly one chronometer is in the DOM after the sky register is enabled then disabled again (the deep-time dial, not a hidden stale sky one)',
+    oneChronoAfterSkyToggle.chronoCount === 1 &&
+      oneChronoAfterSkyToggle.hiddenCount === 0 &&
+      oneChronoAfterSkyToggle.sliderAriaLabel === 'Era',
+    JSON.stringify(oneChronoAfterSkyToggle),
   );
 
   // Year-dial decoupling: bring the anomalies chronometer up alongside the

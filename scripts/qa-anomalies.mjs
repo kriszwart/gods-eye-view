@@ -117,19 +117,22 @@ try {
   const skyDialUnaffected = await page.evaluate(() => {
     const m = window.__godsEyeView.dataManager;
     const slider = document.querySelector('.uap-slider');
+    const cumulativeMode = document.querySelector('[data-mode="cumulative"]');
     return {
       ancientEnabled: m.isEnabled('ancient-sites'),
       min: slider?.getAttribute('aria-valuemin'),
       max: slider?.getAttribute('aria-valuemax'),
       ariaLabel: slider?.getAttribute('aria-label'),
+      modeLabel: cumulativeMode?.textContent.trim() || null,
     };
   });
   check(
-    'sky mode is unaffected: the 1940-2026 dial still drives the anomalies layer with ancient off',
+    'sky mode is unaffected: the 1940-2026 dial still drives the anomalies layer with ancient off, and its mode label still reads "Up to year"',
     skyDialUnaffected.ancientEnabled === false &&
       skyDialUnaffected.min === '1940' &&
       skyDialUnaffected.max === '2026' &&
-      skyDialUnaffected.ariaLabel === 'Year',
+      skyDialUnaffected.ariaLabel === 'Year' &&
+      skyDialUnaffected.modeLabel === 'Up to year',
     JSON.stringify(skyDialUnaffected),
   );
 

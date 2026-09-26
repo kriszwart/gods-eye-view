@@ -66,10 +66,13 @@ const DEEP_TIME_HONESTY_LINE =
  * ignores the year dial entirely then, exactly as before the deep-time
  * dial existed. `attachShellServices` below receives the live sky-active
  * signal from the shell; the dial is created and destroyed on demand
- * (never left mounted-but-hidden) so the two chronometer instances - this
- * one and the sky layer's own - are never both in the DOM at once, which
- * would make every `.uap-chrono`/`.uap-slider` query in the sky layer's own
- * gates ambiguous.
+ * (never left mounted-but-hidden), and the sky layer's own chronometer
+ * detaches its root from the DOM outright whenever it is hidden (see
+ * chronometer.js's own `setVisible`, not just an added `hidden` attribute),
+ * so the two chronometer instances - this one and the sky layer's own -
+ * are never both in the DOM at once, which would make every
+ * `.uap-chrono`/`.uap-slider` query in the sky layer's own gates
+ * ambiguous.
  *
  * Heroes filter by their own real `period_start_bce`; the worldwide sweep
  * carries no per-site dating, so it is banded by its TYPE's typological
@@ -298,9 +301,12 @@ export function createAncientSitesLayer({
    * wins when both are on (ruling: preserves today's decoupled behaviour).
    * The dial is a second, independent instance of the anomalies package's
    * chronometer widget, created and destroyed on demand rather than kept
-   * mounted-but-hidden, so the sky layer's own `.uap-chrono`/`.uap-slider`
-   * queries (its own qa gate) are never made ambiguous by a second such
-   * element sitting in the DOM at the same time.
+   * mounted-but-hidden. That, plus the sky layer's own chronometer
+   * detaching its root from the DOM whenever it is hidden (chronometer.js's
+   * `setVisible`, not just a `hidden` attribute), is what keeps the sky
+   * layer's own `.uap-chrono`/`.uap-slider` queries (its own qa gate) from
+   * ever being made ambiguous by a second such element sitting in the DOM
+   * at the same time.
    */
   function syncDeepTime() {
     const shouldShow = enabled && !isSkyActive();
@@ -309,7 +315,13 @@ export function createAncientSitesLayer({
         container: host,
         from: DEEP_TIME_MIN_BCE,
         to: DEEP_TIME_MAX_BCE,
-        labels: { year: 'Era', modes: 'Era filter' },
+        labels: {
+          year: 'Era',
+          modes: 'Era filter',
+          cumulative: 'Up to era',
+          window: 'Around era',
+          all: 'All eras',
+        },
         scale: {
           initial: DEEP_TIME_MIN_BCE,
           posOf: deepTimeT,

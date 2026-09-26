@@ -25,6 +25,14 @@ const el = (tag, attrs = {}, parent) => {
  * never draws one - see `src/layers/ancientSites/eras.js`). Omitted (the
  * only use before the deep-time dial), the calendar-year scale below
  * applies exactly as it always has.
+ *
+ * `labels` carries the matching swap for the widget's own copy: `year` and
+ * `modes` (the slider's and the mode radiogroup's aria-labels) plus
+ * `cumulative`, `window` and `all`, the three mode buttons' own visible
+ * text and (for `all`) the slider's spoken `aria-valuetext`. Every field
+ * defaults to the calendar-year wording ('Year', 'Time filter', 'Up to
+ * year', 'Around year', 'All years'), so a caller that never sets `labels`
+ * sees exactly the original sky-dial copy.
  */
 export function createChronometer({
   container,
@@ -69,6 +77,15 @@ export function createChronometer({
   const needleText = el('text', {}, needle);
   const hit = el('path', { class: 'hit' }, svg);
 
+  // The three mode-button captions, and the "all" one's spoken
+  // aria-valuetext below, follow the scale's own vocabulary (see this
+  // factory's top-of-file doc comment on `labels`); the sky dial's default
+  // wording is unchanged when a caller never sets these fields.
+  const modeLabels = {
+    cumulative: labels.cumulative || 'Up to year',
+    window: labels.window || 'Around year',
+    all: labels.all || 'All years',
+  };
   const panel = document.createElement('div');
   panel.className = 'uap-chrono-panel';
   panel.innerHTML = `
@@ -76,9 +93,9 @@ export function createChronometer({
     <div class="uap-slider" role="slider" tabindex="0" aria-label="${labels.year || 'Year'}"
       aria-valuemin="${from}" aria-valuemax="${to}" aria-valuenow="${year}"></div>
     <div class="uap-modes" role="radiogroup" aria-label="${labels.modes || 'Time filter'}">
-      <button type="button" role="radio" data-mode="cumulative" aria-checked="true">Up to year</button>
-      <button type="button" role="radio" data-mode="window" aria-checked="false">Around year</button>
-      <button type="button" role="radio" data-mode="all" aria-checked="false">All years</button>
+      <button type="button" role="radio" data-mode="cumulative" aria-checked="true">${modeLabels.cumulative}</button>
+      <button type="button" role="radio" data-mode="window" aria-checked="false">${modeLabels.window}</button>
+      <button type="button" role="radio" data-mode="all" aria-checked="false">${modeLabels.all}</button>
     </div>
     <p class="uap-readout" aria-live="polite"></p>`;
   root.appendChild(panel);
@@ -258,7 +275,7 @@ export function createChronometer({
     slider.setAttribute('aria-valuenow', String(y));
     slider.setAttribute(
       'aria-valuetext',
-      mode === 'all' ? 'All years' : scale ? scale.format(y) : String(y),
+      mode === 'all' ? modeLabels.all : scale ? scale.format(y) : String(y),
     );
     draw();
     if (!silent) onChange?.(y);
@@ -457,9 +474,27 @@ export function createChronometer({
     get mode() {
       return mode;
     },
+    /**
+     * Show or hide the whole widget. Off does more than set the `hidden`
+     * attribute: it detaches `root` from `container` outright, so a layer
+     * that builds its chronometer once in `init()` and only ever toggles
+     * visibility on enable/disable (the sky layer's own pattern) never
+     * leaves a hidden `.uap-chrono`/`.uap-slider` sitting in the DOM for an
+     * unqualified query elsewhere to find - see the ancient-sites layer's
+     * own deep-time dial, which shares that DOM and must never coexist with
+     * a stale sky one. Reattaching is a no-op when `root` is already
+     * connected (for example the very first `setVisible(true)` right after
+     * `createChronometer`, which already appended it).
+     */
     setVisible(on) {
-      root.hidden = !on;
-      if (!on) setPlaying(false);
+      if (on) {
+        root.hidden = false;
+        if (!root.isConnected) container.appendChild(root);
+      } else {
+        setPlaying(false);
+        root.hidden = true;
+        root.remove();
+      }
     },
     destroy() {
       setPlaying(false);

@@ -452,6 +452,7 @@
   flex: none;
   width: 14px;
   height: 14px;
+  border-radius: 0;
   background-color: #d8b36a;
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;

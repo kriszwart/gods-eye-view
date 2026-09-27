@@ -166,10 +166,14 @@ function fallbackGlyphCanvas() {
 /** Composed billboard images, cached per glyph URL (module scope: shared
  * across every renderer instance and every enable/disable cycle, since the
  * shipped glyph SVGs never change while the app is running - "cache per
- * type, never per site"). `billboardGlyphLoading` guards against firing a
- * second fetch for a URL that is already in flight; `billboardGlyphSubscribers`
- * are notified once a fetch settles, so an active renderer can redraw its
- * currently-visible billboards from a placeholder to the real glyph. */
+ * type, never per site"). A failed load is cached too, as the fallback
+ * canvas, so the cache also doubles as "do not retry this URL" (see
+ * `requestBillboardGlyph`'s catch branch below). `billboardGlyphLoading`
+ * guards against firing a second fetch for a URL that is already in flight;
+ * `billboardGlyphSubscribers` are notified once a fetch settles, so an
+ * active renderer can redraw its currently-visible billboards from a
+ * placeholder to the real glyph (or, on failure, to the permanent
+ * fallback). */
 const billboardGlyphCache = new Map();
 const billboardGlyphLoading = new Set();
 const billboardGlyphSubscribers = new Set();
@@ -177,7 +181,9 @@ const billboardGlyphSubscribers = new Set();
 /**
  * The cached composed billboard image for a glyph URL, kicking off a load if
  * this is the first request for it. Returns `null` (caller should use
- * `fallbackGlyphCanvas()` meanwhile) until the load and compose finish.
+ * `fallbackGlyphCanvas()` meanwhile) until the load settles. A failed load
+ * caches the fallback canvas as the permanent result for that URL, so a
+ * single failure ends the chain rather than retrying on every re-render.
  * @param {string} url
  * @returns {HTMLCanvasElement|null}
  */
@@ -196,6 +202,16 @@ function requestBillboardGlyph(url) {
           url,
           error,
         );
+        // Cache the fallback canvas under this URL as a permanent result, not
+        // just a transient placeholder: without this, a failed load left the
+        // cache empty, so the next renderSweepSingles() (fired by the notify
+        // below, or by the next camera move) called requestBillboardGlyph(url)
+        // again, saw no in-flight load and no cache entry, and fired the same
+        // request again - a self-sustaining loop of network requests and
+        // console.warn spam for as long as the camera sat at the closest band
+        // over this type. One failure now ends the chain: one warn, no
+        // retries.
+        billboardGlyphCache.set(url, fallbackGlyphCanvas());
       })
       .finally(() => {
         billboardGlyphLoading.delete(url);

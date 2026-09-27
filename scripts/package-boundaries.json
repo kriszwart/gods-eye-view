@@ -927,6 +927,7 @@
       "src/layers/liveClaims/records.js",
       "src/layers/liveClaims/source.js",
       "src/layers/liveClaims/rendering.js",
+      "src/layers/liveClaims/nearby.js",
       "src/sources/safeUrl.js"
     ],
     "external": ["cesium"]
@@ -1381,6 +1382,7 @@
       "src/layers/liveClaims/records.js",
       "src/layers/liveClaims/source.js",
       "src/layers/liveClaims/rendering.js",
+      "src/layers/liveClaims/nearby.js",
       "src/app/layers/firms.js",
       "src/app/layers/flights.js",
       "src/app/layers/militaryAwareness.js",
@@ -2124,6 +2126,7 @@
       "src/layers/liveClaims/records.js",
       "src/layers/liveClaims/source.js",
       "src/layers/liveClaims/rendering.js",
+      "src/layers/liveClaims/nearby.js",
       "src/app/layers/firms.js",
       "src/app/layers/flights.js",
       "src/app/layers/militaryAwareness.js",

@@ -6,10 +6,15 @@ import {
   mapAnalystRecord,
 } from './model.js';
 import { createLiveClaimsRenderer } from './rendering.js';
+import { findNearbyCases, NEARBY_RADIUS_KM } from './nearby.js';
 import { safeSourceUrl } from '../../sources/safeUrl.js';
 export * from './model.js';
 export { normalizeClaimsSnapshot, normalizeClaimRow } from './records.js';
 export { createLiveClaimsSource } from './source.js';
+export { findNearbyCases, NEARBY_RADIUS_KM, NEARBY_LIMIT } from './nearby.js';
+
+/** Newest claims kept in the stream ticker, per the design spec. */
+const TICKER_LIMIT = 10;
 
 const escapeHtml = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
@@ -43,6 +48,33 @@ function formatWhen(row) {
   return `${row.fetchedAt} (fetched; no time was stated in the post)`;
 }
 
+/** Coarse "how long ago" label for the stream ticker, from a claim's
+ * `fetchedAt`. Recency only, matching the register's brightness rule: never
+ * a claim about how many claims exist or how credible one is. */
+function formatRelativeAge(fetchedAt) {
+  const fetchedMs = Date.parse(fetchedAt);
+  if (!Number.isFinite(fetchedMs)) return '';
+  const ageMs = Math.max(0, Date.now() - fetchedMs);
+  const minutes = Math.floor(ageMs / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+/** True when the visitor has asked for reduced motion; the stream ticker's
+ * row entrances are skipped in that case (newest claims still appear, they
+ * just do not slide in). Guarded for non-browser test environments. */
+function prefersReducedMotion() {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches === true
+  );
+}
+
 /**
  * Live claims register: unverified public claims from Reddit and Bluesky,
  * placed on the globe as pulsing ion points, newest brightest. Implements
@@ -50,10 +82,19 @@ function formatWhen(row) {
  * dossier and this module's own honesty line say so plainly (see
  * docs/superpowers/specs/2026-09-27-live-claims-design.md).
  *
- * @param {{source: object, picking?: object, render?: object, container?: Element}} options
+ * `anomalySource` is an optional read-only dependency (same shape as
+ * `src/layers/anomalies/source.js`'s `createAnomalySource()`: an object with
+ * an async `getSnapshot()`) used only to fetch the bundled anomalies
+ * dataset once, lazily, for the dossier's nearby-cases block. It is never
+ * used to write anything back to the anomalies layer, and its absence just
+ * means that block stays absent - no error.
+ *
+ * @param {{source: object, anomalySource?: object, picking?: object,
+ *   render?: object, container?: Element}} options
  */
 export function createLiveClaimsLayer({
   source,
+  anomalySource,
   picking,
   render,
   container,
@@ -64,6 +105,11 @@ export function createLiveClaimsLayer({
   let renderer = null;
   let dossier = null;
   let statusPlate = null;
+  let statusText = null;
+  let streamToggle = null;
+  let tickerPlate = null;
+  let tickerList = null;
+  let tickerEmpty = null;
   let claims = [];
   let status = 'no-key';
   let unplaced = 0;
@@ -74,10 +120,83 @@ export function createLiveClaimsLayer({
   let lastError = null;
   let clickHandler = null;
   let onOtherDossierOpen = null;
+  let anomalyRowsPromise = null;
+  let openToken = 0;
+  let tickerSeenIds = new Set();
+
+  /**
+   * Lazily fetch the bundled anomalies dataset exactly once (cached for the
+   * lifetime of this layer instance), for the dossier's nearby-cases block.
+   * Read-only: `anomalySource.getSnapshot()` is the same call the anomalies
+   * layer's own source module makes against its own public JSON, so nothing
+   * here ever touches that layer's live state. A failed or missing source
+   * resolves to `null` rather than rejecting, so the caller can treat "no
+   * data" and "fetch failed" identically: the nearby block is simply absent.
+   */
+  function loadAnomalyRows() {
+    if (!anomalySource) return Promise.resolve(null);
+    if (!anomalyRowsPromise) {
+      anomalyRowsPromise = anomalySource.getSnapshot().catch((error) => {
+        console.warn('[Data:LiveClaims] Nearby cases unavailable:', error);
+        return null;
+      });
+    }
+    return anomalyRowsPromise;
+  }
+
+  /**
+   * Append the "N historical cases within 50 km" block to the currently
+   * open dossier, once the anomalies dataset resolves. `token` guards
+   * against a stale fetch landing after the dossier has since closed or
+   * moved to a different claim.
+   */
+  async function attachNearbyBlock(row, token) {
+    const rows = await loadAnomalyRows();
+    if (token !== openToken || !dossier) return;
+    const anchor = dossier.querySelector('.uap-honesty');
+    if (!anchor) return;
+    if (!rows) return; // fetch failed, or no anomalySource was given: absent, no error.
+    const { count, top } = findNearbyCases(row, rows, {
+      radiusKm: NEARBY_RADIUS_KM,
+    });
+    const block = document.createElement('div');
+    block.className = 'uap-nearby';
+    if (count === 0) {
+      block.innerHTML = `<p class="uap-nearby-empty">No historical cases within ${NEARBY_RADIUS_KM} km</p>`;
+    } else {
+      const rowsHtml = top
+        .map(
+          (c) =>
+            `<li class="uap-nearby-row" data-lat="${c.lat}" data-lon="${c.lon}" tabindex="0" role="button">${escapeHtml(String(c.year ?? 'unknown'))}, ${escapeHtml(c.status ?? 'unknown')}, ${Math.round(c.distanceKm)} km</li>`,
+        )
+        .join('');
+      block.innerHTML = `<p class="uap-nearby-count">${count} historical case${count === 1 ? '' : 's'} within ${NEARBY_RADIUS_KM} km</p><ul class="uap-nearby-rows">${rowsHtml}</ul>`;
+      block.querySelectorAll('.uap-nearby-row').forEach((el) => {
+        const flyThere = () => {
+          const lat = Number(el.dataset.lat);
+          const lon = Number(el.dataset.lon);
+          if (!viewer || !Number.isFinite(lat) || !Number.isFinite(lon)) return;
+          viewer.camera.flyTo({
+            destination: Cesium.Cartesian3.fromDegrees(lon, lat, 15000),
+            duration: 2.2,
+          });
+        };
+        el.addEventListener('click', flyThere);
+        el.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            flyThere();
+          }
+        });
+      });
+    }
+    anchor.before(block);
+  }
 
   function openDossier(id) {
     const row = claims.find((r) => r.id === id);
     if (!row || !dossier) return;
+    const token = ++openToken;
     const sourceUrl = safeSourceUrl(row.url);
     dossier.innerHTML = `
       <button type="button" class="uap-close" aria-label="Close claim">Close</button>
@@ -102,15 +221,21 @@ export function createLiveClaimsLayer({
         detail: { register: LIVE_CLAIMS_LAYER_ID },
       }),
     );
+    // The stream ticker sits over the same right-hand edge of the screen as
+    // the dossier; a dossier taking focus (from a direct point click or a
+    // ticker row) closes the ticker rather than the two plates fighting for
+    // the same space.
+    closeTicker();
     dossier.hidden = false;
     dossier.querySelector('.uap-close').focus();
+    attachNearbyBlock(row, token);
   }
 
   /** Refresh the always-visible status plate: the honesty line, plus either
    * the keyless message, an honest empty state, or the current count, and
    * the unplaced-claims tally when nonzero. */
   function refreshStatus() {
-    if (!statusPlate) return;
+    if (!statusText) return;
     const lines = [];
     if (status === 'no-key') {
       lines.push(KEYLESS_MESSAGE);
@@ -126,9 +251,101 @@ export function createLiveClaimsLayer({
         `${unplaced} claim${unplaced === 1 ? '' : 's'} had no placeable location.`,
       );
     }
-    statusPlate.innerHTML = `<p>${escapeHtml(HONESTY_LINE)}</p>${lines
+    statusText.innerHTML = `<p>${escapeHtml(HONESTY_LINE)}</p>${lines
       .map((line) => `<p>${escapeHtml(line)}</p>`)
       .join('')}`;
+  }
+
+  /** Fly to a claim's location and reuse the existing dossier-open path. */
+  function selectTickerRow(id) {
+    const row = claims.find((r) => r.id === id);
+    if (!row) return;
+    if (viewer) {
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(row.lon, row.lat, 20000),
+        duration: 2.0,
+      });
+    }
+    openDossier(id);
+  }
+
+  /** Render up to `TICKER_LIMIT` claims, newest first. `animateNew` gates
+   * the slide-in entrance for rows that were not present at the last
+   * render (skipped outright under prefers-reduced-motion): opening the
+   * plate never animates, a genuinely new arrival while it is already open
+   * does. */
+  function renderTicker({ animateNew } = {}) {
+    if (!tickerList) return;
+    const sorted = [...claims].sort(
+      (a, b) => (Date.parse(b.fetchedAt) || 0) - (Date.parse(a.fetchedAt) || 0),
+    );
+    const top = sorted.slice(0, TICKER_LIMIT);
+    const reduceMotion = prefersReducedMotion();
+    tickerList.replaceChildren();
+    for (const row of top) {
+      const isNew = Boolean(animateNew) && !tickerSeenIds.has(row.id);
+      const item = document.createElement('li');
+      item.className =
+        'uap-claims-ticker-row' +
+        (isNew && !reduceMotion ? ' uap-ticker-row-enter' : '');
+      item.tabIndex = 0;
+      item.setAttribute('role', 'button');
+
+      const place = document.createElement('span');
+      place.className = 'uap-claims-ticker-place';
+      place.textContent = row.place;
+
+      const shape = document.createElement('span');
+      shape.className = 'uap-claims-ticker-shape';
+      shape.textContent = formatShape(row.shape);
+
+      const age = document.createElement('span');
+      age.className = 'uap-claims-ticker-age';
+      age.textContent = formatRelativeAge(row.fetchedAt);
+
+      const src = document.createElement('span');
+      src.className = 'uap-claims-ticker-source';
+      src.textContent = formatSource(row.source);
+
+      item.append(place, shape, age, src);
+      const select = () => selectTickerRow(row.id);
+      item.addEventListener('click', select);
+      item.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          select();
+        }
+      });
+      tickerList.appendChild(item);
+    }
+    tickerSeenIds = new Set(top.map((row) => row.id));
+    const hasRows = top.length > 0;
+    tickerList.hidden = !hasRows;
+    if (tickerEmpty) tickerEmpty.hidden = hasRows;
+  }
+
+  /** Open the stream ticker plate, rendering it fresh (never animated: a
+   * fresh open is not a new arrival). */
+  function openTicker() {
+    if (!tickerPlate) return;
+    tickerPlate.hidden = false;
+    streamToggle?.setAttribute('aria-pressed', 'true');
+    renderTicker({ animateNew: false });
+    tickerPlate.querySelector('.uap-claims-ticker-close')?.focus();
+  }
+
+  /** Close the stream ticker plate. Idempotent: safe whether or not it is
+   * currently open. */
+  function closeTicker() {
+    if (!tickerPlate) return;
+    tickerPlate.hidden = true;
+    streamToggle?.setAttribute('aria-pressed', 'false');
+  }
+
+  function toggleTicker() {
+    if (!tickerPlate) return;
+    if (tickerPlate.hidden) openTicker();
+    else closeTicker();
   }
 
   const layer = {
@@ -170,7 +387,55 @@ export function createLiveClaimsLayer({
       statusPlate = document.createElement('div');
       statusPlate.className = 'uap-legend claims';
       statusPlate.hidden = true;
+      statusText = document.createElement('div');
+      statusText.className = 'uap-legend-text';
+      streamToggle = document.createElement('button');
+      streamToggle.type = 'button';
+      streamToggle.className = 'uap-claims-stream-toggle';
+      streamToggle.textContent = 'Stream';
+      streamToggle.setAttribute('aria-pressed', 'false');
+      streamToggle.setAttribute('aria-label', 'Toggle the live claims stream');
+      streamToggle.addEventListener('click', () => toggleTicker());
+      // The toggle leads (mirrors the dossier's own close button, the
+      // first thing in its markup too) and stays pinned to the plate's
+      // left edge at a fixed width, ahead of the honesty text, which
+      // wraps around whatever room is left. That keeps the toggle clear
+      // of the bottom-centre voice dock at narrow viewports, where the
+      // dock sits close to the left edge and a trailing button would
+      // land underneath it.
+      statusPlate.append(streamToggle, statusText);
       host.appendChild(statusPlate);
+      // The stream ticker: the register's own right-edge plate, newest
+      // claims first, built once here (like the dossier and status plate
+      // above) and torn down only in destroy() - never left orphaned by a
+      // disable().
+      tickerPlate = document.createElement('aside');
+      tickerPlate.className = 'uap-claims-ticker';
+      tickerPlate.hidden = true;
+      tickerPlate.setAttribute('aria-label', 'Live claims stream');
+      const tickerHead = document.createElement('div');
+      tickerHead.className = 'uap-claims-ticker-head';
+      const tickerTitle = document.createElement('h2');
+      tickerTitle.textContent = 'Stream';
+      const tickerClose = document.createElement('button');
+      tickerClose.type = 'button';
+      tickerClose.className = 'uap-claims-ticker-close';
+      tickerClose.textContent = 'Close';
+      tickerClose.setAttribute('aria-label', 'Close stream');
+      tickerClose.addEventListener('click', () => closeTicker());
+      tickerHead.append(tickerTitle, tickerClose);
+      tickerList = document.createElement('ul');
+      tickerList.className = 'uap-claims-ticker-rows';
+      tickerEmpty = document.createElement('p');
+      tickerEmpty.className = 'uap-claims-ticker-empty';
+      tickerEmpty.textContent = 'No claims in the last 48 hours.';
+      tickerEmpty.hidden = true;
+      tickerPlate.append(tickerHead, tickerList, tickerEmpty);
+      tickerPlate.addEventListener(
+        'keydown',
+        (e) => e.key === 'Escape' && closeTicker(),
+      );
+      host.appendChild(tickerPlate);
       console.log('[Data:LiveClaims] Initialized');
     },
 
@@ -202,6 +467,7 @@ export function createLiveClaimsLayer({
       picking?.unregisterPickOwner?.(LIVE_CLAIMS_LAYER_ID);
       if (dossier) dossier.hidden = true;
       if (statusPlate) statusPlate.hidden = true;
+      closeTicker();
       clickHandler?.destroy();
       clickHandler = null;
       renderer?.apply({ visible: false });
@@ -221,6 +487,12 @@ export function createLiveClaimsLayer({
         unplaced = next.unplaced;
         renderer.setRows(claims);
         refreshStatus();
+        // The ticker rides the layer's own 2-minute refresh, never a
+        // separate poll. It only re-renders while actually open: a fresh
+        // open always renders from the current claims anyway, so there is
+        // nothing to keep in sync while closed.
+        if (tickerPlate && !tickerPlate.hidden)
+          renderTicker({ animateNew: true });
         loaded = true;
         lastUpdate = Date.now();
         lastError = null;
@@ -254,13 +526,21 @@ export function createLiveClaimsLayer({
       onOtherDossierOpen = null;
       dossier?.remove();
       statusPlate?.remove();
+      tickerPlate?.remove();
       renderer?.destroy();
       renderer = null;
       dossier = null;
       statusPlate = null;
+      statusText = null;
+      streamToggle = null;
+      tickerPlate = null;
+      tickerList = null;
+      tickerEmpty = null;
       viewer = null;
       claims = [];
       loaded = false;
+      anomalyRowsPromise = null;
+      tickerSeenIds = new Set();
     },
 
     getAnalystRecords(maxCount = 2000) {

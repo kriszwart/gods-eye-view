@@ -3,10 +3,18 @@
  * Browser proof of the live claims register acceptance: registration,
  * fixture claims rendering as pulsing ion points, dossier open with the
  * place/shape/time/source fields, the honesty line verbatim, a link-out to
- * the original post, Escape close, cross-register dossier exclusivity, and
- * share-link restore via token 5 - all against a THROWAWAY server this
- * script starts itself with GEV_CLAIMS_FIXTURE=1 on a spare port (never the
- * controller-managed :4173, which has no fixture env).
+ * the original post, Escape close, cross-register dossier exclusivity, the
+ * nearby-cases block, the stream ticker, and share-link restore via token 5
+ * - all against a THROWAWAY server this script starts itself with
+ * GEV_CLAIMS_FIXTURE=1 on a spare port (never the controller-managed :4173,
+ * which has no fixture env).
+ *
+ * The nearby-cases expectation is computed here, in Node, from the same
+ * bundled public/anomalies/anomalies.v1.json the browser fetches (reusing
+ * the portable nearby.js and anomalies/records.js modules), rather than
+ * pinned as a literal number: the fixture claims' coordinates are fixed,
+ * but the anomalies dataset grows across build phases, so a hardcoded
+ * count would go stale.
  *
  * Also proves the keyless path against a SECOND throwaway server with no
  * fixture and no DEEPSEEK_API_KEY: the register stays empty and shows
@@ -17,8 +25,14 @@
 import puppeteer from 'puppeteer';
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import {
+  findNearbyCases,
+  NEARBY_RADIUS_KM,
+} from '../src/layers/liveClaims/nearby.js';
+import { normalizeAnomalySnapshot } from '../src/layers/anomalies/records.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
@@ -226,6 +240,15 @@ try {
         { timeout: 8000 },
       )
       .catch(() => {});
+    // The nearby-cases block attaches asynchronously (a lazy fetch of the
+    // bundled anomalies dataset), after the dossier itself opens.
+    await page
+      .waitForFunction(
+        () =>
+          document.querySelector('.uap-dossier.claims .uap-nearby') !== null,
+        { timeout: 8000 },
+      )
+      .catch(() => {});
     await page.screenshot({ path: resolve(SHOT_DIR, 'dossier-1440.png') });
     dossier = await page.evaluate((honesty) => {
       const d = document.querySelector('.uap-dossier.claims');
@@ -235,6 +258,15 @@ try {
       const dl = d ? d.querySelector('dl')?.textContent || '' : '';
       const hasHonesty = text.includes(honesty);
       const href = link ? link.href : null;
+      const nearbyCountText =
+        d?.querySelector('.uap-nearby-count')?.textContent ?? null;
+      const nearbyEmptyText =
+        d?.querySelector('.uap-nearby-empty')?.textContent ?? null;
+      const nearbyRowsText = d
+        ? [...d.querySelectorAll('.uap-nearby-row')].map(
+            (row) => row.textContent,
+          )
+        : [];
       d?.dispatchEvent(
         new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
       );
@@ -244,6 +276,9 @@ try {
         href,
         dl,
         closed: d ? d.hidden : null,
+        nearbyCountText,
+        nearbyEmptyText,
+        nearbyRowsText,
       };
     }, strings.honesty);
   }
@@ -268,10 +303,214 @@ try {
   );
   check('Escape closes the dossier', dossier.closed === true);
 
+  // Nearby historical cases: the truth is computed here, independently,
+  // from the same bundled dataset the dossier itself lazily fetches, so
+  // this check keeps working as the anomalies dataset grows (see the file
+  // header comment).
+  const anomaliesRaw = JSON.parse(
+    await readFile(
+      resolve(REPO_ROOT, 'public/anomalies/anomalies.v1.json'),
+      'utf8',
+    ),
+  );
+  const anomalyRows = normalizeAnomalySnapshot(anomaliesRaw);
+  const nearbyTruth =
+    anomalyRows && Number.isFinite(target?.lat) && Number.isFinite(target?.lon)
+      ? findNearbyCases({ lat: target.lat, lon: target.lon }, anomalyRows)
+      : null;
+  check(
+    'the bundled anomalies dataset decodes, so the nearby truth is computable',
+    nearbyTruth !== null,
+    `target=${JSON.stringify(target)}`,
+  );
+  if (nearbyTruth && nearbyTruth.count === 0) {
+    check(
+      'nearby block shows the honest zero-case message (computed truth, not a hardcoded number)',
+      dossier.nearbyEmptyText ===
+        `No historical cases within ${NEARBY_RADIUS_KM} km`,
+      JSON.stringify({ nearbyTruth, dossier }),
+    );
+  } else if (nearbyTruth) {
+    const expectedCountText = `${nearbyTruth.count} historical case${nearbyTruth.count === 1 ? '' : 's'} within ${NEARBY_RADIUS_KM} km`;
+    const expectedRows = nearbyTruth.top.map(
+      (c) =>
+        `${c.year ?? 'unknown'}, ${c.status ?? 'unknown'}, ${Math.round(c.distanceKm)} km`,
+    );
+    check(
+      'nearby block shows the correct case count (computed truth, not a hardcoded number)',
+      dossier.nearbyCountText === expectedCountText,
+      JSON.stringify({ expectedCountText, got: dossier.nearbyCountText }),
+    );
+    check(
+      'nearby block lists the nearest cases, nearest first, matching the computed truth',
+      JSON.stringify(dossier.nearbyRowsText) === JSON.stringify(expectedRows),
+      JSON.stringify({ expectedRows, got: dossier.nearbyRowsText }),
+    );
+  }
+
   check(
     'no page errors during the interactive pass',
     pageErrors.length === 0,
     pageErrors.join(' | '),
+  );
+
+  // --- Stream ticker: newest ~10 claims, newest first, a row click flies
+  // and opens that claim's dossier (which also closes the ticker, since
+  // both plates share the register's right-hand edge), reduced motion
+  // never animates a row in, and disabling the layer closes the ticker
+  // rather than leaving it orphaned open.
+  await page.evaluate(() =>
+    document.querySelector('.uap-claims-stream-toggle')?.click(),
+  );
+  await page
+    .waitForFunction(
+      () => {
+        const t = document.querySelector('.uap-claims-ticker');
+        return t && !t.hidden;
+      },
+      { timeout: 8000 },
+    )
+    .catch(() => {});
+  await page.screenshot({ path: resolve(SHOT_DIR, 'ticker-1440.png') });
+  const tickerOpen = await page.evaluate(() => {
+    const t = document.querySelector('.uap-claims-ticker');
+    const rows = t ? [...t.querySelectorAll('.uap-claims-ticker-row')] : [];
+    return {
+      visible: !!(t && !t.hidden),
+      count: rows.length,
+      places: rows.map(
+        (r) => r.querySelector('.uap-claims-ticker-place')?.textContent ?? '',
+      ),
+    };
+  });
+  check(
+    'stream ticker opens with fixture entries (count > 0)',
+    tickerOpen.visible && tickerOpen.count > 0,
+    JSON.stringify(tickerOpen),
+  );
+  // buildFixtureClaims() (server/providers/claims.js) already lists its
+  // ~8 fictional claims newest first by `fetchedAt`; the ticker sorts
+  // independently, so this also proves that sort is correct, not just
+  // pass-through.
+  const expectedTickerPlaceOrder = [
+    'New York City, New York, United States',
+    'London, United Kingdom',
+    'Tokyo, Japan',
+    'Sydney, Australia',
+    'Mexico City, Mexico',
+    'Open Pacific Ocean',
+    'Moscow, Russia',
+    'Open Pacific Ocean',
+  ];
+  check(
+    'stream ticker lists claims newest first by fetchedAt',
+    JSON.stringify(tickerOpen.places) ===
+      JSON.stringify(expectedTickerPlaceOrder),
+    JSON.stringify(tickerOpen.places),
+  );
+
+  const tickerRowClick = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('.uap-claims-ticker-row')];
+    const tokyoRow = rows.find((r) =>
+      r
+        .querySelector('.uap-claims-ticker-place')
+        ?.textContent?.includes('Tokyo'),
+    );
+    tokyoRow?.click();
+    return { clicked: !!tokyoRow };
+  });
+  await page
+    .waitForFunction(
+      () => {
+        const d = document.querySelector('.uap-dossier.claims');
+        return d && !d.hidden;
+      },
+      { timeout: 8000 },
+    )
+    .catch(() => {});
+  const afterTickerClick = await page.evaluate(() => {
+    const d = document.querySelector('.uap-dossier.claims');
+    const t = document.querySelector('.uap-claims-ticker');
+    return {
+      dossierOpen: !!(d && !d.hidden),
+      dossierPlace: d?.querySelector('h2')?.textContent ?? null,
+      tickerHiddenAfterClick: t ? t.hidden : null,
+    };
+  });
+  check(
+    'a stream ticker row click flies the camera and opens that claim' +
+      "'s dossier",
+    tickerRowClick.clicked &&
+      afterTickerClick.dossierOpen &&
+      afterTickerClick.dossierPlace === 'Tokyo, Japan',
+    JSON.stringify({ tickerRowClick, afterTickerClick }),
+  );
+  check(
+    'opening a dossier from the ticker closes the ticker (the two plates never overlap)',
+    afterTickerClick.tickerHiddenAfterClick === true,
+    JSON.stringify(afterTickerClick),
+  );
+
+  // Reduced motion: close the dossier, emulate the preference, reopen the
+  // ticker, and confirm no row ever carries the slide-in animation class.
+  await page.evaluate(() => {
+    const d = document.querySelector('.uap-dossier.claims');
+    d?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+  });
+  await page.emulateMediaFeatures([
+    { name: 'prefers-reduced-motion', value: 'reduce' },
+  ]);
+  await page.evaluate(() =>
+    document.querySelector('.uap-claims-stream-toggle')?.click(),
+  );
+  await page
+    .waitForFunction(
+      () => {
+        const t = document.querySelector('.uap-claims-ticker');
+        return t && !t.hidden;
+      },
+      { timeout: 8000 },
+    )
+    .catch(() => {});
+  const reducedMotionTicker = await page.evaluate(() => {
+    const t = document.querySelector('.uap-claims-ticker');
+    const rows = t ? [...t.querySelectorAll('.uap-claims-ticker-row')] : [];
+    return {
+      visible: !!(t && !t.hidden),
+      count: rows.length,
+      anyAnimated: rows.some((r) =>
+        r.classList.contains('uap-ticker-row-enter'),
+      ),
+    };
+  });
+  check(
+    'stream ticker never carries the slide-in animation class under prefers-reduced-motion',
+    reducedMotionTicker.visible &&
+      reducedMotionTicker.count > 0 &&
+      reducedMotionTicker.anyAnimated === false,
+    JSON.stringify(reducedMotionTicker),
+  );
+  await page.emulateMediaFeatures([
+    { name: 'prefers-reduced-motion', value: 'no-preference' },
+  ]);
+
+  // Disable: the ticker plate must close, not stay open with a dead
+  // channel behind it (the Spotter plate orphan lesson).
+  await page.evaluate(() =>
+    window.__godsEyeView.dataManager.setEnabled('live-claims', false, {
+      origin: 'user',
+    }),
+  );
+  const afterDisable = await page.evaluate(() => {
+    const t = document.querySelector('.uap-claims-ticker');
+    return { stillInDom: !!t, hidden: t ? t.hidden : null };
+  });
+  check(
+    'disabling the layer closes the stream ticker rather than orphaning it open',
+    afterDisable.stillInDom === true && afterDisable.hidden === true,
+    JSON.stringify(afterDisable),
   );
 
   // Mobile screenshots: fresh page at 390x844, layer already restorable via

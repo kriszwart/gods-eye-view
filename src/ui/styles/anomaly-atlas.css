@@ -831,14 +831,217 @@
   font-size: 12px;
 }
 
+/* Nearby historical cases: a count and up to three clickable rows from the
+   sky register within 50 km of the claim (see nearby.js). Never a
+   credibility claim, just a count and a distance. */
+.anomaly-atlas .uap-dossier.claims .uap-nearby {
+  margin: 12px 0;
+}
+.anomaly-atlas .uap-dossier.claims .uap-nearby-count,
+.anomaly-atlas .uap-dossier.claims .uap-nearby-empty {
+  margin: 0 0 8px;
+  color: var(--uap-dim, #7c8195);
+  font-size: 12px;
+}
+.anomaly-atlas .uap-dossier.claims .uap-nearby-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.anomaly-atlas .uap-dossier.claims .uap-nearby-row {
+  cursor: pointer;
+  color: var(--uap-ink);
+  font: 400 12px var(--uap-mono);
+  padding: 3px 0;
+}
+.anomaly-atlas .uap-dossier.claims .uap-nearby-row:hover,
+.anomaly-atlas .uap-dossier.claims .uap-nearby-row:focus-visible {
+  color: var(--uap-ion);
+}
+.anomaly-atlas .uap-dossier.claims .uap-nearby-row:focus-visible {
+  outline: 2px solid var(--uap-ion);
+  outline-offset: 2px;
+}
+
 /* Live claims status plate: the register's honesty line plus an honest
-   count or the keyless message, always visible while the layer is on.
-   Bottom-left, clear of the dossier (top-right), the sky/ancient legend
-   (top-left) and the Spotter plate (bottom-right). */
+   count or the keyless message, always visible while the layer is on, and
+   the Stream toggle that opens the right-edge ticker. Bottom-left, clear
+   of the dossier (top-right), the sky/ancient legend (top-left) and the
+   Spotter plate (bottom-right). A bounded max-width makes the text wrap
+   rather than grow: without it the row ran straight into the bottom-centre
+   voice dock (the mic control and its visualizer), which sits at the same
+   height. The toggle rides the bottom of that wrapped text column rather
+   than sitting on its own row, so it costs no extra height on a small
+   screen, where the corner is already crowded with the HUD's own MGRS and
+   credit readouts. */
 .anomaly-atlas .uap-legend.claims {
   top: auto;
   bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  max-width: min(280px, calc(100vw - 48px));
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+.anomaly-atlas .uap-legend.claims .uap-legend-text {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .anomaly-atlas .uap-legend.claims p:first-child {
   color: var(--uap-ink);
+}
+.anomaly-atlas .uap-claims-stream-toggle {
+  flex: none;
+  background: none;
+  border: 1px solid var(--uap-hair-strong);
+  color: var(--uap-ink);
+  font: 400 11px var(--uap-mono);
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.anomaly-atlas .uap-claims-stream-toggle:hover,
+.anomaly-atlas .uap-claims-stream-toggle:focus-visible {
+  border-color: var(--uap-ion);
+}
+.anomaly-atlas .uap-claims-stream-toggle:focus-visible {
+  outline: 2px solid var(--uap-ink);
+  outline-offset: 2px;
+}
+.anomaly-atlas .uap-claims-stream-toggle[aria-pressed='true'] {
+  color: var(--uap-ion);
+  border-color: var(--uap-ion);
+}
+
+/* Stream ticker: the newest ~10 live claims, right edge, vertically
+   between the dossier (top-right) and the Spotter plate (bottom-right).
+   Opening a claim's dossier (a point click or a ticker row) closes this,
+   so the two never fight for the same edge. */
+.anomaly-atlas .uap-claims-ticker {
+  position: absolute;
+  right: calc(24px + env(safe-area-inset-right, 0px));
+  top: 50%;
+  transform: translateY(-50%);
+  width: min(300px, calc(100vw - 48px));
+  max-height: min(56vh, 460px);
+  overflow-y: auto;
+  padding: 16px 18px;
+  background: var(--glass-bg);
+  color: var(--uap-ink);
+  font: 400 13px/1.5 var(--uap-sans);
+  z-index: 140;
+}
+.anomaly-atlas .uap-claims-ticker::before,
+.anomaly-atlas .uap-claims-ticker::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: solid var(--uap-hair-strong);
+}
+.anomaly-atlas .uap-claims-ticker::before {
+  top: 0;
+  left: 0;
+  border-width: 1px 0 0 1px;
+}
+.anomaly-atlas .uap-claims-ticker::after {
+  bottom: 0;
+  right: 0;
+  border-width: 0 1px 1px 0;
+}
+.anomaly-atlas .uap-claims-ticker-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+}
+.anomaly-atlas .uap-claims-ticker-head h2 {
+  margin: 0;
+  font: 400 15px/1.2 var(--uap-mono);
+  letter-spacing: -0.01em;
+}
+.anomaly-atlas .uap-claims-ticker-close {
+  background: none;
+  border: 1px solid var(--uap-hair, rgba(217, 220, 230, 0.16));
+  color: var(--uap-ink);
+  font: 400 11px var(--uap-mono);
+  padding: 4px 9px;
+  cursor: pointer;
+}
+.anomaly-atlas .uap-claims-ticker-close:hover,
+.anomaly-atlas .uap-claims-ticker-close:focus-visible {
+  border-color: var(--uap-hair-strong);
+}
+.anomaly-atlas .uap-claims-ticker-close:focus-visible {
+  outline: 2px solid var(--uap-ink);
+  outline-offset: 2px;
+}
+.anomaly-atlas .uap-claims-ticker-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.anomaly-atlas .uap-claims-ticker-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--uap-hair, rgba(217, 220, 230, 0.16));
+  cursor: pointer;
+}
+.anomaly-atlas .uap-claims-ticker-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.anomaly-atlas .uap-claims-ticker-row:hover,
+.anomaly-atlas .uap-claims-ticker-row:focus-visible {
+  outline: none;
+  color: var(--uap-ion);
+}
+.anomaly-atlas .uap-claims-ticker-place {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.anomaly-atlas .uap-claims-ticker-shape {
+  color: var(--uap-dim);
+  font-size: 11px;
+  text-transform: lowercase;
+}
+.anomaly-atlas .uap-claims-ticker-age,
+.anomaly-atlas .uap-claims-ticker-source {
+  color: var(--uap-dim);
+  font: 400 11px var(--uap-mono);
+  white-space: nowrap;
+  text-align: right;
+}
+.anomaly-atlas .uap-claims-ticker-empty {
+  margin: 0;
+  color: var(--uap-dim);
+}
+/* Newest-arrival entrance while the ticker is already open. Never applied
+   on a fresh open (that is not an "arrival"), and skipped entirely under
+   prefers-reduced-motion by the layer's own JS guard; this media query is
+   a second line of defence in case a class slips through. */
+.anomaly-atlas .uap-claims-ticker-row.uap-ticker-row-enter {
+  animation: uap-ticker-row-in 420ms ease-out;
+}
+@keyframes uap-ticker-row-in {
+  from {
+    transform: translateX(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .anomaly-atlas .uap-claims-ticker-row.uap-ticker-row-enter {
+    animation: none;
+  }
 }

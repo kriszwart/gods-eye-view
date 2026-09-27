@@ -25,6 +25,7 @@ import { createApplicationFirms } from './layers/firms.js';
 import { createApplicationEarthquakes } from './layers/earthquakes.js';
 import { createApplicationAnomalies } from './layers/anomalies.js';
 import { createApplicationAncientSites } from './layers/ancientSites.js';
+import { createApplicationLiveClaims } from './layers/liveClaims.js';
 import { createApplicationFirePerimeters } from './layers/perimeters.js';
 import { createApplicationCables } from './layers/submarineCables.js';
 import { createInfrastructureLayers } from '../data/infrastructure.js';
@@ -148,6 +149,7 @@ export function createApplicationCatalog({
         createApplicationEarthquakes({ source: sources.earthquakes }),
         createApplicationAnomalies(),
         createApplicationAncientSites(),
+        createApplicationLiveClaims(),
         createApplicationFirePerimeters({
           source: sources['fire-perimeters'],
         }),

@@ -881,5 +881,13 @@
   "src/layers/ancientSites/glyphMap.test.mjs",
   "scripts/qa-ancient-sites.mjs",
   "src/app/layers/ancientSites.js",
-  "scripts/qa-spotter.mjs"
+  "scripts/qa-spotter.mjs",
+  "src/layers/liveClaims/model.js",
+  "src/layers/liveClaims/records.js",
+  "src/layers/liveClaims/source.js",
+  "src/layers/liveClaims/records.test.mjs",
+  "src/layers/liveClaims/rendering.js",
+  "src/layers/liveClaims/index.js",
+  "src/app/layers/liveClaims.js",
+  "scripts/qa-claims.mjs"
 ]

@@ -919,6 +919,18 @@
     ],
     "external": ["cesium"]
   },
+  "live-claims": {
+    "exports": ["./layers/live-claims"],
+    "modules": [
+      "src/layers/liveClaims/index.js",
+      "src/layers/liveClaims/model.js",
+      "src/layers/liveClaims/records.js",
+      "src/layers/liveClaims/source.js",
+      "src/layers/liveClaims/rendering.js",
+      "src/sources/safeUrl.js"
+    ],
+    "external": ["cesium"]
+  },
   "recent-imagery": {
     "exports": ["./layers/recent-imagery"],
     "modules": [
@@ -1363,6 +1375,12 @@
       "src/layers/ancientSites/tmaLocal.js",
       "src/layers/ancientSites/eras.js",
       "src/layers/ancientSites/glyphMap.js",
+      "src/app/layers/liveClaims.js",
+      "src/layers/liveClaims/index.js",
+      "src/layers/liveClaims/model.js",
+      "src/layers/liveClaims/records.js",
+      "src/layers/liveClaims/source.js",
+      "src/layers/liveClaims/rendering.js",
       "src/app/layers/firms.js",
       "src/app/layers/flights.js",
       "src/app/layers/militaryAwareness.js",
@@ -2100,6 +2118,12 @@
       "src/layers/ancientSites/tmaLocal.js",
       "src/layers/ancientSites/eras.js",
       "src/layers/ancientSites/glyphMap.js",
+      "src/app/layers/liveClaims.js",
+      "src/layers/liveClaims/index.js",
+      "src/layers/liveClaims/model.js",
+      "src/layers/liveClaims/records.js",
+      "src/layers/liveClaims/source.js",
+      "src/layers/liveClaims/rendering.js",
       "src/app/layers/firms.js",
       "src/app/layers/flights.js",
       "src/app/layers/militaryAwareness.js",
@@ -2787,6 +2811,15 @@
     "modules": [
       "src/layers/ancientSites/records.js",
       "src/layers/ancientSites/source.js"
+    ],
+    "external": []
+  },
+  "live-claims-source": {
+    "exports": ["./layers/live-claims/source"],
+    "modules": [
+      "src/layers/liveClaims/records.js",
+      "src/layers/liveClaims/source.js",
+      "src/sources/safeUrl.js"
     ],
     "external": []
   },

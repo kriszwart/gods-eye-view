@@ -816,3 +816,29 @@
   color: var(--uap-dim);
   font-size: 11px;
 }
+
+/* Ion register: the live claims dossier variant. The source tag reads ion
+   here instead of the sky register's status magenta, and the honesty line
+   gets its own quiet rule, mirroring the ancient register's .uap-debated. */
+.anomaly-atlas .uap-dossier.claims .uap-code {
+  color: var(--uap-ion);
+}
+.anomaly-atlas .uap-dossier.claims .uap-honesty {
+  border-left: 2px solid rgba(63, 224, 255, 0.6);
+  padding-left: 8px;
+  margin: 12px 0;
+  color: var(--uap-dim, #7c8195);
+  font-size: 12px;
+}
+
+/* Live claims status plate: the register's honesty line plus an honest
+   count or the keyless message, always visible while the layer is on.
+   Bottom-left, clear of the dossier (top-right), the sky/ancient legend
+   (top-left) and the Spotter plate (bottom-right). */
+.anomaly-atlas .uap-legend.claims {
+  top: auto;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+}
+.anomaly-atlas .uap-legend.claims p:first-child {
+  color: var(--uap-ink);
+}

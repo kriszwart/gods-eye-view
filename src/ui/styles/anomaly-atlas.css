@@ -65,6 +65,136 @@
    palette values from DESIGN_SYSTEM.md belong behind an app-level theme
    selector, if one is ever added, not a prefers-color-scheme query. */
 
+/* Boot sequence: the loading screen as a miniature corona chronometer.
+   Owned here in full (structure, lifecycle and all) rather than split with
+   a stock-GEV file: every visual choice below is Phenomena's own, and the
+   app never runs undecorated, so there is no separate "stock" rule set to
+   keep in step. The markup lives in src/ui/templates/hud-loading.html; the
+   #loading-screen id, the .loader-status child and the JS that adds/removes
+   ".hidden" (src/standalone/application.js, src/app/startupChrome.js) are
+   unchanged by this file. */
+.anomaly-atlas #loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--uap-void);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    opacity 0.8s ease,
+    visibility 0.8s ease;
+}
+.anomaly-atlas #loading-screen.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.anomaly-atlas .loader-content {
+  text-align: center;
+}
+.anomaly-atlas .loader-badge {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  margin: 0 auto 24px;
+}
+.anomaly-atlas .loader-ring {
+  position: absolute;
+  inset: 0;
+}
+.anomaly-atlas .loader-ring-track {
+  fill: none;
+  stroke: var(--uap-hair-strong);
+  stroke-width: 1;
+}
+.anomaly-atlas .loader-ring-fill {
+  fill: none;
+  stroke: url(#loader-ring-gradient);
+  stroke-width: 2;
+  /* r=70: circumference 2*pi*70. */
+  stroke-dasharray: 439.82;
+  transform-origin: 50% 50%;
+  transform: rotate(-90deg);
+}
+.anomaly-atlas .loader-ring-stop-a {
+  /* Gold, the deep-time register's accent (DESIGN_SYSTEM.md); used as a
+     literal value here, matching this file's own convention of inlining
+     #d8b36a elsewhere rather than a --uap-gold token that nothing else needs. */
+  stop-color: #d8b36a;
+}
+.anomaly-atlas .loader-ring-stop-b {
+  stop-color: var(--uap-ion);
+}
+/* Indeterminate sweep: before the boot exposes its first known stage, a
+   short arc turns steadily rather than claiming a progress it does not
+   have yet. Real progress (below) takes over the moment src/ui/loaderStage.js
+   reports one. */
+.anomaly-atlas #loading-screen:not(.is-determinate) .loader-ring-fill {
+  stroke-dashoffset: 320;
+  animation: uap-boot-sweep 1.6s linear infinite;
+}
+@keyframes uap-boot-sweep {
+  to {
+    transform: rotate(270deg);
+  }
+}
+/* Determinate fill: reads the stage src/ui/loaderStage.js last reported. */
+.anomaly-atlas #loading-screen.is-determinate .loader-ring-fill {
+  stroke-dashoffset: calc(
+    439.82 * (1 - (var(--uap-boot-stage, 0) / var(--uap-boot-total, 1)))
+  );
+  transition: stroke-dashoffset 0.5s ease;
+}
+.anomaly-atlas .loader-logo {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 84px;
+  height: auto;
+  filter: drop-shadow(0 0 20px rgba(63, 224, 255, 0.32));
+}
+.anomaly-atlas .loader-content h2 {
+  font: 500 20px/1.2 var(--uap-mono);
+  letter-spacing: 8px;
+  color: var(--uap-ink);
+  margin: 0 0 8px;
+}
+.anomaly-atlas .loader-tagline {
+  margin: 0 0 16px;
+  font: 400 12px var(--uap-sans);
+  letter-spacing: 1px;
+  color: var(--uap-dim);
+}
+.anomaly-atlas .loader-hairline {
+  width: 140px;
+  height: 1px;
+  margin: 0 auto 16px;
+  background: var(--uap-spectrum);
+  opacity: 0.55;
+}
+.anomaly-atlas .loader-status {
+  margin: 0;
+  font: 400 11px var(--uap-mono);
+  letter-spacing: 2px;
+  /* --uap-dim (solid #7c8195), not the lower-opacity --text-dim token: at
+     11px this line needs AA (4.5:1) against the void background, which
+     --text-dim's 36%-opacity ink falls well short of. */
+  color: var(--uap-dim);
+}
+@media (prefers-reduced-motion: reduce) {
+  /* No sweep and no tween: the ring still shows a static, correct read-out
+     (the fixed arc pre-boot, the real stage fraction after), it just never
+     moves on its own. The status line keeps updating regardless; that is
+     plain text, not animation. */
+  .anomaly-atlas #loading-screen:not(.is-determinate) .loader-ring-fill {
+    animation: none;
+  }
+  .anomaly-atlas #loading-screen.is-determinate .loader-ring-fill {
+    transition: none;
+  }
+}
+
 /* Hairline plates with registration corners instead of rounded glass cards. */
 .anomaly-atlas .uap-dossier {
   position: absolute;

@@ -14,6 +14,12 @@ import {
   governorRequestRender,
 } from '../renderGovernor.js';
 import { describeError } from './errors.js';
+import { setLoaderStage } from '../ui/loaderStage.js';
+
+// The boot sequence's own known stages, in the order this module reaches
+// them; the ring in src/ui/styles/anomaly-atlas.css fills against this total.
+// src/app/controls.js reports the final stage once the camera settles.
+const BOOT_STAGE_TOTAL = 4;
 
 /** Construct the application globe using the caller's local configuration. */
 export async function createApplicationScene({
@@ -41,7 +47,12 @@ export async function createApplicationScene({
       else window.__GOOGLE_MAPS_API_KEY__ = previousKey;
     });
   }
-  loaderStatus.textContent = 'Configuring viewer...';
+  setLoaderStage(
+    loaderStatus,
+    'Calibrating the viewer...',
+    1,
+    BOOT_STAGE_TOTAL,
+  );
   // Provider attribution stays visible, including clean-view and recording.
   const creditContainer = document.createElement('div');
   creditContainer.id = 'cesium-credits';
@@ -58,10 +69,14 @@ export async function createApplicationScene({
   defer(installTrackpadPinchZoom(viewer));
   registerDataCredits(viewer, credits);
   configureCreditKeyboardAccess(document);
-  loaderStatus.textContent =
+  setLoaderStage(
+    loaderStatus,
     googleApiKey || cesiumToken
       ? 'Loading Google 3D Tiles...'
-      : 'Loading the keyless globe...';
+      : 'Loading the keyless globe...',
+    2,
+    BOOT_STAGE_TOTAL,
+  );
   const photoreal = await loadPhotorealisticTileset(Cesium, {
     googleApiKey,
     cesiumToken,
@@ -88,12 +103,22 @@ export async function createApplicationScene({
         tileError,
       );
       const tileErrorDetail = describeError(tileError);
-      loaderStatus.textContent = `Google 3D Tiles unavailable (${tileErrorDetail}). Loading the keyless globe...`;
+      setLoaderStage(
+        loaderStatus,
+        `Google 3D Tiles unavailable (${tileErrorDetail}). Loading the keyless globe...`,
+        2,
+        BOOT_STAGE_TOTAL,
+      );
     }
     viewer.scene.globe.show = true;
   }
 
-  loaderStatus.textContent = 'Initializing systems...';
+  setLoaderStage(
+    loaderStatus,
+    'Bringing systems online...',
+    3,
+    BOOT_STAGE_TOTAL,
+  );
 
   const mapStackController = new MapController(viewer, {
     requestRender: governorRequestRender,

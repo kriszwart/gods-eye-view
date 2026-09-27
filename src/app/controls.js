@@ -2,6 +2,10 @@ import { catalogControlServices } from './catalog.js';
 import { StyleManager } from '../ui/composition.js';
 import { flyToAustin } from '../camera.js';
 import { initCockpitCloudEffects } from '../cockpitCloudEffects.js';
+import { setLoaderStage } from '../ui/loaderStage.js';
+
+// The final stage of the boot sequence's own count (src/app/scene.js sets 1-3).
+const BOOT_STAGE_TOTAL = 4;
 
 /** Construct the existing controls and camera presentation. */
 export function createApplicationControls({
@@ -41,10 +45,15 @@ export function createApplicationControls({
 
   // If no share link state, do default fly-to Austin
   if (!styleManager.hasShareState) {
-    loaderStatus.textContent = 'Flying to Austin, TX...';
+    setLoaderStage(
+      loaderStatus,
+      'Flying to Austin, Texas...',
+      4,
+      BOOT_STAGE_TOTAL,
+    );
     defer(flyToAustin(viewer));
   } else {
-    loaderStatus.textContent = 'Restoring shared view...';
+    setLoaderStage(loaderStatus, 'Restoring your view...', 4, BOOT_STAGE_TOTAL);
   }
 
   return { styleManager, weatherEffects, cockpitCloudEffects };

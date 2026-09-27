@@ -1801,6 +1801,7 @@
       "src/styles/void.js",
       "src/ui/applicationShell.js",
       "src/ui/cyberSonarControls.js",
+      "src/ui/loaderStage.js",
       "src/ui/locationNavigation.js",
       "src/ui/cockpitCoordinator.js",
       "src/ui/cameraOrientationControls.js",

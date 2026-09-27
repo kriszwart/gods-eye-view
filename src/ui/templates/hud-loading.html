@@ -4,8 +4,22 @@
   <!-- Loading screen -->
   <div id="loading-screen">
     <div class="loader-content">
-      <span class="loader-logo brand-logo" data-logo-gaze data-logo-src="/logo.svg" aria-hidden="true"><img src="/logo.svg" alt="" /></span>
+      <div class="loader-badge">
+        <svg class="loader-ring" viewBox="0 0 160 160" width="160" height="160" aria-hidden="true" focusable="false">
+          <defs>
+            <linearGradient id="loader-ring-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop class="loader-ring-stop-a" offset="0%" />
+              <stop class="loader-ring-stop-b" offset="100%" />
+            </linearGradient>
+          </defs>
+          <circle class="loader-ring-track" cx="80" cy="80" r="70" />
+          <circle class="loader-ring-fill" cx="80" cy="80" r="70" />
+        </svg>
+        <span class="loader-logo brand-logo" data-logo-gaze data-logo-src="/logo.svg" aria-hidden="true"><img src="/logo.svg" alt="" /></span>
+      </div>
       <h2>Phenom<span class="title-accent">ena</span></h2>
-      <p class="loader-status">Initializing photorealistic world...</p>
+      <p class="loader-tagline">The unexplained, mapped</p>
+      <div class="loader-hairline" aria-hidden="true"></div>
+      <p class="loader-status" role="status" aria-live="polite">Waking the atlas...</p>
     </div>
   </div>

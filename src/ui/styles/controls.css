@@ -279,77 +279,10 @@
   opacity: 1;
 }
 
-/* ── Loading Screen ───────────────────────────── */
-#loading-screen {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  background: var(--bg-dark);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    opacity 0.8s ease,
-    visibility 0.8s ease;
-}
-
-#loading-screen.hidden {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
-
-.loader-content {
-  text-align: center;
-}
-
-.loader-logo {
-  display: block;
-  width: 128px;
-  height: auto;
-  margin: 0 auto 24px;
-  filter: drop-shadow(0 0 24px rgba(0, 246, 255, 0.42));
-  animation: logo-pulse 2s ease-in-out infinite;
-}
-
-@keyframes logo-pulse {
-  0%,
-  100% {
-    opacity: 0.72;
-    transform: scale(0.98);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.02);
-  }
-}
-
-.loader-content h2 {
-  font-family: var(--font-mono);
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: 6px;
-  color: var(--text-primary);
-  margin-bottom: 12px;
-}
-
-.loader-status {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 2px;
-  color: var(--text-dim);
-  animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 0.4;
-  }
-  50% {
-    opacity: 1;
-  }
-}
+/* Loading screen: owned in full by src/ui/styles/anomaly-atlas.css (the
+   Phenomena boot sequence), which this app is hardcoded into with no stock
+   GEV fallback to keep in step (see that file's `.anomaly-atlas #loading-screen`
+   rules and src/ui/loaderStage.js). */
 
 /* ── Post-Processing Toggles ─────────────────── */
 #pp-toggles {

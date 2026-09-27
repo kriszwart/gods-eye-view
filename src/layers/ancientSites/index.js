@@ -4,6 +4,9 @@ import {
   mapAnalystRecord,
   mapSweepAnalystRecord,
   createAncientOverlayEntry,
+  ANCIENT_SWEEP_OVERLAY_SOURCE_ID,
+  ANCIENT_SWEEP_LABEL_CAP,
+  createAncientSweepOverlayEntry,
 } from './model.js';
 import { createAncientRenderer } from './rendering.js';
 import { safeSourceUrl, safeImageUrl } from '../../sources/safeUrl.js';
@@ -107,6 +110,12 @@ const sweepTypeLabel = (type) => type.charAt(0).toUpperCase() + type.slice(1);
  * country, a Wikidata link and a Wikipedia link when the sweep flagged one)
  * because the sweep carries no photo, debate or era column (see the phase
  * 5b task 2 report on the omitted `bce` column).
+ *
+ * At the closest band, the sweep's view-bounded singles also carry ambient
+ * name labels (task 3, ancient-legibility) through a sibling overlay
+ * source, smaller and dimmer than the hero labels, and only while there are
+ * few enough of them on screen to read as legibility rather than clutter
+ * (`ANCIENT_SWEEP_LABEL_CAP`, see model.js and `syncSweepLabels` below).
  *
  * A third, local-only register, The Modern Antiquarian (`tmaLocal.js`), can
  * add unclustered gold points with a compact dossier and record link when
@@ -314,6 +323,59 @@ export function createAncientSitesLayer({
         describeEraBand(deepChrono.year, count, deepChrono.mode),
       );
     }
+  }
+
+  /**
+   * Ambient sweep-name labels (task 3, ancient-legibility): a quieter,
+   * secondary label lane beside the hero labels, published to the sibling
+   * `ANCIENT_SWEEP_OVERLAY_SOURCE_ID` overlay source (see model.js's own
+   * doc comment on that constant for why it is a sibling rather than the
+   * hero source itself). Shown only at the closest band (`cellDeg === 0`,
+   * the same view-bounded singles the glyph billboards already render -
+   * see rendering.js's `currentSingles`/`renderSweepSingles`) and only when
+   * there are few enough of them on screen (`ANCIENT_SWEEP_LABEL_CAP`) that
+   * names add legibility rather than clutter; any coarser band, or too many
+   * singles at the closest one, clears the source instead.
+   *
+   * Wired as the renderer's own `onSweepSinglesChange` callback (see
+   * rendering.js), so this runs on the renderer's existing throttled
+   * recompute/settle cadence - never per frame - and reads the `singles`
+   * it already clustered: no new recompute path. `singles` already comes
+   * from `clusterSweep`'s own `filter`, so the deep-time era band and the
+   * type-filter chips (composed there as one AND predicate - see
+   * rendering.js's `recomputeSweep`) narrow these labels exactly as they
+   * narrow the billboards, with no extra plumbing here.
+   *
+   * Names only, gold register, and smaller/dimmer than the hero labels so
+   * heroes stay visually primary (see model.js's
+   * `createAncientSweepOverlayEntry`).
+   * @param {number} cellDeg - The clustering grid resolution just used (0 at the closest band).
+   * @param {Array<{index:number}>} singles - The closest band's current view-bounded singles.
+   */
+  function syncSweepLabels(cellDeg, singles) {
+    if (
+      cellDeg !== 0 ||
+      !sweepAccessor ||
+      singles.length > ANCIENT_SWEEP_LABEL_CAP
+    ) {
+      overlayHost?.clearSource?.(ANCIENT_SWEEP_OVERLAY_SOURCE_ID);
+      return;
+    }
+    overlayHost?.setEntries?.(
+      ANCIENT_SWEEP_OVERLAY_SOURCE_ID,
+      singles.map(({ index }) =>
+        createAncientSweepOverlayEntry({
+          id: index,
+          position: Cesium.Cartesian3.fromDegrees(
+            sweepAccessor.lon(index),
+            sweepAccessor.lat(index),
+            0,
+          ),
+          name: sweepAccessor.name(index),
+        }),
+      ),
+      { moving: false },
+    );
   }
 
   /** Keep the deep-time dial's band layout current as the canvas resizes,
@@ -560,7 +622,10 @@ export function createAncientSitesLayer({
     init(v) {
       if (viewer) throw new Error('Ancient sites layer is already initialized');
       viewer = v;
-      renderer = createAncientRenderer(viewer, { render });
+      renderer = createAncientRenderer(viewer, {
+        render,
+        onSweepSinglesChange: syncSweepLabels,
+      });
       host = container || viewer.container;
       dossier = document.createElement('aside');
       dossier.className = 'uap-dossier ancient';
@@ -617,6 +682,10 @@ export function createAncientSitesLayer({
       breakdownPlate.setAttribute('aria-live', 'polite');
       host.appendChild(breakdownPlate);
       overlayHost?.setVisible?.(ANCIENT_LAYER_ID, false);
+      // Ambient sweep-name labels (task 3, ancient-legibility): the sibling
+      // overlay source shares the hero source's off-until-enabled lifecycle
+      // (see enable/disable/destroy below).
+      overlayHost?.setVisible?.(ANCIENT_SWEEP_OVERLAY_SOURCE_ID, false);
       console.log('[Data:AncientSites] Initialized');
     },
 
@@ -654,6 +723,7 @@ export function createAncientSitesLayer({
       syncDeepTime();
       renderer?.apply({ visible: true });
       overlayHost?.setVisible?.(ANCIENT_LAYER_ID, true);
+      overlayHost?.setVisible?.(ANCIENT_SWEEP_OVERLAY_SOURCE_ID, true);
       if (!clickHandler) {
         clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
         clickHandler.setInputAction(
@@ -688,6 +758,7 @@ export function createAncientSitesLayer({
       renderer?.apply({ visible: false });
       syncDeepTime();
       overlayHost?.setVisible?.(ANCIENT_LAYER_ID, false);
+      overlayHost?.setVisible?.(ANCIENT_SWEEP_OVERLAY_SOURCE_ID, false);
     },
 
     async update() {
@@ -725,13 +796,19 @@ export function createAncientSitesLayer({
             return false;
           renderer.setTma(tmaRows);
         }
-        // Overlay labels stay hero-only: the sweep is far too dense for the
-        // ambient-label lane, and its cluster badges already carry their own
-        // Cesium-native count text (see rendering.js). syncEraState() sets
-        // the renderer's heroes and these labels together, filtered by the
-        // deep-time dial's era band when it is engaged, or the full hero
-        // tier when it is not - exactly the set this call used to pass
-        // unconditionally before the deep-time dial existed.
+        // Hero overlay labels: syncEraState() sets the renderer's heroes and
+        // their labels together, filtered by the deep-time dial's era band
+        // when it is engaged, or the full hero tier when it is not - exactly
+        // the set this call used to pass unconditionally before the
+        // deep-time dial existed. The sweep itself is still far too dense
+        // for an unconditional ambient-label lane - its cluster badges carry
+        // their own Cesium-native count text instead (see rendering.js) -
+        // but its closest-band singles get their own, separate ambient
+        // sweep-name labels (task 3, ancient-legibility) whenever there are
+        // few enough on screen to add legibility rather than clutter: see
+        // `syncSweepLabels`, wired as the renderer's own
+        // `onSweepSinglesChange` callback above, which reacts to the
+        // renderer's own recompute rather than this load callback.
         syncEraState();
         loaded = true;
         lastUpdate = Date.now();
@@ -761,6 +838,7 @@ export function createAncientSitesLayer({
       legend?.remove();
       legend = null;
       overlayHost?.clearSource?.(ANCIENT_LAYER_ID);
+      overlayHost?.clearSource?.(ANCIENT_SWEEP_OVERLAY_SOURCE_ID);
       renderer?.destroy();
       dossier?.remove();
       hideClusterBreakdown();

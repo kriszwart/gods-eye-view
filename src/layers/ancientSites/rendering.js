@@ -273,8 +273,17 @@ function midBandSingleStyle(cellDeg) {
  * The sweep recompute is postRender-throttled and refreshed again on
  * `moveEnd` (mirroring the FIRMS layer's LOD watcher): no continuous render
  * hold, and no per-frame work while the camera is parked.
+ *
+ * `onSweepSinglesChange(cellDeg, singles)` (task 3, ancient-legibility), if
+ * supplied, fires once per actual recompute - this same throttled/settled
+ * cadence, never per frame - with exactly the `singles` just clustered
+ * above, so a caller (index.js's ambient sweep-name labels) can publish or
+ * clear overlay labels without a second scan of its own.
  */
-export function createAncientRenderer(viewer, { render } = {}) {
+export function createAncientRenderer(
+  viewer,
+  { render, onSweepSinglesChange } = {},
+) {
   const scene = viewer.scene;
   const heroPoints = scene.primitives.add(
     new Cesium.PointPrimitiveCollection({
@@ -619,6 +628,11 @@ export function createAncientRenderer(viewer, { render } = {}) {
     currentSingles = singles;
     currentCellDeg = cellDeg;
     renderSweepPrimitives();
+    // Ambient sweep-name labels (task 3, ancient-legibility): notify only on
+    // an actual recompute, never per frame - see this function's own
+    // nothing-changed guard above and the doc comment on
+    // `onSweepSinglesChange` at the top of this factory.
+    onSweepSinglesChange?.(cellDeg, singles);
   }
 
   /**

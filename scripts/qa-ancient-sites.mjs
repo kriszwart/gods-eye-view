@@ -23,6 +23,12 @@
  * rather than overriding it, and clicking a cluster badge shows a one-line
  * type breakdown that auto-dismisses once the camera settles.
  *
+ * Also proves the ambient sweep-name labels (task 3, ancient-legibility): at
+ * close range over a sparse-but-nonzero area, a known sweep site's name
+ * appears in the ambient overlay through a sibling overlay source, and
+ * zooming out past the closest band clears those labels while the hero
+ * labels keep working.
+ *
  * Also proves the local-only Modern Antiquarian register (phase 5b task 4)
  * is absent with PHENOMENA_LOCAL_TMA unset, which is how this gate's own
  * server always runs: its dev-only route serves the app shell rather than
@@ -248,10 +254,13 @@ try {
     JSON.stringify(reenable),
   );
   check(
-    // Overlay labels stay hero-only even though the dataset now carries
-    // tens of thousands more sites: the sweep is far too dense for the
-    // ambient-label lane, and its cluster badges carry their own
-    // Cesium-native count text instead (checked below).
+    // The hero overlay source stays hero-only even though the dataset now
+    // carries tens of thousands more sites: the sweep's own ambient
+    // sweep-name labels (task 3, ancient-legibility) publish to a sibling
+    // overlay source instead (checked further down, at a deliberately
+    // close, sparse camera position), never inflating this fixed count -
+    // that separation matters here because the boot camera can already be
+    // at close range (city level) by this point in the script.
     'site overlay labels survive an off/on toggle, hero tier only',
     reenable.overlayEntries === 20,
     JSON.stringify(reenable),
@@ -718,6 +727,32 @@ try {
     JSON.stringify(closeZoom),
   );
 
+  // Ambient sweep-name labels (task 3, ancient-legibility): this exact spot
+  // (the first sweep row) is a sparse-but-nonzero close-zoom area, measured
+  // at 29 singles - comfortably under the ~30 cap - so the closest band's
+  // ambient labels should be showing here, carrying the site's real name,
+  // through the sibling `ancient-sites-sweep` overlay source (see
+  // model.js's ANCIENT_SWEEP_LABEL_CAP and index.js's syncSweepLabels).
+  // Camera is unchanged from the check just above.
+  await page.evaluate(() => window.__godsEyeView.viewer.scene.requestRender());
+  await new Promise((r) => setTimeout(r, 500));
+  const sweepLabel = await page.evaluate(async () => {
+    const { getOverlayPaintRect, getWorldOverlayDiagnostics } =
+      await import('/src/overlays/worldOverlay.js');
+    const rect = getOverlayPaintRect('ancient-sites-sweep', 'ancient:sweep:0');
+    return {
+      title: rect?.entry?.title ?? null,
+      sweepEntries:
+        getWorldOverlayDiagnostics().entriesBySource?.['ancient-sites-sweep'] ??
+        0,
+    };
+  });
+  check(
+    'a known sweep site name appears in the ambient overlay labels at close range over a sparse area',
+    sweepLabel.title === sweepTarget.name && sweepLabel.sweepEntries > 0,
+    JSON.stringify({ sweepLabel, expectedName: sweepTarget.name }),
+  );
+
   // Recompute the click point fresh, right before clicking (see
   // setViewAndProject's own comment above).
   const sweepClick = await page.evaluate(setViewAndProject, sweepTarget);
@@ -775,6 +810,50 @@ try {
       String(sweepDossier.wikipediaHref),
     );
   }
+
+  // Zooming out one band from that same sparse spot (past the closest-band
+  // threshold, cellDeg no longer 0) must clear the ambient sweep-name
+  // labels outright, while the hero labels keep working exactly as before.
+  // Run after the sweep-dossier click above (not interleaved with it), for
+  // the same reason the skyward-fallback check below waits its turn: a
+  // camera repositioned away and instantly back would otherwise leave the
+  // pre-existing click test racing the renderer's own throttled recompute.
+  await page.evaluate((site) => {
+    const viewer = window.__godsEyeView.viewer;
+    const ellipsoid = viewer.scene.globe.ellipsoid;
+    viewer.camera.cancelFlight();
+    viewer.camera.setView({
+      destination: ellipsoid.cartographicToCartesian({
+        longitude: (site.lon * Math.PI) / 180,
+        latitude: (site.lat * Math.PI) / 180,
+        height: 600_000,
+      }),
+      orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 },
+    });
+  }, sweepTarget);
+  await new Promise((r) => setTimeout(r, 700));
+  await page.evaluate(() => window.__godsEyeView.viewer.scene.requestRender());
+  await new Promise((r) => setTimeout(r, 500));
+  const sweepLabelsAfterZoomOut = await page.evaluate(async () => {
+    const { getWorldOverlayDiagnostics } =
+      await import('/src/overlays/worldOverlay.js');
+    const diag = window.__godsEyeView.dataManager.layers
+      .get('ancient-sites')
+      ?.module?.getRenderDiagnostics?.();
+    const host = getWorldOverlayDiagnostics();
+    return {
+      cellDeg: diag?.cellDeg,
+      sweepEntries: host.entriesBySource?.['ancient-sites-sweep'] ?? 0,
+      heroEntries: host.entriesBySource?.['ancient-sites'] ?? 0,
+    };
+  });
+  check(
+    'zooming out one band clears the ambient sweep-name labels while hero labels keep working',
+    sweepLabelsAfterZoomOut.cellDeg > 0 &&
+      sweepLabelsAfterZoomOut.sweepEntries === 0 &&
+      sweepLabelsAfterZoomOut.heroEntries > 0,
+    JSON.stringify(sweepLabelsAfterZoomOut),
+  );
 
   // Close-range legibility (task 1, ancient-legibility): zoom into a dense
   // sweep area - Carnac, France, one of the densest concentrations of

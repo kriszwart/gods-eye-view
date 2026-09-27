@@ -876,6 +876,7 @@
   "src/layers/ancientSites/tmaLocal.test.mjs",
   "src/layers/ancientSites/eras.js",
   "src/layers/ancientSites/eras.test.mjs",
+  "src/layers/ancientSites/glyphMap.js",
   "src/layers/ancientSites/glyphMap.test.mjs",
   "scripts/qa-ancient-sites.mjs",
   "src/app/layers/ancientSites.js",

@@ -60,6 +60,26 @@ const BILLBOARD_HALO_FILL = 'rgba(7, 8, 18, 0.72)';
 const BILLBOARD_HALO_STROKE = 'rgba(216, 179, 106, 0.55)';
 
 /**
+ * `imageId` a billboard uses when it draws the shared placeholder canvas
+ * (see `fallbackGlyphCanvas` below), kept distinct from every real glyph
+ * URL. `BillboardCollection`'s underlying `TextureAtlas` keys images by
+ * `imageId` and `addImage` is a no-op for an id it has already seen - it
+ * returns the existing atlas index and ignores the new image outright, and
+ * the atlas is never cleared by `removeAll()` (only the collection's own
+ * destruction drops it). Before this constant existed both the placeholder
+ * and the eventual real glyph were added under the *same* `imageId: url`:
+ * whichever one reached the atlas first (almost always the placeholder,
+ * since a billboard draws before its glyph's network fetch can possibly
+ * settle) permanently claimed that id, so `onGlyphReady`'s re-render kept
+ * calling `add()` with the now-loaded glyph image but the atlas silently
+ * kept serving the placeholder forever - a silent no-op exactly in the
+ * upgrade window the whole mechanism exists for. Giving the placeholder its
+ * own id means the real glyph's first successful render is the first `add()`
+ * ever made under `imageId: url`, so it claims that atlas slot cleanly.
+ */
+const ANCIENT_GLYPH_PLACEHOLDER_IMAGE_ID = 'ancient-glyph-placeholder';
+
+/**
  * Load an image element from a URL (used for the glyph SVGs under
  * public/ancient-sites/glyphs/). Rejects on load failure rather than
  * resolving a broken image, so a caller's `.catch` sees a real error.
@@ -432,7 +452,13 @@ export function createAncientRenderer(
     if (closeBand) {
       for (const single of currentSingles) {
         const i = single.index;
-        const url = glyphUrlForType(sweep.typeName(i));
+        // `sweep.typeName` is documented and tested as optional (see
+        // clusters.js's own `typeNameOf` guard and its "no typeName"
+        // fixture test): a bare accessor without it still renders, just
+        // with every single falling back to the default glyph.
+        const typeName = sweep.typeName ? sweep.typeName(i) : '';
+        const url = glyphUrlForType(typeName);
+        const composed = requestBillboardGlyph(url);
         sweepBillboards.add({
           id: {
             id: `ancient:sweep:${i}`,
@@ -444,8 +470,11 @@ export function createAncientRenderer(
             sweep.lat(i),
             0,
           ),
-          image: requestBillboardGlyph(url) || fallbackGlyphCanvas(),
-          imageId: url,
+          // See ANCIENT_GLYPH_PLACEHOLDER_IMAGE_ID's own comment above: the
+          // placeholder must never share the real glyph's atlas id, or the
+          // upgrade on glyph-ready never takes visual effect.
+          image: composed || fallbackGlyphCanvas(),
+          imageId: composed ? url : ANCIENT_GLYPH_PLACEHOLDER_IMAGE_ID,
           width: BILLBOARD_DISPLAY_PX,
           height: BILLBOARD_DISPLAY_PX,
           verticalOrigin: Cesium.VerticalOrigin.CENTER,
@@ -606,14 +635,16 @@ export function createAncientRenderer(
     const filter =
       eraBand || typeFilter
         ? (i) => {
-            if (typeFilter && !typeFilter.has(sweep.typeName(i))) return false;
+            // `sweep.typeName` is documented and tested as optional (see
+            // clusters.js's own `typeNameOf` guard and its "no typeName"
+            // fixture test): a bare accessor without it should still pass
+            // through both filters below rather than throw, exactly as
+            // clusterSweep itself tolerates.
+            const typeName = sweep.typeName ? sweep.typeName(i) : '';
+            if (typeFilter && !typeFilter.has(typeName)) return false;
             if (
               eraBand &&
-              !sweepTypeInEraBand(
-                sweep.typeName(i),
-                eraBand.bceValue,
-                eraBand.mode,
-              )
+              !sweepTypeInEraBand(typeName, eraBand.bceValue, eraBand.mode)
             )
               return false;
             return true;
@@ -710,11 +741,15 @@ export function createAncientRenderer(
     tmaBillboards.removeAll();
     for (const r of rows) {
       const url = glyphUrlForTmaCategory(r.category);
+      const composed = requestBillboardGlyph(url);
       tmaBillboards.add({
         id: { id: r.id, ancientKind: 'tma', tmaId: r.id },
         position: Cesium.Cartesian3.fromDegrees(r.lon, r.lat, 0),
-        image: requestBillboardGlyph(url) || fallbackGlyphCanvas(),
-        imageId: url,
+        // See ANCIENT_GLYPH_PLACEHOLDER_IMAGE_ID's own comment above: the
+        // placeholder must never share the real glyph's atlas id, or the
+        // upgrade on glyph-ready never takes visual effect.
+        image: composed || fallbackGlyphCanvas(),
+        imageId: composed ? url : ANCIENT_GLYPH_PLACEHOLDER_IMAGE_ID,
         width: BILLBOARD_DISPLAY_PX,
         height: BILLBOARD_DISPLAY_PX,
         verticalOrigin: Cesium.VerticalOrigin.CENTER,

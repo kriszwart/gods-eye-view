@@ -440,12 +440,25 @@ try {
     const m = window.__godsEyeView.dataManager;
     const diag = () =>
       m.layers.get('ancient-sites')?.module?.getRenderDiagnostics?.();
+    // `.ancient-type-chip` only ever exists on the deep-time dial's own
+    // panel (installTypeFilterChips, index.js), never the sky chronometer's
+    // one - so the panel a chip sits in is unambiguously the deep dial's own
+    // panel root. The `data-mode` mode buttons below are scoped to this same
+    // root (rather than a bare `document.querySelector`) because
+    // `data-mode="window"`/`"cumulative"` are also the sky chronometer's own
+    // attribute values (chronometer.js is shared by both registers): a
+    // document-wide query is only accidentally correct today, because the
+    // sky chronometer's root detaches from the DOM whenever it is hidden
+    // (see syncDeepTime's own doc comment); scoping here keeps this check
+    // honest if that "only one chronometer ever mounted" arrangement ever
+    // changes (for example, a future dual-register UI slot).
+    const panelRoot = document
+      .querySelector('.uap-chrono-panel button.ancient-type-chip')
+      ?.closest('.uap-chrono-panel');
     const findChip = (label) =>
-      [
-        ...document.querySelectorAll(
-          '.uap-chrono-panel button.ancient-type-chip',
-        ),
-      ].find((b) => b.textContent.trim() === label);
+      [...(panelRoot?.querySelectorAll('button.ancient-type-chip') ?? [])].find(
+        (b) => b.textContent.trim() === label,
+      );
     // The dial just rebuilt fresh (the previous check toggled the sky
     // register off again); its own reset recompute is throttled, so wait
     // for it to actually land before treating this reading as the
@@ -463,7 +476,7 @@ try {
     allBtn?.click();
     await new Promise((r) => setTimeout(r, 400));
     const restoredAfterAll = diag()?.sweepVisibleCount;
-    document.querySelector('[data-mode="window"]')?.click();
+    panelRoot?.querySelector('[data-mode="window"]')?.click();
     await new Promise((r) => setTimeout(r, 400));
     const eraOnly = diag()?.sweepVisibleCount;
     megalithBtn?.click();
@@ -477,7 +490,7 @@ try {
     // the first click has not already been superseded before it runs.
     allBtn?.click();
     await new Promise((r) => setTimeout(r, 400));
-    document.querySelector('[data-mode="cumulative"]')?.click();
+    panelRoot?.querySelector('[data-mode="cumulative"]')?.click();
     await new Promise((r) => setTimeout(r, 400));
     const restoredFinal = diag()?.sweepVisibleCount;
     return {

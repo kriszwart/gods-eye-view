@@ -41,12 +41,12 @@
   Gates: `npm run format:check` (1,138 files clean), `npm test` (5,167
   tests, 5,166 passing, 1 pre-existing skip, 0 failed, plus 13
   performance-budget tests passing), `npm run check:boundaries`, `npm run
-  build`. Against the controller-managed dev server: `npm run test:track`
-  failed on 6 of 109 checks on two consecutive runs, all tracing to a
-  stale Vite dependency-optimisation cache already on that long-running
-  server (`egm96-universal.js` answering 504 "Outdated Optimize Dep"),
-  unrelated to this change and left unfixed as a server-management
-  concern outside this task's scope; `node scripts/qa-anomalies.mjs` (0
+  build`. Against the dev server: `npm run test:track` first failed on 6
+  of 109 checks on two consecutive runs, all tracing to a stale Vite
+  dependency-optimisation cache on the long-running server
+  (`egm96-universal.js` answering 504 "Outdated Optimize Dep");
+  restarting the server with the cache cleared brought it to 109 of 109,
+  confirming the failure was environmental; `node scripts/qa-anomalies.mjs` (0
   failures), `node scripts/qa-ancient-sites.mjs` (0 failures), `node
   scripts/qa-spotter.mjs` (0 failures) and `node scripts/qa-perf.mjs` (24
   of 24 passed) all ran clean. `node scripts/qa-claims.mjs`, which spins

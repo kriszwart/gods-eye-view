@@ -453,6 +453,27 @@ export function createAncientSitesLayer({
       btn.setAttribute('aria-pressed', 'true');
       typeButtons.set(type, btn);
     }
+    // Narrow-viewport fix (ancient-legibility, fix wave): group the six
+    // chips into their own wrapper so anomaly-atlas.css can relocate them
+    // as a unit below 480px, clear of the Cyber HUD telemetry chrome (and
+    // the Cesium attribution/key-setup chips beside it) that the panel's
+    // own bottom-anchored position shares at narrow widths. `addAction`
+    // (chronometer.js) inserts each button directly into the dial's panel
+    // as a flat sibling of Play, the slider and the era modes, so there is
+    // no existing container to select for a CSS-only fix - flexbox has no
+    // way to move a contiguous run of siblings as a group while leaving
+    // the rest of the panel's own items in their normal flow. `display:
+    // contents` in the CSS keeps this wrapper invisible to layout above
+    // that breakpoint, so it is a no-op everywhere else (desktop stays
+    // pixel-unchanged, and the sky register never creates this class).
+    const panel = allBtn.parentElement;
+    if (panel) {
+      const chipRow = document.createElement('div');
+      chipRow.className = 'ancient-type-chip-row';
+      panel.insertBefore(chipRow, allBtn);
+      chipRow.appendChild(allBtn);
+      for (const btn of typeButtons.values()) chipRow.appendChild(btn);
+    }
     activeTypes = null;
   }
 

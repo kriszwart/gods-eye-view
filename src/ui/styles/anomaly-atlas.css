@@ -555,6 +555,55 @@
   border-bottom-width: 2px;
 }
 
+/* Narrow-viewport fix (ancient-legibility, fix wave): at 390 px the deep
+   dial's panel needs three wrapped lines to fit Play, the slider, the era
+   modes, the six type chips and the readout, and that taller panel grows
+   upward from its bottom anchor straight into the Cyber HUD's bottom
+   telemetry corners (src/ui/styles/cyber.css's .hud-bottom-left and
+   .hud-bottom-right, both roughly 646-723px from the top on a 390x844
+   viewport) - confirmed by overlapping DOM rects, not just visually. That
+   same bottom-anchored strip also already carries #cesium-credits
+   (foundation.css, required to stay visible by the Google Maps Platform
+   ToS) and the dev-only #key-setup-chip, so simply compressing the chips
+   into fewer lines within the panel still lands them somewhere already
+   contested - not a clean fix.
+
+   installTypeFilterChips (src/layers/ancientSites/index.js) wraps the six
+   chip buttons in a `.ancient-type-chip-row` div for this: `display:
+   contents` here keeps that wrapper invisible to layout at normal widths,
+   so the chips stay ordinary flex items of .uap-chrono-panel and desktop
+   is pixel-unchanged. Below 480 px only, the wrapper switches to
+   `position: fixed` with its own top-anchored slot: this lifts the chips
+   out of the panel's flex flow entirely (fixed/absolute items leave flex
+   flow per spec), leaving Play, the slider, the era modes and the readout
+   in the panel's own unmodified position, and drops the chips into the
+   clear stretch of map canvas between the legend (ends around 294px) and
+   the DISPLAY/CCTV/CONTEXT dock headers (start around 430px) - confirmed
+   empty of any other UI by an elementFromPoint sweep across that band.
+   `position: fixed` (not absolute) positions from the viewport directly,
+   sidestepping .uap-chrono-panel's own content-driven box. `pointer-events`
+   inherits from the panel's own `auto` (set above) since the property is
+   inherited regardless of position. A CSS-only fix could not isolate the
+   chips into their own relocatable unit without this wrapper - flexbox has
+   no way to move a contiguous run of siblings as a group while leaving
+   the rest of a flex-wrap container's items in their normal flow. Scoped
+   to `.ancient-type-chip-row`, a class the sky register's chronometer
+   never produces, so its own action row is untouched. */
+.anomaly-atlas .ancient-type-chip-row {
+  display: contents;
+}
+@media (max-width: 480px) {
+  .anomaly-atlas .ancient-type-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    position: fixed;
+    top: 300px;
+    left: calc(24px + env(safe-area-inset-left, 0px));
+    right: calc(24px + env(safe-area-inset-right, 0px));
+  }
+}
+
 /* Cluster badge breakdown plate (task 2, ancient-legibility): a one-line
    gold read-out shown while a badge click flies the camera one band closer,
    naming the cluster's per-type counts (see clusters.js's `byType`).

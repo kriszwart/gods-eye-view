@@ -6,8 +6,14 @@ import {
   nextBandTargetHeight,
   wrapLon,
   SKYWARD_FALLBACK_CELL_DEG,
+  CAMERA_BANDS,
 } from './clusters.js';
 import { sweepTypeInEraBand } from './eras.js';
+import {
+  SWEEP_TYPES,
+  glyphUrlForType,
+  glyphUrlForTmaCategory,
+} from './glyphMap.js';
 
 /**
  * Local-only Modern Antiquarian overlay (see tmaLocal.js): every reference
@@ -37,6 +43,195 @@ function formatClusterCount(count) {
   return count >= 1000 ? `${Math.round(count / 100) / 10}k` : String(count);
 }
 
+/** Close-range single markers (task 1, ancient-legibility): each renders as
+ * a small composed image (a dark halo ring behind the type's gold glyph)
+ * rather than a bare point, so a single reads against any terrain and its
+ * type is legible without opening the dossier. `BILLBOARD_CANVAS_DIM` is the
+ * raster size the composed image is drawn at (higher than the on-screen
+ * size, for crispness on high-DPI screens); `BILLBOARD_DISPLAY_PX` is the
+ * billboard's actual on-screen size, "roughly 20 px" per the task brief. */
+const BILLBOARD_CANVAS_DIM = 40;
+const BILLBOARD_DISPLAY_PX = 20;
+/** Dark halo fill, matching the plate background other atlas panels already
+ * use (`--uap-void` at the same alpha as `.uap-legend`'s own background). */
+const BILLBOARD_HALO_FILL = 'rgba(7, 8, 18, 0.72)';
+/** A faint gold ring around the halo gives the disc a defined edge without
+ * competing with the glyph itself. */
+const BILLBOARD_HALO_STROKE = 'rgba(216, 179, 106, 0.55)';
+
+/**
+ * Load an image element from a URL (used for the glyph SVGs under
+ * public/ancient-sites/glyphs/). Rejects on load failure rather than
+ * resolving a broken image, so a caller's `.catch` sees a real error.
+ * @param {string} url
+ * @returns {Promise<HTMLImageElement>}
+ */
+function loadImageElement(url) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () =>
+      reject(new Error(`Failed to load glyph image: ${url}`));
+    image.src = url;
+  });
+}
+
+/**
+ * Recolour a monochrome glyph image to gold via canvas compositing: draw the
+ * source image (the shipped glyphs use `fill="currentColor"`, which resolves
+ * to black when loaded standalone as an `<img>`), then `source-in` composite
+ * a solid gold fill so only the glyph's own opaque pixels - and their
+ * anti-aliased edges - take the gold colour, leaving transparent areas
+ * untouched.
+ * @param {HTMLImageElement} image
+ * @returns {HTMLCanvasElement}
+ */
+function recolorGlyphGold(image) {
+  const width = image.naturalWidth || image.width || BILLBOARD_CANVAS_DIM;
+  const height = image.naturalHeight || image.height || BILLBOARD_CANVAS_DIM;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+  ctx.drawImage(image, 0, 0, width, height);
+  ctx.globalCompositeOperation = 'source-in';
+  ctx.fillStyle = GOLD;
+  ctx.fillRect(0, 0, width, height);
+  return canvas;
+}
+
+/**
+ * Compose one billboard image: a dark halo ring behind the gold-recoloured
+ * glyph, centred, at `BILLBOARD_CANVAS_DIM`. Built once per distinct glyph
+ * URL (see `requestBillboardGlyph`'s cache below) and reused for every
+ * billboard of that type - never rebuilt per site.
+ * @param {HTMLImageElement} glyphImage - Already-loaded glyph image (black on transparent).
+ * @returns {HTMLCanvasElement}
+ */
+function composeGlyphBillboardCanvas(glyphImage) {
+  const dim = BILLBOARD_CANVAS_DIM;
+  const canvas = document.createElement('canvas');
+  canvas.width = dim;
+  canvas.height = dim;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+  const centre = dim / 2;
+  ctx.beginPath();
+  ctx.arc(centre, centre, centre - 2, 0, Math.PI * 2);
+  ctx.fillStyle = BILLBOARD_HALO_FILL;
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = BILLBOARD_HALO_STROKE;
+  ctx.stroke();
+  const glyphSize = dim * 0.6;
+  const offset = (dim - glyphSize) / 2;
+  ctx.drawImage(
+    recolorGlyphGold(glyphImage),
+    offset,
+    offset,
+    glyphSize,
+    glyphSize,
+  );
+  return canvas;
+}
+
+/** Lazily-built halo-only placeholder (a small gold dot in the same dark
+ * halo ring) shown for the brief window - if any - between a billboard's
+ * first request and its real glyph finishing its (tiny, same-origin, local)
+ * fetch. Built once, shared by every type until its own glyph is ready. */
+let fallbackGlyphCanvasEl = null;
+function fallbackGlyphCanvas() {
+  if (fallbackGlyphCanvasEl) return fallbackGlyphCanvasEl;
+  const dim = BILLBOARD_CANVAS_DIM;
+  const canvas = document.createElement('canvas');
+  canvas.width = dim;
+  canvas.height = dim;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    const centre = dim / 2;
+    ctx.beginPath();
+    ctx.arc(centre, centre, centre - 2, 0, Math.PI * 2);
+    ctx.fillStyle = BILLBOARD_HALO_FILL;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(centre, centre, dim * 0.18, 0, Math.PI * 2);
+    ctx.fillStyle = GOLD;
+    ctx.fill();
+  }
+  fallbackGlyphCanvasEl = canvas;
+  return fallbackGlyphCanvasEl;
+}
+
+/** Composed billboard images, cached per glyph URL (module scope: shared
+ * across every renderer instance and every enable/disable cycle, since the
+ * shipped glyph SVGs never change while the app is running - "cache per
+ * type, never per site"). `billboardGlyphLoading` guards against firing a
+ * second fetch for a URL that is already in flight; `billboardGlyphSubscribers`
+ * are notified once a fetch settles, so an active renderer can redraw its
+ * currently-visible billboards from a placeholder to the real glyph. */
+const billboardGlyphCache = new Map();
+const billboardGlyphLoading = new Set();
+const billboardGlyphSubscribers = new Set();
+
+/**
+ * The cached composed billboard image for a glyph URL, kicking off a load if
+ * this is the first request for it. Returns `null` (caller should use
+ * `fallbackGlyphCanvas()` meanwhile) until the load and compose finish.
+ * @param {string} url
+ * @returns {HTMLCanvasElement|null}
+ */
+function requestBillboardGlyph(url) {
+  const ready = billboardGlyphCache.get(url);
+  if (ready) return ready;
+  if (!billboardGlyphLoading.has(url)) {
+    billboardGlyphLoading.add(url);
+    loadImageElement(url)
+      .then((image) => {
+        billboardGlyphCache.set(url, composeGlyphBillboardCanvas(image));
+      })
+      .catch((error) => {
+        console.warn(
+          '[Data:AncientSites] Glyph billboard failed to load:',
+          url,
+          error,
+        );
+      })
+      .finally(() => {
+        billboardGlyphLoading.delete(url);
+        for (const notify of billboardGlyphSubscribers) notify();
+      });
+  }
+  return null;
+}
+
+/** The mid-band single-point style ramps between the coarsest camera band's
+ * `cellDeg` and the closest non-billboard band's `cellDeg` (also the
+ * skyward fallback's own resolution - see `SKYWARD_FALLBACK_CELL_DEG`). */
+const MID_BAND_FAR_CELL_DEG = CAMERA_BANDS[0].cellDeg;
+const MID_BAND_NEAR_CELL_DEG = SKYWARD_FALLBACK_CELL_DEG;
+
+/**
+ * Point size and alpha for the sweep's unclustered singles at every camera
+ * band except the closest one (which renders billboards instead - see
+ * `renderSweepSingles`): a linear ramp from a faint 4px/0.55-alpha dot at the
+ * coarsest band up to a clearer 6px/0.8-alpha dot just above the billboard
+ * transition, so stepping into billboards is not the only legibility change
+ * on the way in (task 1, ancient-legibility: a flat 4px/0.55 dot at every
+ * non-close band read as barely-there against terrain).
+ * @param {number} cellDeg - The clustering grid resolution currently in use.
+ * @returns {{size: number, alpha: number}}
+ */
+function midBandSingleStyle(cellDeg) {
+  const t = Cesium.Math.clamp(
+    (MID_BAND_FAR_CELL_DEG - cellDeg) /
+      (MID_BAND_FAR_CELL_DEG - MID_BAND_NEAR_CELL_DEG),
+    0,
+    1,
+  );
+  return { size: 4 + t * 2, alpha: 0.55 + t * 0.25 };
+}
+
 /**
  * Owns every Cesium primitive for the ancient register.
  *
@@ -45,13 +240,17 @@ function formatClusterCount(count) {
  * primitives: it renders through camera-height-banded grid clustering
  * (`clusters.js`, portable): coarse grid badges (a larger gold point plus a
  * `LabelCollection` count) at world/continent/country zoom, individual
- * "singles" gold points for cells holding exactly one site, and, below the
- * closest clustering band, unclustered singles bounded to the current view
- * rectangle instead of the whole sweep.
+ * "singles" for cells holding exactly one site - a gold point at every band
+ * except the closest, and, below the closest clustering band, a gold-glyph
+ * billboard (dark halo ring plus the site's type glyph, see `glyphMap.js`
+ * and the billboard-compositing helpers above) bounded to the current view
+ * rectangle instead of the whole sweep (task 1, ancient-legibility: the bare
+ * 4px/0.55-alpha dot the closest band used to render was unreadable against
+ * varied terrain, and gave no way to tell sweep types apart).
  *
  * A local-only Modern Antiquarian register (`tmaLocal.js`) can add a third,
- * much smaller point set, gold like the rest, gated behind
- * `LOCAL_TMA_ENABLED` above so it renders as one-shot unclustered points
+ * much smaller billboard set, gold like the rest, gated behind
+ * `LOCAL_TMA_ENABLED` above so it renders as one-shot unclustered billboards
  * with no camera-height banding of its own and, when the flag is off,
  * carries no primitives, pick branch or data into the build at all.
  *
@@ -71,6 +270,15 @@ export function createAncientRenderer(viewer, { render } = {}) {
       blendOption: Cesium.BlendOption.TRANSLUCENT,
     }),
   );
+  // Closest-band singles only (see recomputeSweep/renderSweepPrimitives):
+  // gold-glyph-plus-halo billboards, never populated at the same time as
+  // sweepPoints above.
+  const sweepBillboards = scene.primitives.add(
+    new Cesium.BillboardCollection({
+      scene,
+      blendOption: Cesium.BlendOption.TRANSLUCENT,
+    }),
+  );
   const clusterPoints = scene.primitives.add(
     new Cesium.PointPrimitiveCollection({
       blendOption: Cesium.BlendOption.TRANSLUCENT,
@@ -79,18 +287,20 @@ export function createAncientRenderer(viewer, { render } = {}) {
   const clusterLabels = scene.primitives.add(new Cesium.LabelCollection());
   heroPoints.show = false;
   sweepPoints.show = false;
+  sweepBillboards.show = false;
   clusterPoints.show = false;
   clusterLabels.show = false;
   // Local-only Modern Antiquarian register (see LOCAL_TMA_ENABLED above): a
   // flag-off build never allocates this collection.
-  let tmaPoints = null;
+  let tmaBillboards = null;
   if (LOCAL_TMA_ENABLED) {
-    tmaPoints = scene.primitives.add(
-      new Cesium.PointPrimitiveCollection({
+    tmaBillboards = scene.primitives.add(
+      new Cesium.BillboardCollection({
+        scene,
         blendOption: Cesium.BlendOption.TRANSLUCENT,
       }),
     );
-    tmaPoints.show = false;
+    tmaBillboards.show = false;
   }
 
   let sweep = null;
@@ -116,6 +326,23 @@ export function createAncientRenderer(viewer, { render } = {}) {
 
   const requestFrame = (reason) =>
     render ? render.governorRequestRender(reason) : scene.requestRender();
+
+  // Glyph billboards load asynchronously (see requestBillboardGlyph above),
+  // though kicking off every type's load at creation time below means this
+  // almost never has visible work left to do by the time a user actually
+  // reaches the closest band. When a glyph does finish loading after a
+  // billboard was already drawn with the placeholder, redraw so it upgrades
+  // to the real glyph without waiting for the next camera move.
+  function onGlyphReady() {
+    if (visible && sweep && currentCellDeg === 0) {
+      renderSweepPrimitives();
+      requestFrame('ancient-glyph-ready');
+    }
+  }
+  billboardGlyphSubscribers.add(onGlyphReady);
+  // Kick every sweep-type glyph's load off now, well before any camera could
+  // plausibly reach the closest band.
+  for (const type of SWEEP_TYPES) requestBillboardGlyph(glyphUrlForType(type));
 
   function cameraHeight() {
     return (
@@ -158,8 +385,54 @@ export function createAncientRenderer(viewer, { render } = {}) {
     requestFrame('ancient-heroes');
   }
 
-  function renderSweepPrimitives() {
+  /**
+   * Render the sweep's current unclustered singles: gold-glyph billboards at
+   * the closest band (`currentCellDeg === 0`, the view-bounded path - see
+   * recomputeSweep), plain gold points everywhere else. Never both at once:
+   * whichever collection does not apply for the current band is cleared.
+   */
+  function renderSweepSingles() {
     sweepPoints.removeAll();
+    sweepBillboards.removeAll();
+    const closeBand = currentCellDeg === 0;
+    if (closeBand) {
+      for (const single of currentSingles) {
+        const i = single.index;
+        const url = glyphUrlForType(sweep.typeName(i));
+        sweepBillboards.add({
+          id: {
+            id: `ancient:sweep:${i}`,
+            ancientKind: 'sweep',
+            ancientIndex: i,
+          },
+          position: Cesium.Cartesian3.fromDegrees(
+            sweep.lon(i),
+            sweep.lat(i),
+            0,
+          ),
+          image: requestBillboardGlyph(url) || fallbackGlyphCanvas(),
+          imageId: url,
+          width: BILLBOARD_DISPLAY_PX,
+          height: BILLBOARD_DISPLAY_PX,
+          verticalOrigin: Cesium.VerticalOrigin.CENTER,
+          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+          // Ground-level billboards depth-test against the globe/terrain by
+          // default, unlike the plain points this replaces at close range:
+          // at a few tens of km altitude looking straight down, that reads
+          // as an intermittent depth-precision miss against the ellipsoid
+          // surface right underneath the billboard's own anchor point - not
+          // a visible z-fighting flicker, but the billboard failing to pick
+          // at all despite rendering and sitting at the right screen
+          // position (reproduced with a minimal, unrelated billboard at the
+          // same camera height and pitch; matches FIRMS's own billboards,
+          // src/layers/firms/rendering.js, which set this for the same
+          // reason).
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        });
+      }
+      return;
+    }
+    const { size, alpha } = midBandSingleStyle(currentCellDeg);
     for (const single of currentSingles) {
       const i = single.index;
       sweepPoints.add({
@@ -169,13 +442,17 @@ export function createAncientRenderer(viewer, { render } = {}) {
           ancientIndex: i,
         },
         position: Cesium.Cartesian3.fromDegrees(sweep.lon(i), sweep.lat(i), 0),
-        pixelSize: 4,
-        color: goldAlpha(0.55),
-        outlineColor: goldAlpha(0.2),
+        pixelSize: size,
+        color: goldAlpha(alpha),
+        outlineColor: goldAlpha(alpha * 0.36),
         outlineWidth: 1,
         scaleByDistance: new Cesium.NearFarScalar(2.0e5, 1.3, 2.0e7, 0.6),
       });
     }
+  }
+
+  function renderSweepPrimitives() {
+    renderSweepSingles();
     clusterPoints.removeAll();
     clusterLabels.removeAll();
     currentClusters.forEach((cluster, index) => {
@@ -335,31 +612,37 @@ export function createAncientRenderer(viewer, { render } = {}) {
 
   /**
    * Render the local-only Modern Antiquarian rows as one-shot, unclustered
-   * gold points: no camera-height banding of its own (the register is small
-   * enough, ~17k rows, that plain points are cheap, and it is a dev-only
-   * owner convenience, not a shipped register). Measured rather than
-   * assumed (phase 5b task 4 fix report): 17,388 points cost ~8.7ms to
-   * batch-build once on load, and add no measurable per-frame render cost
-   * at world zoom (scene.render() sampled over 60 calls: ~0.015ms mean with
-   * the register on vs ~0.012ms off, both effectively noise), comfortably
-   * inside a single frame budget either way, so folding this small a
-   * register through the sweep's clustering path would add complexity
-   * without a performance reason. A flag-off build never reaches past the
-   * guard below, so this is the only place TMA point data or its `tma`
-   * pick kind ever exists.
+   * gold-glyph billboards: no camera-height banding of its own (the register
+   * is small enough, ~17k rows, that this is cheap, and it is a dev-only
+   * owner convenience, not a shipped register). Each row's free-text
+   * `category` maps to the nearest sweep type (`glyphUrlForTmaCategory`, see
+   * glyphMap.js), so it gets the same glyph-plus-halo treatment as the
+   * sweep's own closest-band singles (task 1, ancient-legibility). Point
+   * -based cost was measured previously (phase 5b task 4 fix report:
+   * 17,388 points, ~8.7ms one-off build, no measurable per-frame cost); the
+   * billboard replacement reuses the same five cached glyph images the
+   * sweep already loads (see requestBillboardGlyph above), so it adds no
+   * further network cost and a comparable one-off build cost, not
+   * separately re-measured here. A flag-off build never reaches past the
+   * guard below, so this is the only place TMA data or its `tma` pick kind
+   * ever exists.
    */
   function setTma(rows) {
-    if (!LOCAL_TMA_ENABLED || !tmaPoints) return;
-    tmaPoints.removeAll();
+    if (!LOCAL_TMA_ENABLED || !tmaBillboards) return;
+    tmaBillboards.removeAll();
     for (const r of rows) {
-      tmaPoints.add({
+      const url = glyphUrlForTmaCategory(r.category);
+      tmaBillboards.add({
         id: { id: r.id, ancientKind: 'tma', tmaId: r.id },
         position: Cesium.Cartesian3.fromDegrees(r.lon, r.lat, 0),
-        pixelSize: 3,
-        color: goldAlpha(0.5),
-        outlineColor: goldAlpha(0.2),
-        outlineWidth: 1,
-        scaleByDistance: new Cesium.NearFarScalar(2.0e5, 1.2, 2.0e7, 0.5),
+        image: requestBillboardGlyph(url) || fallbackGlyphCanvas(),
+        imageId: url,
+        width: BILLBOARD_DISPLAY_PX,
+        height: BILLBOARD_DISPLAY_PX,
+        verticalOrigin: Cesium.VerticalOrigin.CENTER,
+        horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+        // See the matching comment on the sweep billboard add above.
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
       });
     }
     requestFrame('ancient-tma');
@@ -417,9 +700,10 @@ export function createAncientRenderer(viewer, { render } = {}) {
     visible = next;
     heroPoints.show = next;
     sweepPoints.show = next;
+    sweepBillboards.show = next;
     clusterPoints.show = next;
     clusterLabels.show = next;
-    if (tmaPoints) tmaPoints.show = next;
+    if (tmaBillboards) tmaBillboards.show = next;
     if (next) {
       installBandWatcher();
       recomputeSweep();
@@ -458,7 +742,18 @@ export function createAncientRenderer(viewer, { render } = {}) {
     return {
       heroCount: heroPoints.length,
       clusterCount: clusterPoints.length,
-      singleCount: sweepPoints.length,
+      // The logical count of unclustered singles the sweep currently
+      // represents, regardless of which primitive collection actually draws
+      // them (plain points at every band except the closest, gold-glyph
+      // billboards at the closest one - see renderSweepSingles): this stays
+      // meaningful across that switch, unlike reading either collection's
+      // own `.length` directly (only one of the two is ever populated).
+      singleCount: currentSingles.length,
+      // The closest band's billboard primitive count specifically (0 at
+      // every other band, since renderSweepSingles clears sweepBillboards
+      // whenever it is not the closest band) - task 1's own qa gate checks
+      // this stays bounded at close range over a dense area.
+      billboardCount: sweepBillboards.length,
       // The true filtered sweep total currently represented on screen,
       // clustered or not - unlike clusterCount/singleCount (primitive
       // counts, which shrink as clustering coarsens), this is what the
@@ -474,11 +769,13 @@ export function createAncientRenderer(viewer, { render } = {}) {
 
   function destroy() {
     removeBandWatcher();
+    billboardGlyphSubscribers.delete(onGlyphReady);
     scene.primitives.remove(heroPoints);
     scene.primitives.remove(sweepPoints);
+    scene.primitives.remove(sweepBillboards);
     scene.primitives.remove(clusterPoints);
     scene.primitives.remove(clusterLabels);
-    if (tmaPoints) scene.primitives.remove(tmaPoints);
+    if (tmaBillboards) scene.primitives.remove(tmaBillboards);
   }
 
   const api = {

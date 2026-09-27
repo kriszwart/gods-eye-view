@@ -435,6 +435,32 @@
   height: 9px;
 }
 
+/* Ancient-sites legend's glyph key row (task 1, ancient-legibility): the
+   same five sweep-type glyphs the closest-band billboards and the hero
+   dossier use, named in the register's own gold. */
+.anomaly-atlas .uap-legend .uap-glyph-key {
+  margin: 0 0 8px;
+}
+.anomaly-atlas .uap-legend .uap-glyph-key li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--uap-ink);
+}
+.anomaly-atlas .uap-legend .uap-glyph-icon {
+  display: inline-block;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  background-color: #d8b36a;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
 /* Sources and credits: opened from the chronometer's "Sources" action.
    Top-left, stacked below the legend, not bottom-left: the chronometer's own
    filter/Tour/Sources panel owns the full width of the bottom edge (it

@@ -25,6 +25,7 @@ import {
   describeEraBand,
   heroInEraBand,
 } from './eras.js';
+import { SWEEP_TYPES, glyphUrlForType } from './glyphMap.js';
 export * from './model.js';
 export { normalizeAncientSitesV2 } from './records.js';
 export { createAncientSource } from './source.js';
@@ -50,6 +51,10 @@ const escapeHtml = (s) =>
  */
 const DEEP_TIME_HONESTY_LINE =
   "Undated sites are placed by their type's typical period, not their own dating.";
+
+/** Sentence-case display label for a sweep type name (`circle` -> `Circle`),
+ * for the legend's glyph key row below. */
+const sweepTypeLabel = (type) => type.charAt(0).toUpperCase() + type.slice(1);
 
 /**
  * Curated ancient and disputed-archaeology sites, shown as a static gold
@@ -132,7 +137,7 @@ export function createAncientSitesLayer({
   let host = null;
   let isSkyActive = () => false;
   let deepChrono = null;
-  let deepTimeNote = null;
+  let legend = null;
   let deepRelayoutRemover = null;
   let lastDeepLayoutKey = '';
 
@@ -311,6 +316,12 @@ export function createAncientSitesLayer({
    * layer's own `.uap-chrono`/`.uap-slider` queries (its own qa gate) from
    * ever being made ambiguous by a second such element sitting in the DOM
    * at the same time.
+   *
+   * The register's own legend (glyph key plus the honesty line, built in
+   * init()) shares the dial's own show/hide lifecycle below: both occupy the
+   * same top-left plate slot the sky register's own legend uses, so only one
+   * of the two ever shows at a time, the same "sky wins" arbitration already
+   * governing the dial itself.
    */
   function syncDeepTime() {
     const shouldShow = enabled && !isSkyActive();
@@ -345,14 +356,14 @@ export function createAncientSitesLayer({
       relayoutDeepChrono();
       deepRelayoutRemover ||=
         viewer.scene.postRender.addEventListener(relayoutDeepChrono);
-      if (deepTimeNote) deepTimeNote.hidden = false;
+      if (legend) legend.hidden = false;
       syncEraState();
     } else if (!shouldShow && deepChrono) {
       deepChrono.destroy();
       deepChrono = null;
       deepRelayoutRemover?.();
       deepRelayoutRemover = null;
-      if (deepTimeNote) deepTimeNote.hidden = true;
+      if (legend) legend.hidden = true;
       syncEraState();
     }
   }
@@ -423,14 +434,34 @@ export function createAncientSitesLayer({
         (e) => e.key === 'Escape' && (dossier.hidden = true),
       );
       host.appendChild(dossier);
-      // The deep-time dial's honesty line: created once, hidden until the
-      // dial itself is showing (syncDeepTime toggles it alongside the
-      // dial's own lifecycle).
-      deepTimeNote = document.createElement('p');
-      deepTimeNote.className = 'uap-legend ancient';
-      deepTimeNote.hidden = true;
-      deepTimeNote.textContent = DEEP_TIME_HONESTY_LINE;
-      host.appendChild(deepTimeNote);
+      // The register's legend: a glyph key row naming all five sweep types
+      // (task 1, ancient-legibility - the same glyphs the closest-band
+      // billboards and the hero dossier already use, see glyphMap.js) plus
+      // the deep-time dial's own honesty line. Created once, hidden until
+      // the dial itself is showing (syncDeepTime toggles it alongside the
+      // dial's own lifecycle): the glyph key sits in the same slot as the
+      // dial for the same reason the dial itself yields to the sky
+      // register's own chronometer when both layers are on (see
+      // syncDeepTime's doc comment) - one shared top-left legend slot,
+      // arbitrated the same way throughout this register.
+      legend = document.createElement('div');
+      legend.className = 'uap-legend ancient';
+      legend.hidden = true;
+      // Each glyph is a CSS mask (not an <img src>): the shipped SVGs use
+      // `fill="currentColor"`, which resolves to black - not this element's
+      // own CSS colour - when loaded as an external image resource, so a
+      // plain <img> would render a near-invisible black icon on this dark
+      // plate. A mask-image keeps the actual glyph colour under CSS control
+      // (gold here) with no extra fetch or canvas work.
+      legend.innerHTML = `
+        <ul class="uap-glyph-key">
+          ${SWEEP_TYPES.map((type) => {
+            const url = escapeHtml(glyphUrlForType(type));
+            return `<li><i class="uap-glyph-icon" style="-webkit-mask-image:url('${url}');mask-image:url('${url}')"></i>${escapeHtml(sweepTypeLabel(type))}</li>`;
+          }).join('')}
+        </ul>
+        <p>${escapeHtml(DEEP_TIME_HONESTY_LINE)}</p>`;
+      host.appendChild(legend);
       overlayHost?.setVisible?.(ANCIENT_LAYER_ID, false);
       console.log('[Data:AncientSites] Initialized');
     },
@@ -572,8 +603,8 @@ export function createAncientSitesLayer({
       // layer's own defensive Spotter-close call in its destroy().
       deepChrono?.destroy();
       deepChrono = null;
-      deepTimeNote?.remove();
-      deepTimeNote = null;
+      legend?.remove();
+      legend = null;
       overlayHost?.clearSource?.(ANCIENT_LAYER_ID);
       renderer?.destroy();
       dossier?.remove();

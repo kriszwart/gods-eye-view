@@ -110,6 +110,33 @@ try {
     true,
   );
 
+  // Legend glyph key (task 1, ancient-legibility): five sweep-type glyphs
+  // named in the register's own legend, visible now (the deep-time dial and
+  // its shared legend slot both engage on a fresh enable with the sky
+  // register still off - see index.js's syncDeepTime).
+  const glyphKey = await page.evaluate(() => {
+    const plate = document.querySelector('.uap-legend.ancient');
+    const key = plate?.querySelector('.uap-glyph-key') ?? null;
+    return {
+      plateFound: !!plate,
+      plateHidden: plate ? plate.hidden : null,
+      keyFound: !!key,
+      items: key
+        ? [...key.querySelectorAll('li')].map((li) => li.textContent.trim())
+        : [],
+    };
+  });
+  check(
+    'ancient-sites legend carries a glyph key row naming all five sweep types',
+    glyphKey.plateFound &&
+      glyphKey.plateHidden === false &&
+      glyphKey.keyFound &&
+      ['Circle', 'Geoglyph', 'Megalith', 'Mound', 'Settlement'].every((name) =>
+        glyphKey.items.includes(name),
+      ),
+    JSON.stringify(glyphKey),
+  );
+
   // Local-only Modern Antiquarian register: absent with the flag unset.
   // Snapshot the request tally now, before the deliberate probe fetch just
   // below adds its own matching request to the same array.
@@ -487,7 +514,12 @@ try {
       wiki: json.sites.wiki[0],
     };
   });
-  const sweepClick = await page.evaluate((site) => {
+  // setView plus the canvas-point computation for `site`, in one synchronous
+  // evaluate call: the camera-to-screen projection is read in the same tick
+  // the camera is (re)set. Reused below to recompute the click point fresh
+  // immediately before the actual click, rather than reusing a point
+  // computed well before it fires.
+  const setViewAndProject = (site) => {
     const viewer = window.__godsEyeView.viewer;
     const ellipsoid = viewer.scene.globe.ellipsoid;
     viewer.camera.cancelFlight();
@@ -506,7 +538,8 @@ try {
     });
     const canvasPoint = viewer.scene.cartesianToCanvasCoordinates(target);
     return canvasPoint ? { x: canvasPoint.x, y: canvasPoint.y } : null;
-  }, sweepTarget);
+  };
+  await page.evaluate(setViewAndProject, sweepTarget);
   await new Promise((r) => setTimeout(r, 700));
   const closeZoom = await page.evaluate(() =>
     window.__godsEyeView.dataManager.layers
@@ -519,6 +552,9 @@ try {
     JSON.stringify(closeZoom),
   );
 
+  // Recompute the click point fresh, right before clicking (see
+  // setViewAndProject's own comment above).
+  const sweepClick = await page.evaluate(setViewAndProject, sweepTarget);
   let sweepDossier = { open: false };
   if (sweepClick) {
     await page.mouse.click(sweepClick.x, sweepClick.y);
@@ -573,6 +609,40 @@ try {
       String(sweepDossier.wikipediaHref),
     );
   }
+
+  // Close-range legibility (task 1, ancient-legibility): zoom into a dense
+  // sweep area - Carnac, France, one of the densest concentrations of
+  // megalithic standing stones in the dataset - and prove the closest
+  // band's singles render as billboards (a gold glyph over a dark halo, see
+  // rendering.js's renderSweepSingles), not the near-invisible flat dots the
+  // pre-task screenshots complained about, and that this still stays
+  // bounded rather than turning into one primitive per site in the area.
+  await page.evaluate(() => {
+    const viewer = window.__godsEyeView.viewer;
+    const ellipsoid = viewer.scene.globe.ellipsoid;
+    viewer.camera.cancelFlight();
+    viewer.camera.setView({
+      destination: ellipsoid.cartographicToCartesian({
+        longitude: (-3.08 * Math.PI) / 180,
+        latitude: (47.61 * Math.PI) / 180,
+        height: 50_000,
+      }),
+      orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 },
+    });
+  });
+  await new Promise((r) => setTimeout(r, 900));
+  const carnacZoom = await page.evaluate(() =>
+    window.__godsEyeView.dataManager.layers
+      .get('ancient-sites')
+      ?.module?.getRenderDiagnostics?.(),
+  );
+  check(
+    'close zoom over a dense area (Carnac) renders singles as bounded billboards',
+    carnacZoom?.cellDeg === 0 &&
+      carnacZoom?.billboardCount > 0 &&
+      carnacZoom?.billboardCount < 5000,
+    JSON.stringify(carnacZoom),
+  );
 
   // Regression: at close range with the camera pitched above the horizon,
   // computeViewRectangle() returns nothing to bound unclustered singles

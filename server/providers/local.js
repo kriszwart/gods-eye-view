@@ -26,6 +26,7 @@ import { firePerimetersProxy } from './firePerimeters.js';
 import { cycloneProxy } from './cyclones.js';
 import { windProxy } from './wind.js';
 import { localTmaProxy } from './local-tma.js';
+import { claimsProxy } from './claims.js';
 
 /**
  * Construct the local provider plugins in their established order. The
@@ -61,6 +62,7 @@ function localProviderPlugins() {
     weatherProxy(),
     cycloneProxy(),
     firePerimetersProxy(),
+    claimsProxy(),
     keySetupEndpoint(),
   ];
   if (process.env.PHENOMENA_LOCAL_TMA === '1') plugins.push(localTmaProxy());

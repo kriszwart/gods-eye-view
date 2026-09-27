@@ -1,5 +1,58 @@
 # Changelog
 
+- Live claims register: a fourth register, share token 5, ion accent,
+  showing unverified public sighting claims pulled live from Reddit's
+  public JSON (r/UFOs, r/HighStrangeness, r/aliens) and Bluesky's public
+  search, polled at most every two minutes.
+
+  A server-side DeepSeek gate (`DEEPSEEK_API_KEY`, model `deepseek-chat`
+  by default) classifies each post into `{ sighting, place, lat, lon,
+  shape, when }`; the register is link-out only. The stored claim keeps
+  exactly nine fields (id, url, source, lat, lon, place, shape, when,
+  fetchedAt); the post's own text is discarded the moment classification
+  finishes, and no author handle is ever stored, logged or rendered
+  anywhere in the pipeline.
+
+  No claim carries a credibility score. Brightness on the globe encodes
+  recency alone, floored so a day-old claim never fades to invisible, and
+  the layer's own honesty line says so verbatim wherever the register
+  appears: "Unverified public claims, shown as posted; nothing here is
+  evaluated or endorsed." The register is deliberately ephemeral: an
+  in-memory window holding at most 48 hours and 500 claims, nothing
+  written to disk. Without `DEEPSEEK_API_KEY` the endpoint answers
+  `{ claims: [], status: 'no-key' }` and the status plate reads
+  "Classifier key not set", calm rather than an error.
+
+  Each claim's dossier counts historical cases within 50 km using a
+  portable haversine (`src/layers/liveClaims/nearby.js`), read-only over
+  the anomalies register's own public data, with the nearest three shown
+  and clickable to fly the camera there. A right-edge stream ticker lists
+  the newest 10 claims, newest first, and honours reduced motion by
+  skipping its own slide-in animation on new rows.
+
+  Honest caveat: both feeds returned a plain 403 from this development
+  environment's network egress, confirmed at the host level (Reddit's own
+  edge, Bluesky's CDN, not a user-agent block), so the feed fetchers are
+  coded to the documented Reddit and Bluesky API shapes and proven end to
+  end against mocks and fixtures, never against a live response. The
+  first run on an unblocked network should confirm both mappers still
+  match reality.
+
+  Gates: `npm run format:check` (1,138 files clean), `npm test` (5,167
+  tests, 5,166 passing, 1 pre-existing skip, 0 failed, plus 13
+  performance-budget tests passing), `npm run check:boundaries`, `npm run
+  build`. Against the controller-managed dev server: `npm run test:track`
+  failed on 6 of 109 checks on two consecutive runs, all tracing to a
+  stale Vite dependency-optimisation cache already on that long-running
+  server (`egm96-universal.js` answering 504 "Outdated Optimize Dep"),
+  unrelated to this change and left unfixed as a server-management
+  concern outside this task's scope; `node scripts/qa-anomalies.mjs` (0
+  failures), `node scripts/qa-ancient-sites.mjs` (0 failures), `node
+  scripts/qa-spotter.mjs` (0 failures) and `node scripts/qa-perf.mjs` (24
+  of 24 passed) all ran clean. `node scripts/qa-claims.mjs`, which spins
+  up its own throwaway servers rather than touching `:4173`, ran 3
+  consecutive clean runs, 0 failures each.
+
 - Ancient legibility: the ancient sites register reads clearly at every
   camera height, not just at world zoom, and the gold register stays gold
   throughout - heroes are unaffected by any of it.

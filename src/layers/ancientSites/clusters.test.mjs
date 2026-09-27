@@ -17,6 +17,17 @@ function fixtureSweep(points) {
   };
 }
 
+/** Build a sweep accessor over [lat, lon, type] triples, for the per-type
+ * breakdown tests below (task 2, ancient-legibility). */
+function fixtureSweepWithType(points) {
+  return {
+    length: points.length,
+    lat: (i) => points[i][0],
+    lon: (i) => points[i][1],
+    typeName: (i) => points[i][2],
+  };
+}
+
 test('clusterSweep collapses two nearby sites into one cluster with the right count and centroid', () => {
   const sweep = fixtureSweep([
     [51.0, -1.0],
@@ -140,6 +151,45 @@ test('clusterSweep with no filter behaves exactly as before (all sites included)
   ]);
   const { clusters } = clusterSweep(sweep, { cellDeg: 5 });
   assert.equal(clusters[0].count, 2);
+});
+
+test('clusterSweep attaches a per-type breakdown to each cluster, summing to the cluster count', () => {
+  const sweep = fixtureSweepWithType([
+    [51.0, -1.0, 'megalith'],
+    [51.1, -1.1, 'megalith'],
+    [51.05, -1.05, 'mound'],
+  ]);
+  const { clusters } = clusterSweep(sweep, { cellDeg: 5 });
+  assert.equal(clusters.length, 1);
+  assert.equal(clusters[0].count, 3);
+  const total = Object.values(clusters[0].byType).reduce((a, b) => a + b, 0);
+  assert.equal(total, clusters[0].count);
+  assert.deepEqual(clusters[0].byType, { megalith: 2, mound: 1 });
+});
+
+test('clusterSweep excludes a filtered-out site from the per-type breakdown, not just the count', () => {
+  const sweep = fixtureSweepWithType([
+    [51.0, -1.0, 'megalith'],
+    [51.1, -1.1, 'mound'],
+    [51.05, -1.05, 'circle'],
+  ]);
+  // Index 1 (mound) is filtered out: it must be absent from byType too, not
+  // merely subtracted from the total.
+  const { clusters } = clusterSweep(sweep, {
+    cellDeg: 5,
+    filter: (i) => i !== 1,
+  });
+  assert.equal(clusters[0].count, 2);
+  assert.deepEqual(clusters[0].byType, { megalith: 1, circle: 1 });
+});
+
+test('clusterSweep gives every cluster an empty byType when the sweep accessor carries no typeName', () => {
+  const sweep = fixtureSweep([
+    [51.0, -1.0],
+    [51.1, -1.1],
+  ]);
+  const { clusters } = clusterSweep(sweep, { cellDeg: 5 });
+  assert.deepEqual(clusters[0].byType, {});
 });
 
 test('cellDegForHeight selects the coarsest band at world altitude', () => {

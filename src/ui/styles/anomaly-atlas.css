@@ -540,6 +540,45 @@
   color: var(--uap-dim, #7c8195);
 }
 
+/* Type filter chips (task 2, ancient-legibility): one chip per sweep type
+   plus "All", added to the deep-time dial's own panel (index.js's
+   installTypeFilterChips) via the same addAction mechanism the sky
+   register's own status filter chips use. Gold accent on the pressed state
+   distinguishes these from the sky dial's own magenta/violet/ion mode
+   gradient (one accent per register, DESIGN_SYSTEM.md). */
+.anomaly-atlas .uap-chrono-panel button.ancient-type-chip:hover {
+  color: #d8b36a;
+}
+.anomaly-atlas .uap-chrono-panel button.ancient-type-chip[aria-pressed='true'] {
+  color: var(--uap-ink);
+  border-bottom-color: #d8b36a;
+  border-bottom-width: 2px;
+}
+
+/* Cluster badge breakdown plate (task 2, ancient-legibility): a one-line
+   gold read-out shown while a badge click flies the camera one band closer,
+   naming the cluster's per-type counts (see clusters.js's `byType`).
+   Passive (role="status"), never a dialog, so it carries no close button of
+   its own - it auto-dismisses on camera settle or Escape (index.js's
+   showClusterBreakdown/hideClusterBreakdown). Top-centre, clear of the
+   dossier (top-right), the legend (top-left) and the dial (bottom). */
+.anomaly-atlas .uap-cluster-breakdown {
+  position: absolute;
+  left: 50%;
+  top: calc(24px + env(safe-area-inset-top, 0px));
+  transform: translateX(-50%);
+  max-width: min(480px, calc(100vw - 48px));
+  margin: 0;
+  padding: 8px 16px;
+  background: var(--glass-bg);
+  color: var(--uap-ink);
+  border: 1px solid var(--uap-hair-strong);
+  border-left: 3px solid #d8b36a;
+  font: 400 12px var(--uap-mono);
+  text-align: center;
+  z-index: 140;
+}
+
 /* Spotter: a live sky-check plate over currently tracked sources. Opposite
    corner from the dossier so both can stand open at once. */
 .anomaly-atlas .uap-spotter {

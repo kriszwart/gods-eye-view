@@ -328,6 +328,14 @@ export function createAncientRenderer(viewer, { render } = {}) {
   // dial is not engaged (either register default: every sweep site shows,
   // exactly as before the deep-time dial existed).
   let eraBand = null;
+  // The type-filter chip row's current selection (task 2, ancient-legibility,
+  // see index.js's installTypeFilterChips): a `Set` of sweep type names to
+  // include, or null for "every type" (the "All" chip). Composes with
+  // `eraBand` as AND inside recomputeSweep's own `filter` closure below -
+  // one combined predicate, one recompute path, one memo key (controller
+  // ruling, task 2): a dial change and a chip change can never serve stale
+  // primitives against each other.
+  let typeFilter = null;
   let bandRemover = null;
   let moveEndRemover = null;
   let moveEndSettleTimer = null;
@@ -339,6 +347,7 @@ export function createAncientRenderer(viewer, { render } = {}) {
   let lastRecomputeCellDeg;
   let lastRecomputeBoundsKey;
   let lastRecomputeEraKey;
+  let lastRecomputeTypeKey;
 
   const requestFrame = (reason) =>
     render ? render.governorRequestRender(reason) : scene.requestRender();
@@ -522,6 +531,13 @@ export function createAncientRenderer(viewer, { render } = {}) {
     return band ? `${band.mode}:${band.bceValue}` : null;
   }
 
+  /** Stable string key for a type-filter set (or its absence: null means
+   * "every type"), for the nothing-changed guard below. Sorted so the same
+   * set of types always keys the same regardless of insertion order. */
+  function typeKeyOf(types) {
+    return types ? [...types].sort().join(',') : null;
+  }
+
   function recomputeSweep() {
     if (!sweep) return;
     const height = cameraHeight();
@@ -548,19 +564,21 @@ export function createAncientRenderer(viewer, { render } = {}) {
     }
     const boundsKey = boundsKeyOf(bounds);
     const eraKey = eraKeyOf(eraBand);
+    const typeKey = typeKeyOf(typeFilter);
     // No per-frame work while the camera is parked: a postRender tick (or a
-    // throttled era-filter request, see requestSweepRecompute below) whose
-    // camera-height band, view rectangle and era band are all identical to
-    // the last successful recompute has nothing new to cluster, so it skips
-    // straight past the ~81k-row scan and the primitive rebuild. Without
-    // this, another layer holding continuous render (sky hero craft) with
-    // the camera parked reruns an unchanged recompute every throttle window
-    // forever.
+    // throttled era-filter or type-filter request, see requestSweepRecompute
+    // below) whose camera-height band, view rectangle, era band and type
+    // filter are all identical to the last successful recompute has nothing
+    // new to cluster, so it skips straight past the ~81k-row scan and the
+    // primitive rebuild. Without this, another layer holding continuous
+    // render (sky hero craft) with the camera parked reruns an unchanged
+    // recompute every throttle window forever.
     if (
       sweep === lastRecomputeSweep &&
       cellDeg === lastRecomputeCellDeg &&
       boundsKey === lastRecomputeBoundsKey &&
-      eraKey === lastRecomputeEraKey
+      eraKey === lastRecomputeEraKey &&
+      typeKey === lastRecomputeTypeKey
     ) {
       return;
     }
@@ -568,16 +586,30 @@ export function createAncientRenderer(viewer, { render } = {}) {
     lastRecomputeCellDeg = cellDeg;
     lastRecomputeBoundsKey = boundsKey;
     lastRecomputeEraKey = eraKey;
-    // The deep-time dial's era band, applied upstream of clustering (see
-    // eras.js): only sites whose TYPE's typological window matches the
-    // dial's current position ever reach a bucket or a single, so a
-    // cluster badge's count already reflects the filtered total. `null`
-    // (the dial disengaged) filters nothing, exactly as before the
-    // deep-time dial existed.
-    const filter = eraBand
-      ? (i) =>
-          sweepTypeInEraBand(sweep.typeName(i), eraBand.bceValue, eraBand.mode)
-      : null;
+    lastRecomputeTypeKey = typeKey;
+    // The deep-time dial's era band and the type-filter chip row's selection
+    // compose as one AND predicate, applied upstream of clustering (see
+    // eras.js and index.js's installTypeFilterChips): only sites passing
+    // BOTH conditions ever reach a bucket or a single, so a cluster badge's
+    // count (and its per-type breakdown, see clusters.js's `byType`) already
+    // reflects the fully filtered total. Both filters default to null
+    // (nothing engaged), exactly as before either one existed.
+    const filter =
+      eraBand || typeFilter
+        ? (i) => {
+            if (typeFilter && !typeFilter.has(sweep.typeName(i))) return false;
+            if (
+              eraBand &&
+              !sweepTypeInEraBand(
+                sweep.typeName(i),
+                eraBand.bceValue,
+                eraBand.mode,
+              )
+            )
+              return false;
+            return true;
+          }
+        : null;
     const { clusters, singles } = clusterSweep(sweep, {
       cellDeg,
       bounds,
@@ -623,6 +655,22 @@ export function createAncientRenderer(viewer, { render } = {}) {
    */
   function setEraFilter(band) {
     eraBand = band;
+    requestSweepRecompute();
+  }
+
+  /**
+   * Set or clear the type-filter chip row's selection: a `Set` of sweep type
+   * names to include, or null to include every type (the "All" chip, and
+   * the default before any chip is ever touched). Routes its recompute
+   * through the same throttle/settle machinery as camera motion and the era
+   * band (see `requestSweepRecompute`), and composes with `eraBand` as one
+   * AND predicate (see `recomputeSweep`) rather than a second, independent
+   * filtering pass - a no-op while the register is not visible, mirroring
+   * `setEraFilter`.
+   * @param {Set<string>|null} types
+   */
+  function setTypeFilter(types) {
+    typeFilter = types || null;
     requestSweepRecompute();
   }
 
@@ -798,6 +846,7 @@ export function createAncientRenderer(viewer, { render } = {}) {
     setHeroes,
     setSweep,
     setEraFilter,
+    setTypeFilter,
     apply,
     pick,
     getCluster,

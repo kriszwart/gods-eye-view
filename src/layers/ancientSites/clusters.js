@@ -104,9 +104,18 @@ function inBounds(lat, lon, bounds) {
  * `sweepTypeInEraBand`) applies here, upstream of clustering, so a badge's
  * count only ever reflects sites the current era band actually includes.
  *
- * @param {{length:number, lat:(i:number)=>number, lon:(i:number)=>number}} sweep
+ * Each cluster also carries `byType`, a plain object mapping a sweep type
+ * name to how many of the cluster's sites are that type (task 2,
+ * ancient-legibility: the badge-click breakdown plate). Built only when
+ * `sweep.typeName` exists (every real accessor carries it - see
+ * `records.js` - so this is a defensive fallback for a fixture sweep that
+ * does not); its values always sum to the cluster's own `count`, since it
+ * accumulates over exactly the same filtered, in-bounds indices that count
+ * does, never a separate pass.
+ *
+ * @param {{length:number, lat:(i:number)=>number, lon:(i:number)=>number, typeName?:(i:number)=>string}} sweep
  * @param {{cellDeg?: number, bounds?: {west:number,south:number,east:number,north:number}|null, filter?: ((index:number)=>boolean)|null}} [options]
- * @returns {{clusters: Array<{lat:number, lon:number, count:number, sampleIndex:number}>, singles: Array<{index:number}>}}
+ * @returns {{clusters: Array<{lat:number, lon:number, count:number, sampleIndex:number, byType:Object<string,number>}>, singles: Array<{index:number}>}}
  */
 export function clusterSweep(
   sweep,
@@ -117,6 +126,8 @@ export function clusterSweep(
   const singles = [];
   if (!length) return { clusters, singles };
   const cell = Number(cellDeg) || 0;
+  const typeNameOf =
+    typeof sweep.typeName === 'function' ? sweep.typeName : null;
   if (cell <= 0) {
     for (let i = 0; i < length; i += 1) {
       const lat = sweep.lat(i);
@@ -140,12 +151,16 @@ export function clusterSweep(
     const key = `${latIndex}:${lonIndex}`;
     let bucket = buckets.get(key);
     if (!bucket) {
-      bucket = { sumLat: 0, sumLon: 0, count: 0, sampleIndex: i };
+      bucket = { sumLat: 0, sumLon: 0, count: 0, sampleIndex: i, byType: {} };
       buckets.set(key, bucket);
     }
     bucket.sumLat += lat;
     bucket.sumLon += lon;
     bucket.count += 1;
+    if (typeNameOf) {
+      const type = typeNameOf(i) || 'unknown';
+      bucket.byType[type] = (bucket.byType[type] || 0) + 1;
+    }
   }
   for (const bucket of buckets.values()) {
     if (bucket.count > 1) {
@@ -154,6 +169,7 @@ export function clusterSweep(
         lon: bucket.sumLon / bucket.count,
         count: bucket.count,
         sampleIndex: bucket.sampleIndex,
+        byType: bucket.byType,
       });
     } else {
       singles.push({ index: bucket.sampleIndex });

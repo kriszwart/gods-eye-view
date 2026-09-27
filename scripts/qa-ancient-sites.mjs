@@ -16,6 +16,13 @@
  * clicking it opens a compact dossier with a Wikidata link (and a Wikipedia
  * link when the sweep flagged one).
  *
+ * Also proves the type filter chips and the badge breakdown plate (task 2,
+ * ancient-legibility): one chip per sweep type plus "All" on the deep-time
+ * dial's own panel, unchecking a chip narrows the visible sweep and "All"
+ * restores it, the chip filter composes as AND with the deep-time era band
+ * rather than overriding it, and clicking a cluster badge shows a one-line
+ * type breakdown that auto-dismisses once the camera settles.
+ *
  * Also proves the local-only Modern Antiquarian register (phase 5b task 4)
  * is absent with PHENOMENA_LOCAL_TMA unset, which is how this gate's own
  * server always runs: its dev-only route serves the app shell rather than
@@ -382,6 +389,130 @@ try {
     JSON.stringify(oneChronoAfterSkyToggle),
   );
 
+  // ── type filter chips (task 2, ancient-legibility) ──
+  //
+  // Run here, not later: the sky register is off right now (the previous
+  // check disabled it again), so the ancient layer's own deep-time dial -
+  // and the type chips added to its panel - are actually in the DOM. The
+  // very next section below turns the sky register on and leaves it on for
+  // the rest of this script, which tears the dial (and the chips) down.
+  //
+  // One chip per sweep type plus "All": unchecking a chip narrows
+  // sweepVisibleCount, "All" restores it, and the chip filter composes as
+  // AND with the deep-time era band rather than overriding it - "around
+  // era" mode at the dial's fresh default position (1500 CE) already
+  // excludes the circle and mound types on its own (their typological
+  // windows do not reach this era, see eras.js's TYPE_ERA_WINDOWS), so
+  // additionally unchecking Megalith there must narrow the count further
+  // still, not reset it.
+  //
+  // Pin the camera to a known world-zoom view first, exactly like the era
+  // band and worldwide-sweep sections elsewhere in this file: the app's own
+  // one-time boot cinematic (flyToAustin, src/camera.js) can still be
+  // easing toward Austin this far into the script on a slower run, and an
+  // uncancelled flyTo keeps overwriting camera.setView every frame for its
+  // own remaining duration, silently drifting the camera out from under a
+  // multi-step test that never repositions it itself.
+  await page.evaluate(() => {
+    const viewer = window.__godsEyeView.viewer;
+    const ellipsoid = viewer.scene.globe.ellipsoid;
+    viewer.camera.cancelFlight();
+    viewer.camera.setView({
+      destination: ellipsoid.cartographicToCartesian({
+        longitude: 0,
+        latitude: (15 * Math.PI) / 180,
+        height: 20_000_000,
+      }),
+      orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 },
+    });
+  });
+  await new Promise((r) => setTimeout(r, 700));
+  const typeChips = await page.evaluate(async () => {
+    const m = window.__godsEyeView.dataManager;
+    const diag = () =>
+      m.layers.get('ancient-sites')?.module?.getRenderDiagnostics?.();
+    const findChip = (label) =>
+      [
+        ...document.querySelectorAll(
+          '.uap-chrono-panel button.ancient-type-chip',
+        ),
+      ].find((b) => b.textContent.trim() === label);
+    // The dial just rebuilt fresh (the previous check toggled the sky
+    // register off again); its own reset recompute is throttled, so wait
+    // for it to actually land before treating this reading as the
+    // unfiltered baseline - otherwise this would read the stale count left
+    // over from the earlier "End" (oldest era) position instead.
+    await new Promise((r) => setTimeout(r, 400));
+    const before = diag()?.sweepVisibleCount;
+    const megalithBtn = findChip('Megalith');
+    const allBtn = findChip('All');
+    const wasMegalithPressed = megalithBtn?.getAttribute('aria-pressed');
+    megalithBtn?.click();
+    await new Promise((r) => setTimeout(r, 400));
+    const uncheckedNowPressed = megalithBtn?.getAttribute('aria-pressed');
+    const unchecked = diag()?.sweepVisibleCount;
+    allBtn?.click();
+    await new Promise((r) => setTimeout(r, 400));
+    const restoredAfterAll = diag()?.sweepVisibleCount;
+    document.querySelector('[data-mode="window"]')?.click();
+    await new Promise((r) => setTimeout(r, 400));
+    const eraOnly = diag()?.sweepVisibleCount;
+    megalithBtn?.click();
+    await new Promise((r) => setTimeout(r, 400));
+    const both = diag()?.sweepVisibleCount;
+    // Restore defaults: a specific hardcoded sweep row is picked by
+    // coordinates later in this script and must still render there. One
+    // click at a time, each given its own settle wait, rather than firing
+    // both back to back - the throttled recompute path only guarantees the
+    // *final* state lands, not that an in-flight deferred recompute from
+    // the first click has not already been superseded before it runs.
+    allBtn?.click();
+    await new Promise((r) => setTimeout(r, 400));
+    document.querySelector('[data-mode="cumulative"]')?.click();
+    await new Promise((r) => setTimeout(r, 400));
+    const restoredFinal = diag()?.sweepVisibleCount;
+    return {
+      foundMegalith: !!megalithBtn,
+      foundAll: !!allBtn,
+      wasMegalithPressed,
+      uncheckedNowPressed,
+      before,
+      unchecked,
+      restoredAfterAll,
+      eraOnly,
+      both,
+      restoredFinal,
+    };
+  });
+  check(
+    'unchecking the Megalith chip narrows sweepVisibleCount',
+    typeChips.foundMegalith &&
+      typeChips.wasMegalithPressed === 'true' &&
+      typeChips.uncheckedNowPressed === 'false' &&
+      Number.isFinite(typeChips.before) &&
+      Number.isFinite(typeChips.unchecked) &&
+      typeChips.unchecked < typeChips.before,
+    JSON.stringify(typeChips),
+  );
+  check(
+    'the All chip re-checks every type and restores the original sweepVisibleCount',
+    typeChips.foundAll && typeChips.restoredAfterAll === typeChips.before,
+    JSON.stringify(typeChips),
+  );
+  check(
+    'the type-chip filter composes with the era band (AND): a chip unchecked while "around era" mode is active narrows further, not overridden',
+    Number.isFinite(typeChips.eraOnly) &&
+      Number.isFinite(typeChips.both) &&
+      typeChips.eraOnly < typeChips.before &&
+      typeChips.both < typeChips.eraOnly,
+    JSON.stringify(typeChips),
+  );
+  check(
+    'era filter still composes cleanly: restoring All and cumulative mode returns the original sweepVisibleCount',
+    typeChips.restoredFinal === typeChips.before,
+    JSON.stringify(typeChips),
+  );
+
   // Year-dial decoupling: bring the anomalies chronometer up alongside the
   // static register, step its year, and prove the ancient count never moves
   // with it.
@@ -479,17 +610,52 @@ try {
   await new Promise((r) => setTimeout(r, 700));
   if (clusterClick) {
     await page.mouse.click(clusterClick.x, clusterClick.y);
+    // Badge breakdown (task 2, ancient-legibility): a one-line type
+    // breakdown shows while the camera flies one band closer - read it well
+    // before the 1.5s flight settles (the wait below is deliberately
+    // shorter than that).
+    await new Promise((r) => setTimeout(r, 300));
+    const breakdown = await page.evaluate(() => {
+      const plate = document.querySelector('.uap-cluster-breakdown');
+      return {
+        found: !!plate,
+        visible: plate ? !plate.hidden : false,
+        text: plate?.textContent || '',
+      };
+    });
+    const sweepTypeNames = [
+      'circle',
+      'geoglyph',
+      'megalith',
+      'mound',
+      'settlement',
+    ];
+    check(
+      'clicking a cluster badge shows a one-line type breakdown while flying closer',
+      breakdown.found &&
+        breakdown.visible &&
+        /\d+ sites?:/.test(breakdown.text) &&
+        sweepTypeNames.some((t) => breakdown.text.toLowerCase().includes(t)),
+      JSON.stringify(breakdown),
+    );
     await new Promise((r) => setTimeout(r, 2200));
-    const afterClusterClick = await page.evaluate(() =>
-      window.__godsEyeView.dataManager.layers
+    const afterClusterClick = await page.evaluate(() => ({
+      diag: window.__godsEyeView.dataManager.layers
         .get('ancient-sites')
         ?.module?.getRenderDiagnostics?.(),
-    );
+      breakdownHidden:
+        document.querySelector('.uap-cluster-breakdown')?.hidden ?? null,
+    }));
     check(
       'clicking a cluster badge flies the camera one band closer and re-clusters at finer resolution',
-      afterClusterClick?.cameraHeight < worldZoom.cameraHeight &&
-        afterClusterClick?.cellDeg < worldZoom.cellDeg,
-      JSON.stringify({ before: worldZoom, after: afterClusterClick }),
+      afterClusterClick.diag?.cameraHeight < worldZoom.cameraHeight &&
+        afterClusterClick.diag?.cellDeg < worldZoom.cellDeg,
+      JSON.stringify({ before: worldZoom, after: afterClusterClick.diag }),
+    );
+    check(
+      'the badge breakdown plate auto-dismisses once the camera settles',
+      afterClusterClick.breakdownHidden === true,
+      JSON.stringify(afterClusterClick),
     );
   } else {
     check(

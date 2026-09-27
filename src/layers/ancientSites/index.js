@@ -52,6 +52,16 @@ const escapeHtml = (s) =>
 const DEEP_TIME_HONESTY_LINE =
   "Undated sites are placed by their type's typical period, not their own dating.";
 
+/**
+ * The honesty line the type filter chips require (task 2, ancient-legibility,
+ * controller ruling): heroes are curated, not swept, so a chip toggling a
+ * type off never removes a hero of that type from the globe. Said plainly
+ * next to the chips so a hero staying visible with its type unchecked never
+ * reads as the filter being broken. British English, sentence case.
+ */
+const TYPE_FILTER_HERO_HINT =
+  'Heroes always show, regardless of the type filters.';
+
 /** Sentence-case display label for a sweep type name (`circle` -> `Circle`),
  * for the legend's glyph key row below. */
 const sweepTypeLabel = (type) => type.charAt(0).toUpperCase() + type.slice(1);
@@ -140,6 +150,21 @@ export function createAncientSitesLayer({
   let legend = null;
   let deepRelayoutRemover = null;
   let lastDeepLayoutKey = '';
+  // Type filter chips (task 2, ancient-legibility): a Set of enabled sweep
+  // types, or null meaning "every type" (the "All" chip and the default
+  // before any chip is touched) - mirrors the sky register's own
+  // `activeStatuses` (src/layers/anomalies/index.js). Chips share the
+  // deep-time dial's own lifecycle (installTypeFilterChips below, called
+  // from syncDeepTime): built fresh, and reset to "every type", every time
+  // the dial engages - the sky register becoming active resets both back to
+  // defaults, exactly like the era band, never a stale selection carried
+  // across.
+  let activeTypes = null;
+  // Badge breakdown plate (task 2, ancient-legibility): a small gold
+  // one-liner shown while a cluster-badge click flies the camera one band
+  // closer, naming the cluster's per-type counts (see clusters.js's
+  // `byType`). Created once in init(), like the dossier and legend.
+  let breakdownPlate = null;
 
   function openHeroDossier(id) {
     const row = heroRows.find((r) => r.id === id);
@@ -241,17 +266,21 @@ export function createAncientSitesLayer({
   }
 
   /**
-   * Apply the deep-time dial's current era band (or its absence) to the
-   * renderer and the hero tier, and refresh the dial's readout. Heroes
-   * filter by their own `period_start_bce`; the sweep is banded by type
-   * inside `rendering.js`'s `setEraFilter` (see eras.js). Overlay labels
-   * stay in lockstep with which heroes are actually rendered, so a
-   * filtered-out hero's label never floats with no point beneath it.
-   * Safe to call before any data has loaded (an empty `heroRows`) or
-   * before the renderer exists at all. "All eras" mode passes a null band,
-   * same as the dial being absent altogether: every site already shows in
-   * that mode (see eras.js's `withinBand`), so a non-null band there would
-   * only cost the sweep an 81k-row closure scan that always answers true.
+   * Apply the deep-time dial's current era band (or its absence) and the
+   * type filter chips' current selection to the renderer and the hero tier,
+   * and refresh the dial's readout. Heroes filter by their own
+   * `period_start_bce` and never by the type chips (they are curated, not
+   * swept - see `TYPE_FILTER_HERO_HINT`); the sweep is banded by era and
+   * type together inside `rendering.js`'s `setEraFilter`/`setTypeFilter`
+   * (one combined AND predicate - see eras.js and installTypeFilterChips
+   * below). Overlay labels stay in lockstep with which heroes are actually
+   * rendered, so a filtered-out hero's label never floats with no point
+   * beneath it. Safe to call before any data has loaded (an empty
+   * `heroRows`) or before the renderer exists at all. "All eras" mode passes
+   * a null band, same as the dial being absent altogether: every site
+   * already shows in that mode (see eras.js's `withinBand`), so a non-null
+   * band there would only cost the sweep an 81k-row closure scan that
+   * always answers true.
    */
   function syncEraState() {
     if (!renderer) return;
@@ -260,6 +289,7 @@ export function createAncientSitesLayer({
         ? { bceValue: deepChrono.year, mode: deepChrono.mode }
         : null;
     renderer.setEraFilter(band);
+    renderer.setTypeFilter(activeTypes);
     const rows = band
       ? heroRows.filter((r) =>
           heroInEraBand(r.period_start_bce, band.bceValue, band.mode),
@@ -302,6 +332,66 @@ export function createAncientSitesLayer({
       width: canvas.clientWidth,
       height: canvas.clientHeight,
     });
+  }
+
+  /**
+   * Type filter chips (task 2, ancient-legibility): one chip per sweep type
+   * plus "All", added to the deep-time dial's own panel via `addAction` -
+   * the exact mechanism the sky register's own status filter chips use
+   * (src/layers/anomalies/index.js's STATUS_FILTERS) - so these share the
+   * dial's lifecycle: built fresh every time the dial engages (syncDeepTime
+   * calls this right after creating it), gone the moment it does not. The
+   * sky register becoming active resets both the era band and this
+   * selection back to defaults, never a stale filter carried across (see
+   * syncDeepTime's teardown branch, which resets `activeTypes` to null the
+   * same instant it clears `deepChrono`).
+   *
+   * Multiple types are selectable at once - each chip toggles independently
+   * of the others, mirroring the sky register's own status chips - and
+   * "All" resets every type back on. `activeTypes` (the outer closure
+   * variable `syncEraState` reads) is kept in lockstep with every chip's own
+   * `aria-pressed` state, collapsing to `null` (the renderer's "no
+   * filtering" value) the moment every type is enabled again, so an
+   * unfiltered selection never costs the sweep a per-row type-name check it
+   * does not need (mirrors `activeStatuses`'s own null-when-full-set
+   * collapse in the sky register).
+   * @param {ReturnType<typeof createChronometer>} chrono
+   */
+  function installTypeFilterChips(chrono) {
+    const enabledTypes = new Set(SWEEP_TYPES);
+    const typeButtons = new Map();
+    const allBtn = chrono.addAction('All', () => {
+      enabledTypes.clear();
+      for (const type of SWEEP_TYPES) enabledTypes.add(type);
+      for (const btn of typeButtons.values())
+        btn.setAttribute('aria-pressed', 'true');
+      allBtn.setAttribute('aria-pressed', 'true');
+      activeTypes = null;
+      syncEraState();
+    });
+    allBtn.classList.add('ancient-type-chip');
+    allBtn.setAttribute('aria-pressed', 'true');
+    for (const type of SWEEP_TYPES) {
+      const btn = chrono.addAction(sweepTypeLabel(type), () => {
+        enabledTypes.has(type)
+          ? enabledTypes.delete(type)
+          : enabledTypes.add(type);
+        btn.setAttribute('aria-pressed', String(enabledTypes.has(type)));
+        allBtn.setAttribute(
+          'aria-pressed',
+          String(enabledTypes.size === SWEEP_TYPES.length),
+        );
+        activeTypes =
+          enabledTypes.size === SWEEP_TYPES.length
+            ? null
+            : new Set(enabledTypes);
+        syncEraState();
+      });
+      btn.classList.add('ancient-type-chip');
+      btn.setAttribute('aria-pressed', 'true');
+      typeButtons.set(type, btn);
+    }
+    activeTypes = null;
   }
 
   /**
@@ -351,6 +441,7 @@ export function createAncientSitesLayer({
         onChange: syncEraState,
         onModeChange: syncEraState,
       });
+      installTypeFilterChips(deepChrono);
       deepChrono.setVisible(true);
       lastDeepLayoutKey = '';
       relayoutDeepChrono();
@@ -364,14 +455,63 @@ export function createAncientSitesLayer({
       deepRelayoutRemover?.();
       deepRelayoutRemover = null;
       if (legend) legend.hidden = true;
+      // The type-filter chips just went with the dial (they are its own
+      // panel buttons, destroyed above); reset the selection back to
+      // "every type" too, exactly mirroring the era band's own implicit
+      // reset (syncEraState below reads `deepChrono`, already null here) -
+      // never a stale filter left engaged with no chip left to show it.
+      activeTypes = null;
       syncEraState();
     }
   }
 
-  /** Clicking a badge flies the camera one band closer, centred on it. */
+  /** Escape dismisses the badge breakdown plate; only ever bound while the
+   * plate is actually showing (see showClusterBreakdown/hideClusterBreakdown
+   * below), since the plate is passive read-out (role="status") and never
+   * takes focus itself, unlike the dossier's own Escape handling. */
+  function onBreakdownKeydown(e) {
+    if (e.key === 'Escape') hideClusterBreakdown();
+  }
+
+  /**
+   * Show the one-line type breakdown for a cluster badge just clicked, for
+   * example "126 sites: 87 megalith, 22 mound, 17 circle" - entries sorted
+   * by count, descending, so the most common type reads first. `byType`
+   * comes straight from `clusters.js`'s `clusterSweep` (see rendering.js's
+   * `getCluster`), already filtered by whatever era band and type chips are
+   * currently active, so this always describes exactly what the badge's own
+   * count represents, never a stale or unfiltered total.
+   * @param {{count:number, byType?: Object<string,number>}} cluster
+   */
+  function showClusterBreakdown(cluster) {
+    if (!breakdownPlate) return;
+    const entries = Object.entries(cluster.byType || {}).sort(
+      (a, b) => b[1] - a[1],
+    );
+    const parts = entries.map(([type, count]) => `${count} ${type}`).join(', ');
+    const total = cluster.count;
+    const noun = total === 1 ? 'site' : 'sites';
+    breakdownPlate.textContent = `${total} ${noun}: ${parts || 'type unrecorded'}`;
+    if (breakdownPlate.hidden) {
+      breakdownPlate.hidden = false;
+      document.addEventListener('keydown', onBreakdownKeydown);
+    }
+  }
+
+  /** Hide the badge breakdown plate (camera settle, Escape, or teardown). */
+  function hideClusterBreakdown() {
+    if (!breakdownPlate || breakdownPlate.hidden) return;
+    breakdownPlate.hidden = true;
+    document.removeEventListener('keydown', onBreakdownKeydown);
+  }
+
+  /** Clicking a badge shows its type breakdown and flies the camera one band
+   * closer, centred on it; the breakdown plate auto-dismisses once the
+   * camera settles (or sooner, on Escape - see hideClusterBreakdown). */
   async function flyToCluster(index) {
     const cluster = renderer?.getCluster(index);
     if (!cluster || !viewer) return;
+    showClusterBreakdown(cluster);
     const targetHeight = renderer.nextBandTargetHeight();
     await new Promise((resolve) =>
       viewer.camera.flyTo({
@@ -385,6 +525,7 @@ export function createAncientSitesLayer({
         cancel: resolve,
       }),
     );
+    hideClusterBreakdown();
   }
 
   /** Pick-registry ownership test: `ancient:` and `ancient-cluster:` always;
@@ -460,8 +601,21 @@ export function createAncientSitesLayer({
             return `<li><i class="uap-glyph-icon" style="-webkit-mask-image:url('${url}');mask-image:url('${url}')"></i>${escapeHtml(sweepTypeLabel(type))}</li>`;
           }).join('')}
         </ul>
-        <p>${escapeHtml(DEEP_TIME_HONESTY_LINE)}</p>`;
+        <p>${escapeHtml(DEEP_TIME_HONESTY_LINE)}</p>
+        <p>${escapeHtml(TYPE_FILTER_HERO_HINT)}</p>`;
       host.appendChild(legend);
+      // Badge breakdown plate (task 2, ancient-legibility): a passive,
+      // read-only one-liner (role="status", not a dialog - it never takes
+      // focus), so Escape dismissing it is handled by a document-level
+      // keydown listener added only while it is showing (see
+      // showClusterBreakdown/hideClusterBreakdown below), not a listener on
+      // the plate itself.
+      breakdownPlate = document.createElement('p');
+      breakdownPlate.className = 'uap-cluster-breakdown ancient';
+      breakdownPlate.hidden = true;
+      breakdownPlate.setAttribute('role', 'status');
+      breakdownPlate.setAttribute('aria-live', 'polite');
+      host.appendChild(breakdownPlate);
       overlayHost?.setVisible?.(ANCIENT_LAYER_ID, false);
       console.log('[Data:AncientSites] Initialized');
     },
@@ -522,6 +676,7 @@ export function createAncientSitesLayer({
       enabled = false;
       picking?.unregisterPickOwner?.(ANCIENT_LAYER_ID);
       if (dossier) dossier.hidden = true;
+      hideClusterBreakdown();
       clickHandler?.destroy();
       clickHandler = null;
       // Hide the renderer first, so the deep-time dial's teardown below
@@ -608,8 +763,11 @@ export function createAncientSitesLayer({
       overlayHost?.clearSource?.(ANCIENT_LAYER_ID);
       renderer?.destroy();
       dossier?.remove();
+      hideClusterBreakdown();
+      breakdownPlate?.remove();
       renderer = null;
       dossier = null;
+      breakdownPlate = null;
       viewer = null;
       host = null;
       heroRows = [];

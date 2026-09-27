@@ -47,6 +47,7 @@ export class LayerBindings {
     this._anomaliesSetSpotterOpen = null;
     this._ancientShellModule = null;
     this._ancientNotifySkyChanged = null;
+    this._liveClaimsShellModule = null;
     this._spotter = null;
     this._cctvRequestFocusHandler = null;
     this._removeCctvRequestFocusListener = null;
@@ -308,6 +309,48 @@ export class LayerBindings {
       typeof attached?.notifySkyChanged === 'function'
         ? attached.notifySkyChanged
         : null;
+  }
+
+  /**
+   * Give the live-claims register a way to open the sky register's own
+   * dossier for a nearby historical case, through the same idiom
+   * `_connectAnomaliesShell` already uses for case search: a shell-owned
+   * lookup by layer id, never a direct module reference held by
+   * `src/layers/liveClaims/index.js` itself. `focusAnomalyCase` re-checks
+   * `isEnabled('anomalies')` itself (never trusting a caller's own stale
+   * read) and is a no-op returning `false` when the sky register is off,
+   * since enabling it on the visitor's behalf is out of scope for that
+   * nearby-case row; the layer's own `isAnomaliesEnabled` lets it decide
+   * whether to offer that click at all. Mirrors the teardown-on-rewire
+   * dance in `_connectAnomaliesShell`/`_connectAncientSitesShell`: the
+   * outgoing module is detached (with `null`, safe here since neither
+   * callback needs a live fallback) before a changed or torn-down manager
+   * is wired to a fresh one.
+   */
+  _connectLiveClaimsShell() {
+    if (!this._dataManager) {
+      this._liveClaimsShellModule?.attachShellServices?.(null);
+      this._liveClaimsShellModule = null;
+      return;
+    }
+    const liveClaims = this._dataManager.layers?.get('live-claims')?.module;
+    if (this._liveClaimsShellModule !== liveClaims) {
+      this._liveClaimsShellModule?.attachShellServices?.(null);
+      this._liveClaimsShellModule = null;
+    }
+    if (typeof liveClaims?.attachShellServices !== 'function') return;
+    this._liveClaimsShellModule = liveClaims;
+    const manager = this._dataManager;
+    liveClaims.attachShellServices({
+      isAnomaliesEnabled: () => manager.isEnabled('anomalies'),
+      focusAnomalyCase: async (id) => {
+        if (!manager.isEnabled('anomalies')) return false;
+        const mod = manager.layers?.get('anomalies')?.module;
+        if (typeof mod?.focusCase !== 'function') return false;
+        await mod.focusCase(id);
+        return true;
+      },
+    });
   }
 
   /**
@@ -662,6 +705,7 @@ export class LayerBindings {
     this._connectWeatherCamera();
     this._connectAnomaliesShell();
     this._connectAncientSitesShell();
+    this._connectLiveClaimsShell();
     if (!this._awarenessSelectedHandler) {
       this._awarenessSelectedHandler = (event) =>
         this._persistAwarenessSelection(event, false);
@@ -718,5 +762,6 @@ export class LayerBindings {
     this._connectWeatherCamera();
     this._connectAnomaliesShell();
     this._connectAncientSitesShell();
+    this._connectLiveClaimsShell();
   }
 }

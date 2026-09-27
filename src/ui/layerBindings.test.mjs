@@ -84,3 +84,93 @@ test('_connectAncientSitesShell detaching to a different ancient module (manager
   assert.equal(secondAncient.calls.length, 1, 'the incoming module gets the live attach');
   assert.equal(typeof secondAncient.calls[0].isSkyActive, 'function');
 });
+
+/** A fake live-claims layer module recording every `attachShellServices`
+ * call it receives, mirroring `makeFakeAncientModule` above. */
+function makeFakeLiveClaimsModule() {
+  const calls = [];
+  return {
+    calls,
+    attachShellServices(services) {
+      calls.push(services);
+    },
+  };
+}
+
+/** A fake data manager carrying a live-claims module and, optionally, an
+ * anomalies module: `_connectLiveClaimsShell` looks both up by id, and
+ * `focusAnomalyCase` re-checks `isEnabled('anomalies')` itself rather than
+ * trusting a caller's own read. */
+function makeFakeManagerWithLiveClaims({
+  liveClaimsModule,
+  anomaliesModule,
+  anomaliesEnabled = true,
+} = {}) {
+  const layers = new Map();
+  if (liveClaimsModule) layers.set('live-claims', { module: liveClaimsModule });
+  if (anomaliesModule) layers.set('anomalies', { module: anomaliesModule });
+  return {
+    layers,
+    isEnabled: (id) => (id === 'anomalies' ? anomaliesEnabled : true),
+  };
+}
+
+test('_connectLiveClaimsShell attaches a live isAnomaliesEnabled and a focusAnomalyCase that reaches the sky register', async () => {
+  const bindings = makeBindings();
+  const liveClaims = makeFakeLiveClaimsModule();
+  const focusCaseCalls = [];
+  const anomalies = {
+    async focusCase(id) {
+      focusCaseCalls.push(id);
+    },
+  };
+  bindings._dataManager = makeFakeManagerWithLiveClaims({
+    liveClaimsModule: liveClaims,
+    anomaliesModule: anomalies,
+    anomaliesEnabled: true,
+  });
+  bindings._connectLiveClaimsShell();
+  assert.equal(liveClaims.calls.length, 1);
+  const services = liveClaims.calls[0];
+  assert.equal(services.isAnomaliesEnabled(), true);
+  const opened = await services.focusAnomalyCase('case-1');
+  assert.equal(opened, true);
+  assert.deepEqual(focusCaseCalls, ['case-1']);
+});
+
+test('_connectLiveClaimsShell.focusAnomalyCase is a no-op while the sky register is off, never enabling it on the visitor\'s behalf', async () => {
+  const bindings = makeBindings();
+  const liveClaims = makeFakeLiveClaimsModule();
+  const focusCaseCalls = [];
+  const anomalies = {
+    async focusCase(id) {
+      focusCaseCalls.push(id);
+    },
+  };
+  bindings._dataManager = makeFakeManagerWithLiveClaims({
+    liveClaimsModule: liveClaims,
+    anomaliesModule: anomalies,
+    anomaliesEnabled: false,
+  });
+  bindings._connectLiveClaimsShell();
+  const services = liveClaims.calls[0];
+  assert.equal(services.isAnomaliesEnabled(), false);
+  const opened = await services.focusAnomalyCase('case-1');
+  assert.equal(opened, false);
+  assert.deepEqual(focusCaseCalls, [], 'the sky register is never enabled or focused on the visitor\'s behalf');
+});
+
+test('_connectLiveClaimsShell detaching to no manager detaches the outgoing module with a bare null', () => {
+  const bindings = makeBindings();
+  const liveClaims = makeFakeLiveClaimsModule();
+  bindings._dataManager = makeFakeManagerWithLiveClaims({
+    liveClaimsModule: liveClaims,
+  });
+  bindings._connectLiveClaimsShell();
+  assert.equal(liveClaims.calls.length, 1);
+
+  bindings._dataManager = null;
+  bindings._connectLiveClaimsShell();
+  assert.equal(liveClaims.calls.length, 2, 'the detach call');
+  assert.equal(liveClaims.calls[1], null);
+});

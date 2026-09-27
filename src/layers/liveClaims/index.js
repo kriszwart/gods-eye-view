@@ -123,6 +123,8 @@ export function createLiveClaimsLayer({
   let anomalyRowsPromise = null;
   let openToken = 0;
   let tickerSeenIds = new Set();
+  let shellFocusAnomalyCase = null;
+  let shellIsAnomaliesEnabled = null;
 
   /**
    * Lazily fetch the bundled anomalies dataset exactly once (cached for the
@@ -167,11 +169,17 @@ export function createLiveClaimsLayer({
       const rowsHtml = top
         .map(
           (c) =>
-            `<li class="uap-nearby-row" data-lat="${c.lat}" data-lon="${c.lon}" tabindex="0" role="button">${escapeHtml(String(c.year ?? 'unknown'))}, ${escapeHtml(c.status ?? 'unknown')}, ${Math.round(c.distanceKm)} km</li>`,
+            `<li class="uap-nearby-row" data-lat="${c.lat}" data-lon="${c.lon}" data-id="${escapeHtml(c.id != null ? String(c.id) : '')}" tabindex="0" role="button">${escapeHtml(String(c.year ?? 'unknown'))}, ${escapeHtml(c.status ?? 'unknown')}, ${Math.round(c.distanceKm)} km</li>`,
         )
         .join('');
       block.innerHTML = `<p class="uap-nearby-count">${count} historical case${count === 1 ? '' : 's'} within ${NEARBY_RADIUS_KM} km</p><ul class="uap-nearby-rows">${rowsHtml}</ul>`;
       block.querySelectorAll('.uap-nearby-row').forEach((el) => {
+        // The case's own id, from the bundled anomalies dataset this block
+        // fetched read-only (see loadAnomalyRows above); null when the
+        // decoded row carried none. `canOpenCase` is read fresh on every
+        // click rather than cached, so a layer toggle that happens while
+        // this dossier stays open is honoured immediately.
+        const caseId = el.dataset.id || null;
         const flyThere = () => {
           const lat = Number(el.dataset.lat);
           const lon = Number(el.dataset.lon);
@@ -181,11 +189,28 @@ export function createLiveClaimsLayer({
             duration: 2.2,
           });
         };
-        el.addEventListener('click', flyThere);
+        // Opening the sky register's own dossier for this case goes through
+        // the shell channel layerBindings.js already uses for case search
+        // (`_focusCaseSearchResult`), never a direct reference to the
+        // anomalies layer: this module never imports it. Enabling the
+        // anomalies layer on the visitor's behalf is out of scope here, so
+        // a disabled register just keeps today's fly-only behaviour, with a
+        // tooltip explaining why the row does not open a case.
+        const canOpenCase = Boolean(
+          caseId && shellFocusAnomalyCase && shellIsAnomaliesEnabled?.(),
+        );
+        el.title = canOpenCase
+          ? 'Open the case dossier'
+          : 'Enable sky events to open the case';
+        const openCase = () => {
+          flyThere();
+          if (canOpenCase) shellFocusAnomalyCase(caseId);
+        };
+        el.addEventListener('click', openCase);
         el.addEventListener('keydown', (e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            flyThere();
+            openCase();
           }
         });
       });
@@ -437,6 +462,30 @@ export function createLiveClaimsLayer({
       );
       host.appendChild(tickerPlate);
       console.log('[Data:LiveClaims] Initialized');
+    },
+
+    /**
+     * The shell supplies the sky register's own `focusCase(id)` (and a live
+     * "is the sky register on" query) so a nearby-case row in this layer's
+     * own dossier can open that case's dossier, without this module ever
+     * importing `src/layers/anomalies/index.js` directly (see
+     * `attachNearbyBlock`). Mirrors the channel `layerBindings.js` already
+     * uses for cross-register case search
+     * (`_connectAnomaliesShell`/`_focusCaseSearchResult`): a shell-owned
+     * lookup by layer id, never an ad-hoc cross-layer reference. Missing or
+     * non-function services fall back to null, so a detach (a manager
+     * rewire, or this layer tearing down) just returns the row to
+     * fly-only.
+     */
+    attachShellServices(services) {
+      shellFocusAnomalyCase =
+        typeof services?.focusAnomalyCase === 'function'
+          ? services.focusAnomalyCase
+          : null;
+      shellIsAnomaliesEnabled =
+        typeof services?.isAnomaliesEnabled === 'function'
+          ? services.isAnomaliesEnabled
+          : null;
     },
 
     enable() {

@@ -426,6 +426,7 @@ try {
       return {
         rowFound: !!row,
         rowText: row?.textContent ?? null,
+        rowTitle: row?.title ?? null,
         calledBefore: before,
         calledAfter: window.__qaFlyToCalls,
       };
@@ -485,6 +486,118 @@ try {
       parisDossier.flyProbe?.calledAfter >
         (parisDossier.flyProbe?.calledBefore ?? -1),
     JSON.stringify(parisDossier.flyProbe),
+  );
+  check(
+    'with anomalies off, a nearby row carries a tooltip explaining why it will not open a case',
+    parisDossier.flyProbe?.rowTitle === 'Enable sky events to open the case',
+    JSON.stringify(parisDossier.flyProbe),
+  );
+  const anomalyDossierWhileOff = await page.evaluate(() => {
+    const d = document.querySelector('aside[aria-label="Case dossier"]');
+    return { present: !!d, hidden: d ? d.hidden : null };
+  });
+  check(
+    "with anomalies off, clicking the nearby row never opens the sky register's own dossier (fly-only stays fly-only)",
+    anomalyDossierWhileOff.present === false ||
+      anomalyDossierWhileOff.hidden === true,
+    JSON.stringify(anomalyDossierWhileOff),
+  );
+
+  // ── fly-and-open: with the sky register enabled, the same nearby row also
+  // opens that case's own dossier, through the shell channel
+  // LayerBindings#_connectLiveClaimsShell hands the live-claims layer -
+  // mirroring how case search already reaches focusCase - never a direct
+  // reference this register holds on the anomalies module itself. ──
+  await page.evaluate(() =>
+    window.__godsEyeView.dataManager.setEnabled('anomalies', true, {
+      origin: 'user',
+    }),
+  );
+  await page.waitForFunction(
+    () =>
+      (window.__godsEyeView.dataManager.layers
+        .get('anomalies')
+        ?.module?.getStats?.().count ?? 0) > 0,
+    { timeout: 30000 },
+  );
+  // The earlier nearby-row click flew the camera away from the Paris
+  // claim's on-screen position, so it is reprojected fresh before this
+  // block clicks it again, exactly as it was the first time.
+  const parisClickPointAgain = await page.evaluate(projectAt, parisTarget);
+  await page.mouse.click(parisClickPointAgain.x, parisClickPointAgain.y);
+  await page
+    .waitForFunction(
+      () => {
+        const d = document.querySelector('.uap-dossier.claims');
+        return d && !d.hidden;
+      },
+      { timeout: 8000 },
+    )
+    .catch(() => {});
+  await page
+    .waitForFunction(
+      () =>
+        document.querySelector('.uap-dossier.claims .uap-nearby-row') !== null,
+      { timeout: 8000 },
+    )
+    .catch(() => {});
+  const enabledRowTitle = await page.evaluate(
+    () =>
+      document.querySelector('.uap-dossier.claims .uap-nearby-row')?.title ??
+      null,
+  );
+  check(
+    'with anomalies on, the nearby row no longer carries the "enable sky events" tooltip',
+    enabledRowTitle === 'Open the case dossier',
+    String(enabledRowTitle),
+  );
+  await page.evaluate(() =>
+    document.querySelector('.uap-dossier.claims .uap-nearby-row')?.click(),
+  );
+  await page
+    .waitForFunction(
+      () => {
+        const d = document.querySelector('aside[aria-label="Case dossier"]');
+        return d && !d.hidden;
+      },
+      { timeout: 8000 },
+    )
+    .catch(() => {});
+  const anomalyDossierWhileOn = await page.evaluate(() => {
+    const d = document.querySelector('aside[aria-label="Case dossier"]');
+    const claims = document.querySelector('.uap-dossier.claims');
+    return {
+      open: !!(d && !d.hidden),
+      dl: d ? d.querySelector('dl')?.textContent || '' : '',
+      claimsHidden: claims ? claims.hidden : null,
+    };
+  });
+  check(
+    "with anomalies on, clicking a nearby row opens the sky register's own case dossier (its plate appears)",
+    anomalyDossierWhileOn.open === true &&
+      /Where/.test(anomalyDossierWhileOn.dl) &&
+      /Reported as/.test(anomalyDossierWhileOn.dl),
+    JSON.stringify(anomalyDossierWhileOn),
+  );
+  check(
+    "opening the sky register's dossier from a nearby row closes the claim dossier (one on-screen dossier slot, shared across registers)",
+    anomalyDossierWhileOn.claimsHidden === true,
+    JSON.stringify(anomalyDossierWhileOn),
+  );
+  // Close the case dossier and turn the sky register back off, so the rest
+  // of this script runs against the same live-claims-only state as before
+  // this block.
+  await page.evaluate(() => {
+    document
+      .querySelector('aside[aria-label="Case dossier"]')
+      ?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      );
+  });
+  await page.evaluate(() =>
+    window.__godsEyeView.dataManager.setEnabled('anomalies', false, {
+      origin: 'user',
+    }),
   );
 
   // --- Stream ticker: newest ~10 claims, newest first, a row click flies

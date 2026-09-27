@@ -16,8 +16,10 @@
   --uap-mono: 'Martian Mono', 'IBM Plex Mono', ui-monospace, monospace;
   --uap-sans: 'IBM Plex Sans', system-ui, sans-serif;
   /* The specimens page's spectrum accent, reused as the dossier plate's
-     title hairline. Dark values above; the light (clean room) palette
-     from DESIGN_SYSTEM.md takes over under prefers-color-scheme: light. */
+     title hairline. Dark-calibrated only: the app is hardcoded dark (see
+     the note below), so the light (clean room) palette from
+     DESIGN_SYSTEM.md has nowhere to attach until an app-level theme
+     selector exists. */
   --uap-spectrum: linear-gradient(
     90deg,
     var(--uap-magenta),
@@ -57,11 +59,11 @@
   --btn-radius: 2px;
 }
 
-@media (prefers-color-scheme: light) {
-  :root.anomaly-atlas {
-    --uap-spectrum: linear-gradient(90deg, #d1127f, #5b3fe0 55%, #0a93b8);
-  }
-}
+/* The app is hardcoded dark (foundation.css sets color-scheme: dark, and
+   there is no in-app theme toggle), so the dark hairline above serves every
+   visitor regardless of OS colour-scheme preference. The light (clean room)
+   palette values from DESIGN_SYSTEM.md belong behind an app-level theme
+   selector, if one is ever added, not a prefers-color-scheme query. */
 
 /* Hairline plates with registration corners instead of rounded glass cards. */
 .anomaly-atlas .uap-dossier {

@@ -38,6 +38,15 @@
  * just at the friendly /local-tma/ route, per the phase 5b task 4 fix
  * round's server.fs.deny entry in build/vite.js.
  *
+ * Also proves the cross-register dossier-switch exclusivity added by the
+ * gev:dossier-open window CustomEvent (dispatched on open in both
+ * src/layers/anomalies/index.js and src/layers/ancientSites/index.js, each
+ * listening for the other's dispatch to close its own dossier): with both
+ * registers enabled and an ancient dossier open from a real click, a real
+ * click on an anomaly point closes the ancient dossier and opens the
+ * anomaly one in the same gesture, leaving exactly one dossier plate
+ * visible, then Escape closes it.
+ *
  * Needs the dev server on :4173 (QA_BASE_URL overrides).
  */
 import puppeteer from 'puppeteer';
@@ -1128,6 +1137,147 @@ try {
         new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
       );
   });
+
+  // ── cross-register dossier exclusivity (gev:dossier-open) ──
+  //
+  // The same-register switch just above proves clicking a different site
+  // replaces an open ancient dossier with another ancient one; it says
+  // nothing about the other register. Both layers are already enabled here
+  // (ancient sites from the top of this script, anomalies since the
+  // year-dial decoupling section above), so this reuses that state rather
+  // than toggling either layer again: open an ancient dossier with a real
+  // click (sweepTarget and setViewAndProject, both already proven above),
+  // then a real click on an anomaly point, and prove the ancient dossier
+  // closes while the anomaly one opens, with exactly one dossier plate
+  // visible throughout.
+  await page.evaluate(setViewAndProject, sweepTarget);
+  await new Promise((r) => setTimeout(r, 700));
+  const crossAncientClick = await page.evaluate(setViewAndProject, sweepTarget);
+  if (crossAncientClick) {
+    await page.mouse.click(crossAncientClick.x, crossAncientClick.y);
+    await page
+      .waitForFunction(
+        () => {
+          const d = document.querySelector('.uap-dossier.ancient');
+          return d && !d.hidden;
+        },
+        { timeout: 8000 },
+      )
+      .catch(() => {});
+  }
+  const ancientOpenFirst = await page.evaluate(() => {
+    const d = document.querySelector('.uap-dossier.ancient');
+    return !!(d && !d.hidden);
+  });
+
+  // A real, currently-rendered anomaly record: getAnalystRecords applies the
+  // sky chronometer's own inWindow(year, mode) filter (index.js), the same
+  // filter the renderer itself applies, so the point picked here is
+  // guaranteed to actually be on screen and pickable rather than hidden by
+  // wherever the dial happens to sit at this point in the script. No status
+  // filter is ever touched in this file, so activeStatuses stays null (its
+  // default) and never narrows this further.
+  const anomalyTarget = await page.evaluate(() => {
+    const mod =
+      window.__godsEyeView.dataManager.layers.get('anomalies')?.module;
+    const record = (mod?.getAnalystRecords?.(50) ?? []).find(
+      (r) => Number.isFinite(r.lat) && Number.isFinite(r.lon),
+    );
+    return record
+      ? {
+          lat: record.lat,
+          lon: record.lon,
+          source: record.source,
+          status: record.status,
+        }
+      : null;
+  });
+  // Mirrors setViewAndProject above, at qa-anomalies.mjs's own proven pick
+  // height (20,000 m) for a plain report point rather than a monument.
+  const projectAnomalyPoint = (site) => {
+    const viewer = window.__godsEyeView.viewer;
+    const ellipsoid = viewer.scene.globe.ellipsoid;
+    viewer.camera.cancelFlight();
+    viewer.camera.setView({
+      destination: ellipsoid.cartographicToCartesian({
+        longitude: (site.lon * Math.PI) / 180,
+        latitude: (site.lat * Math.PI) / 180,
+        height: 20_000,
+      }),
+      orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 },
+    });
+    const target = ellipsoid.cartographicToCartesian({
+      longitude: (site.lon * Math.PI) / 180,
+      latitude: (site.lat * Math.PI) / 180,
+      height: 0,
+    });
+    const canvasPoint = viewer.scene.cartesianToCanvasCoordinates(target);
+    return canvasPoint ? { x: canvasPoint.x, y: canvasPoint.y } : null;
+  };
+  let crossRegisterSwitch = {
+    visibleCount: -1,
+    anomalyOpen: false,
+    ancientClosed: false,
+    anomalyText: '',
+  };
+  if (anomalyTarget) {
+    await page.evaluate(projectAnomalyPoint, anomalyTarget);
+    await new Promise((r) => setTimeout(r, 700));
+    const anomalyClick = await page.evaluate(
+      projectAnomalyPoint,
+      anomalyTarget,
+    );
+    if (anomalyClick) {
+      await page.mouse.click(anomalyClick.x, anomalyClick.y);
+      await page
+        .waitForFunction(
+          () => {
+            const d = document.querySelector('.uap-dossier:not(.ancient)');
+            return d && !d.hidden;
+          },
+          { timeout: 8000 },
+        )
+        .catch(() => {});
+    }
+    crossRegisterSwitch = await page.evaluate(() => {
+      const visible = [...document.querySelectorAll('.uap-dossier')].filter(
+        (d) => !d.hidden,
+      );
+      const anomalyDossier = document.querySelector(
+        '.uap-dossier:not(.ancient)',
+      );
+      const ancientDossier = document.querySelector('.uap-dossier.ancient');
+      return {
+        visibleCount: visible.length,
+        anomalyOpen: !!(anomalyDossier && !anomalyDossier.hidden),
+        ancientClosed: !ancientDossier || ancientDossier.hidden === true,
+        anomalyText: anomalyDossier ? anomalyDossier.textContent : '',
+      };
+    });
+  }
+  check(
+    'a real click on an anomaly point closes an open ancient dossier and opens the anomaly one, exactly one dossier visible (gev:dossier-open cross-register exclusivity)',
+    ancientOpenFirst === true &&
+      !!anomalyTarget &&
+      crossRegisterSwitch.visibleCount === 1 &&
+      crossRegisterSwitch.anomalyOpen === true &&
+      crossRegisterSwitch.ancientClosed === true &&
+      crossRegisterSwitch.anomalyText.includes(anomalyTarget.source) &&
+      crossRegisterSwitch.anomalyText.includes(anomalyTarget.status),
+    JSON.stringify({ ancientOpenFirst, crossRegisterSwitch, anomalyTarget }),
+  );
+  const crossEscape = await page.evaluate(() => {
+    const d = document.querySelector('.uap-dossier:not(.ancient)');
+    d?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    return { hidden: d ? d.hidden : null };
+  });
+  check(
+    'Escape closes the anomaly dossier opened by the cross-register switch',
+    crossEscape.hidden === true,
+    JSON.stringify(crossEscape),
+  );
 
   check(
     'no page errors during the interactive pass',

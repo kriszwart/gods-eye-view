@@ -791,6 +791,103 @@ try {
     JSON.stringify(fullMotionTicker),
   );
 
+  // Reduced motion: the points themselves carry a continuous sine "breathing"
+  // pulse (src/layers/liveClaims/rendering.js, onTick), independent of the
+  // ticker's own one-shot entrance animation checked above. Proven through a
+  // tiny diagnostic (`layer.getDiagnostics()`, mirroring the getDiagnostics
+  // pattern other layers already expose for their own qa gates) rather than
+  // screenshot diffing: two snapshots of the same rendered point across a
+  // real delay must hold near-steady under prefers-reduced-motion (within
+  // DRIFT_EPSILON, not bit-exact: age-based brightness legitimately keeps
+  // decaying with real elapsed time even with the sine term removed, a
+  // few thousandths at most over well under a second against the 48-hour
+  // window), and must move well past that epsilon under ordinary motion
+  // (the sine pulse's own amplitude is over an order of magnitude larger),
+  // proving the reduced-motion branch is a genuine bypass, not an accident
+  // of the fixture data.
+  async function pulseDiagnosticsOnFreshPage(reduceMotion) {
+    const ctx = await browser.createBrowserContext();
+    const p = await ctx.newPage();
+    if (reduceMotion) {
+      await p.emulateMediaFeatures([
+        { name: 'prefers-reduced-motion', value: 'reduce' },
+      ]);
+    }
+    await p.goto(`${fixtureBase}/?welcome=0`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await p.waitForFunction(() => window.__godsEyeView?.dataManager, {
+      timeout: 60000,
+    });
+    await p.evaluate(() =>
+      window.__godsEyeView.dataManager.setEnabled('live-claims', true, {
+        origin: 'user',
+      }),
+    );
+    await p.waitForFunction(
+      () =>
+        (window.__godsEyeView.dataManager.layers
+          .get('live-claims')
+          ?.module?.getStats?.().count ?? 0) > 0,
+      { timeout: 30000 },
+    );
+    const readDiagnostics = () =>
+      p.evaluate(() =>
+        window.__godsEyeView.dataManager.layers
+          .get('live-claims')
+          .module.getDiagnostics(),
+      );
+    // A tick needs to have actually run at least once before the first
+    // snapshot: the renderer only updates a point's size/alpha on
+    // viewer.clock.onTick, which only fires while the layer holds
+    // continuous render (rows loaded and visible).
+    await new Promise((r) => setTimeout(r, 300));
+    const first = await readDiagnostics();
+    await new Promise((r) => setTimeout(r, 900));
+    const second = await readDiagnostics();
+    return { first, second };
+  }
+
+  // Comfortably above the largest age-decay drift a sub-second delay can
+  // produce (observed order of 1e-5), and comfortably below the sine
+  // pulse's own amplitude (PULSE_SIZE_AMPLITUDE_PX 1.6,
+  // PULSE_ALPHA_AMPLITUDE 0.12 - see rendering.js), so it cleanly separates
+  // "held steady" from "still pulsing".
+  const PIXEL_DRIFT_EPSILON = 0.05;
+  const ALPHA_DRIFT_EPSILON = 0.01;
+
+  const reducedPulse = await pulseDiagnosticsOnFreshPage(true);
+  check(
+    'live claims points: getDiagnostics reports prefers-reduced-motion',
+    reducedPulse.first.reducedMotion === true &&
+      reducedPulse.second.reducedMotion === true,
+    JSON.stringify(reducedPulse),
+  );
+  check(
+    "live claims points: the tick's sine pulse never runs under prefers-reduced-motion (pixel size and alpha hold near-steady across ticks, only age-decay drift)",
+    reducedPulse.first.pointCount > 0 &&
+      Math.abs(
+        reducedPulse.first.firstPixelSize - reducedPulse.second.firstPixelSize,
+      ) < PIXEL_DRIFT_EPSILON &&
+      Math.abs(reducedPulse.first.firstAlpha - reducedPulse.second.firstAlpha) <
+        ALPHA_DRIFT_EPSILON,
+    JSON.stringify(reducedPulse),
+  );
+
+  const fullMotionPulse = await pulseDiagnosticsOnFreshPage(false);
+  check(
+    'live claims points: without prefers-reduced-motion the sine pulse keeps modulating pixel size or alpha well past the age-decay epsilon (the reduced-motion branch above is a real bypass, not an accident)',
+    fullMotionPulse.first.pointCount > 0 &&
+      (Math.abs(
+        fullMotionPulse.first.firstPixelSize -
+          fullMotionPulse.second.firstPixelSize,
+      ) >= PIXEL_DRIFT_EPSILON ||
+        Math.abs(
+          fullMotionPulse.first.firstAlpha - fullMotionPulse.second.firstAlpha,
+        ) >= ALPHA_DRIFT_EPSILON),
+    JSON.stringify(fullMotionPulse),
+  );
+
   // Disable: the ticker plate must close, not stay open with a dead
   // channel behind it (the Spotter plate orphan lesson).
   await page.evaluate(() =>

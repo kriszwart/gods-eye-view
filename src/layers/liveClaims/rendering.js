@@ -28,6 +28,19 @@ const PULSE_ALPHA_AMPLITUDE = 0.12;
 // afford the looser tolerance.
 const CLICK_PICK_BOX_PX = 12;
 
+/** True when the visitor has asked for reduced motion. This module is
+ * Cesium-side (it already imports Cesium and touches the viewer), where
+ * reading `window.matchMedia` is allowed - unlike the portable
+ * records/source/model modules, which must never touch a browser global.
+ * Guarded for non-browser environments all the same. */
+function prefersReducedMotion() {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches === true
+  );
+}
+
 /**
  * Owns every Cesium resource for the live-claims layer: a single
  * PointPrimitiveCollection of pulsing ion points, ticked continuously (via a
@@ -49,6 +62,24 @@ export function createLiveClaimsRenderer(viewer, { render } = {}) {
   let visible = false;
   let rowCount = 0;
   let holding = false;
+  let reducedMotion = prefersReducedMotion();
+  // Live: a visitor can flip the OS/browser reduced-motion setting while
+  // the app is already running, so the query is watched rather than read
+  // once at construction. Guarded the same way prefersReducedMotion() is,
+  // for non-browser test environments.
+  let motionQuery = null;
+  let onMotionChange = null;
+  if (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function'
+  ) {
+    motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    onMotionChange = (event) => {
+      reducedMotion = event.matches;
+      requestFrame('live-claims-motion-preference-changed');
+    };
+    motionQuery.addEventListener?.('change', onMotionChange);
+  }
 
   const syncHold = () => {
     if (!render) return;
@@ -71,16 +102,24 @@ export function createLiveClaimsRenderer(viewer, { render } = {}) {
       const meta = point.id;
       const ageMs = nowMs - meta.fetchedAtMs;
       const brightness = brightnessForAge(ageMs);
-      const phase = ((now - t0) / 1000) * PULSE_HZ * 2 * Math.PI + meta.phase;
-      const pulse = 0.5 + 0.5 * Math.sin(phase);
-      point.pixelSize =
-        pointPixelSize(brightness) + PULSE_SIZE_AMPLITUDE_PX * pulse;
-      point.color = ion.withAlpha(
-        Math.max(
-          0,
-          Math.min(1, pointAlpha(brightness) + PULSE_ALPHA_AMPLITUDE * pulse),
-        ),
-      );
+      if (reducedMotion) {
+        // No sine modulation: the point sits at its plain age-brightness
+        // size and alpha, unchanging frame to frame (see
+        // docs/superpowers/plans - reduced motion parked follow-up).
+        point.pixelSize = pointPixelSize(brightness);
+        point.color = ion.withAlpha(pointAlpha(brightness));
+      } else {
+        const phase = ((now - t0) / 1000) * PULSE_HZ * 2 * Math.PI + meta.phase;
+        const pulse = 0.5 + 0.5 * Math.sin(phase);
+        point.pixelSize =
+          pointPixelSize(brightness) + PULSE_SIZE_AMPLITUDE_PX * pulse;
+        point.color = ion.withAlpha(
+          Math.max(
+            0,
+            Math.min(1, pointAlpha(brightness) + PULSE_ALPHA_AMPLITUDE * pulse),
+          ),
+        );
+      }
     }
     if (!render) scene.requestRender();
   }
@@ -127,12 +166,37 @@ export function createLiveClaimsRenderer(viewer, { render } = {}) {
     return picked?.id?.claimId ?? picked?.primitive?.id?.claimId ?? null;
   }
 
+  /**
+   * A tiny read-only snapshot for qa-claims.mjs's reduced-motion check
+   * (mirrors the `getDiagnostics()` pattern other layers already expose for
+   * their own qa gates, for example `src/layers/cyclones/index.js`), rather
+   * than proving the tick's sine modulation is bypassed through screenshot
+   * diffing. `firstPixelSize`/`firstAlpha` are the first rendered point's
+   * current values, so a caller can snapshot this twice across a short
+   * delay and confirm they hold steady under reduced motion (and move
+   * without it).
+   * @returns {{reducedMotion: boolean, pointCount: number,
+   *   firstPixelSize: ?number, firstAlpha: ?number}}
+   */
+  function getDiagnostics() {
+    const first = points.length ? points.get(0) : null;
+    return {
+      reducedMotion,
+      pointCount: points.length,
+      firstPixelSize: first ? first.pixelSize : null,
+      firstAlpha: first ? first.color.alpha : null,
+    };
+  }
+
   function destroy() {
     removeTick();
+    motionQuery?.removeEventListener?.('change', onMotionChange);
+    motionQuery = null;
+    onMotionChange = null;
     scene.primitives.remove(points);
     rowCount = 0;
     syncHold();
   }
 
-  return { setRows, apply, pick, destroy };
+  return { setRows, apply, pick, destroy, getDiagnostics };
 }

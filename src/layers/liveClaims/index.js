@@ -609,6 +609,20 @@ export function createLiveClaimsLayer({
         unplaced,
       };
     },
+
+    /** Read-only diagnostic for qa-claims.mjs's reduced-motion check; see
+     * `createLiveClaimsRenderer`'s own `getDiagnostics()` doc comment.
+     * Returns a null-ish default before `init()` has built a renderer. */
+    getDiagnostics() {
+      return (
+        renderer?.getDiagnostics?.() ?? {
+          reducedMotion: null,
+          pointCount: 0,
+          firstPixelSize: null,
+          firstAlpha: null,
+        }
+      );
+    },
   };
   return layer;
 }

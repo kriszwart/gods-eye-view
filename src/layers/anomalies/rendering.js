@@ -36,6 +36,18 @@ const INFRARED_FS = /* glsl */ `
 const hashDeg = (s) =>
   [...s].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7) % 360;
 
+/** True when the visitor has asked for reduced motion. This module is
+ * Cesium-side (it already imports Cesium and drives the scene directly),
+ * where reading `window.matchMedia` is allowed, unlike the portable
+ * records/source/model modules. Guarded for non-browser environments. */
+function prefersReducedMotion() {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches === true
+  );
+}
+
 /**
  * Owns every Cesium resource for the layer: one pair of point collections per
  * year (current and past), plus animated hero models.
@@ -62,6 +74,23 @@ export function createAnomalyRenderer(
   };
   // Continuous frames only while something animates: hero loops or pulses.
   let holding = false;
+  let reducedMotion = prefersReducedMotion();
+  // Live: a visitor can flip the OS/browser reduced-motion setting while
+  // the app is already running, so the query is watched rather than read
+  // once at construction. Guarded the same way prefersReducedMotion() is,
+  // for non-browser test environments.
+  let motionQuery = null;
+  let onMotionChange = null;
+  if (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function'
+  ) {
+    motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    onMotionChange = (event) => {
+      reducedMotion = event.matches;
+    };
+    motionQuery.addEventListener?.('change', onMotionChange);
+  }
   const syncHold = () => {
     if (!render) return;
     const want = state.visible && (heroes.length > 0 || live.length > 0);
@@ -260,7 +289,11 @@ export function createAnomalyRenderer(
     // Hero loops need frames; the governor hold covers this when injected.
     if (!render) scene.requestRender();
   };
-  // Arrival pulses: a ring blooms at each report as its year arrives.
+  // Arrival pulses: a ring blooms at each report as its year arrives. Under
+  // reduced motion (see prefersReducedMotion above) a ring never grows or
+  // fades: it appears once at a fixed, fully-bloomed size and alpha, holds
+  // there unchanged, then is removed outright once PULSE_MS elapses -
+  // never a per-frame tween.
   const pulses = scene.primitives.add(
     new Cesium.PointPrimitiveCollection({
       blendOption: Cesium.BlendOption.TRANSLUCENT,
@@ -268,6 +301,8 @@ export function createAnomalyRenderer(
   );
   let live = [];
   const PULSE_MS = 1600;
+  const REDUCED_PULSE_PIXEL_SIZE = 26;
+  const REDUCED_PULSE_ALPHA = 0.6;
   const stepPulses = () => {
     if (!live.length) return;
     const now = performance.now();
@@ -277,8 +312,10 @@ export function createAnomalyRenderer(
         pulses.remove(p.point);
         return false;
       }
-      p.point.pixelSize = 6 + 34 * t;
-      p.point.outlineColor = p.color.withAlpha(0.9 * (1 - t) * (1 - t));
+      if (!reducedMotion) {
+        p.point.pixelSize = 6 + 34 * t;
+        p.point.outlineColor = p.color.withAlpha(0.9 * (1 - t) * (1 - t));
+      }
       return true;
     });
     if (!render) scene.requestRender();
@@ -296,9 +333,11 @@ export function createAnomalyRenderer(
       const color = new Cesium.Color(red, green, blue, 1);
       const point = pulses.add({
         position: Cesium.Cartesian3.fromDegrees(r.lon, r.lat, 0),
-        pixelSize: 6,
+        pixelSize: reducedMotion ? REDUCED_PULSE_PIXEL_SIZE : 6,
         color: Cesium.Color.TRANSPARENT,
-        outlineColor: color,
+        outlineColor: reducedMotion
+          ? color.withAlpha(REDUCED_PULSE_ALPHA)
+          : color,
         outlineWidth: 1.5,
       });
       live.push({ point, start, color });
@@ -447,6 +486,9 @@ export function createAnomalyRenderer(
 
   function destroy() {
     removeTick();
+    motionQuery?.removeEventListener?.('change', onMotionChange);
+    motionQuery = null;
+    onMotionChange = null;
     scene.primitives.remove(pulses);
     live = [];
     clearPoints();

@@ -1,5 +1,48 @@
 # Changelog
 
+- Ancient legibility: the ancient sites register reads clearly at every
+  camera height, not just at world zoom, and the gold register stays gold
+  throughout - heroes are unaffected by any of it.
+
+  At the closest band, a sweep single now renders as a small composed
+  billboard - a dark halo ring behind the site's type glyph - instead of
+  the bare 4px dot that used to vanish against varied terrain. The
+  billboard depth-tests against the globe by default, which produced an
+  intermittent pick miss at ground level despite rendering in the right
+  screen position; `disableDepthTestDistance` on the billboard fixes it,
+  mirroring the FIRMS layer's own billboards. A failed glyph load now
+  caches a permanent fallback rather than retrying on every render.
+
+  The legend gained a glyph key naming all five sweep types (circle,
+  geoglyph, megalith, mound, settlement), and a row of type filter chips
+  sits on the deep-time dial's own panel: each type toggles independently,
+  "All" restores every type, and the filter composes as one AND predicate
+  with the era band rather than a second, competing recompute path -
+  unchecking a type while an era is active narrows further, never resets.
+  Heroes always show regardless of the chips, since they are curated, not
+  swept; the legend says so. Clicking a cluster badge now also shows a
+  one-line type breakdown ("126 sites: 87 megalith, 22 mound, 17 circle"),
+  read straight off the same per-cluster counts the badge's own number
+  comes from, and auto-dismisses once the camera settles one band closer.
+
+  Ambient names finish the picture: at the closest band, when the current,
+  filtered view holds fewer than about 30 sweep singles, their names now
+  appear as small, dimmer labels beside the glyph billboards, published to
+  a sibling overlay source rather than the hero source, so a count that
+  moves with the filters and the camera can never disturb the hero tier's
+  own fixed entry count. Sweep labels stay smaller and dimmer than a hero
+  label, and always lose a collision to one, so heroes stay visually
+  primary. Zooming out past the closest band, or a view crowded past the
+  cap, clears the sweep labels outright; the chips and the era dial
+  already narrow which singles exist, so the labels follow both with no
+  extra plumbing. Labels carry names only, never a dating claim.
+
+  Gates: `npm run format:check` (1,126 files clean), `npm test` (5,146
+  tests, 5,145 passing, 1 pre-existing skip, 0 failed), `npm run
+  check:boundaries`, `npm run build`. `node scripts/qa-ancient-sites.mjs`
+  (0 failures, 3 consecutive clean runs) and `node scripts/qa-anomalies.mjs`
+  (0 failures).
+
 - Phenomena phase 5b: the ancient sites register grows from a curated
   sample to a worldwide sweep, the Modern Antiquarian position is
   restated rather than changed, and the chronometer gains a second,

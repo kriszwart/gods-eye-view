@@ -300,9 +300,25 @@ export function validateClassified(candidate, classified, shapeCategories) {
 }
 
 /**
- * Build ~8 clearly fictional claims spread across the 48 h window so
+ * Build ~9 clearly fictional claims spread across the 48 h window so
  * age-driven brightness ramps show, plus a fixed unplaced count. Used only
  * when GEV_CLAIMS_FIXTURE=1; never mixed with live data.
+ *
+ * The Paris entry sits at a real French location, deliberately near the
+ * GEIPAN case mass the bundled `anomalies.v1.json` carries, so the
+ * dossier's nearby-cases block (`src/layers/liveClaims/nearby.js`) has a
+ * genuine nonzero result to render against real data; every other claim
+ * sits far enough from that France-heavy dataset to keep the honest
+ * zero-case path live too (see `scripts/qa-claims.mjs`, which proves both
+ * branches).
+ *
+ * The Paris entry's `fetchedAt` (5 h ago) is deliberately out of step with
+ * its position at the end of this array (which otherwise lists the other
+ * eight claims oldest-last): this makes the array's own order NOT the
+ * newest-first order, so a stream ticker that renders claims as given,
+ * without sorting them by `fetchedAt` itself, would show them in the wrong
+ * order. That keeps the ticker's own sort genuinely load-bearing rather
+ * than a no-op over pre-ordered fixture data.
  *
  * @param {number} [now] - epoch ms.
  * @returns {{claims: Array<object>, unplaced: number}}
@@ -397,6 +413,21 @@ export function buildFixtureClaims(now = Date.now()) {
       shape: null,
       when: null,
       fetchedAt: ago(40),
+    },
+    {
+      id: 'reddit:fixture-paris',
+      url: 'https://example.com/reddit/fixture-paris',
+      source: 'reddit',
+      lat: 48.8566,
+      lon: 2.3522,
+      place: 'Paris, France',
+      shape: 'boomerang',
+      when: null,
+      // Deliberately out of age order against this array's own position
+      // (see the function's doc comment): chronologically this sits
+      // between the Tokyo and Sydney entries above, not after Pacific
+      // South.
+      fetchedAt: ago(5),
     },
   ];
   return { claims, unplaced: 2 };

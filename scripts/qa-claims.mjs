@@ -16,6 +16,16 @@
  * but the anomalies dataset grows across build phases, so a hardcoded
  * count would go stale.
  *
+ * Both branches of that nearby-cases check run live every pass: the New
+ * York fixture claim sits far from the France-heavy GEIPAN mass (an honest
+ * zero-case result), while the Paris fixture claim sits at a real French
+ * location squarely inside that mass (a genuine nonzero result). The Paris
+ * claim's fetchedAt also sits out of step with its position at the end of
+ * buildFixtureClaims()'s array, so the stream ticker's newest-first order
+ * check below is only satisfied by an actual sort, not a pass-through of
+ * feed order (see the fixture's own doc comment in
+ * server/providers/claims.js).
+ *
  * Also proves the keyless path against a SECOND throwaway server with no
  * fixture and no DEEPSEEK_API_KEY: the register stays empty and shows
  * "Classifier key not set" rather than erroring.
@@ -190,8 +200,10 @@ try {
     JSON.stringify(statusPlate),
   );
 
-  // A known fixture claim (New York, the freshest in buildFixtureClaims) at
-  // the same pick height the anomalies/ancient-sites gates use.
+  // A known fixture claim (New York, the freshest in buildFixtureClaims and
+  // far from the France-heavy GEIPAN mass, so this is the honest zero-case
+  // nearby anchor) at the same pick height the anomalies/ancient-sites
+  // gates use.
   const target = await page.evaluate(() => {
     const records = window.__godsEyeView.dataManager.layers
       .get('live-claims')
@@ -323,35 +335,146 @@ try {
     nearbyTruth !== null,
     `target=${JSON.stringify(target)}`,
   );
-  if (nearbyTruth && nearbyTruth.count === 0) {
-    check(
-      'nearby block shows the honest zero-case message (computed truth, not a hardcoded number)',
-      dossier.nearbyEmptyText ===
-        `No historical cases within ${NEARBY_RADIUS_KM} km`,
-      JSON.stringify({ nearbyTruth, dossier }),
-    );
-  } else if (nearbyTruth) {
-    const expectedCountText = `${nearbyTruth.count} historical case${nearbyTruth.count === 1 ? '' : 's'} within ${NEARBY_RADIUS_KM} km`;
-    const expectedRows = nearbyTruth.top.map(
-      (c) =>
-        `${c.year ?? 'unknown'}, ${c.status ?? 'unknown'}, ${Math.round(c.distanceKm)} km`,
-    );
-    check(
-      'nearby block shows the correct case count (computed truth, not a hardcoded number)',
-      dossier.nearbyCountText === expectedCountText,
-      JSON.stringify({ expectedCountText, got: dossier.nearbyCountText }),
-    );
-    check(
-      'nearby block lists the nearest cases, nearest first, matching the computed truth',
-      JSON.stringify(dossier.nearbyRowsText) === JSON.stringify(expectedRows),
-      JSON.stringify({ expectedRows, got: dossier.nearbyRowsText }),
-    );
-  }
+  // New York sits far from the France-heavy GEIPAN mass: this is genuinely
+  // the zero-case branch, not a vacuous check that never runs.
+  check(
+    'the New York fixture claim genuinely has zero cases nearby (a real zero-path anchor)',
+    nearbyTruth !== null && nearbyTruth.count === 0,
+    JSON.stringify(nearbyTruth),
+  );
+  check(
+    'nearby block shows the honest zero-case message (computed truth, not a hardcoded number)',
+    dossier.nearbyEmptyText ===
+      `No historical cases within ${NEARBY_RADIUS_KM} km`,
+    JSON.stringify({ nearbyTruth, dossier }),
+  );
 
   check(
     'no page errors during the interactive pass',
     pageErrors.length === 0,
     pageErrors.join(' | '),
+  );
+
+  // ── nonzero nearby path: the Paris fixture claim sits at a real French
+  // location inside the bundled GEIPAN case mass, so this branch is proven
+  // live against real data, not just at the unit level. ──
+  const parisTarget = await page.evaluate(() => {
+    const records = window.__godsEyeView.dataManager.layers
+      .get('live-claims')
+      .module.getAnalystRecords(20);
+    return records.find((r) => r.place?.includes('Paris'));
+  });
+  const parisTruth =
+    anomalyRows &&
+    Number.isFinite(parisTarget?.lat) &&
+    Number.isFinite(parisTarget?.lon)
+      ? findNearbyCases(
+          { lat: parisTarget.lat, lon: parisTarget.lon },
+          anomalyRows,
+        )
+      : null;
+  check(
+    'the Paris fixture claim genuinely has cases nearby (a real nonzero-path anchor, computed truth)',
+    parisTruth !== null && parisTruth.count > 0,
+    JSON.stringify(parisTruth),
+  );
+
+  const parisClickPoint = await page.evaluate(projectAt, parisTarget);
+  let parisDossier = { open: false };
+  if (parisClickPoint) {
+    await page.mouse.click(parisClickPoint.x, parisClickPoint.y);
+    await page
+      .waitForFunction(
+        () => {
+          const d = document.querySelector('.uap-dossier.claims');
+          return d && !d.hidden;
+        },
+        { timeout: 8000 },
+      )
+      .catch(() => {});
+    await page
+      .waitForFunction(
+        () =>
+          document.querySelector('.uap-dossier.claims .uap-nearby') !== null,
+        { timeout: 8000 },
+      )
+      .catch(() => {});
+    // Wrap camera.flyTo before clicking a nearby row so a click's effect on
+    // the camera is provable even though the flight itself takes 2.2s to
+    // finish animating.
+    const flyProbe = await page.evaluate(() => {
+      const viewer = window.__godsEyeView.viewer;
+      const original = viewer.camera.flyTo.bind(viewer.camera);
+      window.__qaFlyToCalls = 0;
+      viewer.camera.flyTo = (options) => {
+        window.__qaFlyToCalls++;
+        return original(options);
+      };
+      const row = document.querySelector('.uap-dossier.claims .uap-nearby-row');
+      const before = window.__qaFlyToCalls;
+      row?.click();
+      return {
+        rowFound: !!row,
+        rowText: row?.textContent ?? null,
+        calledBefore: before,
+        calledAfter: window.__qaFlyToCalls,
+      };
+    });
+    parisDossier = await page.evaluate(() => {
+      const d = document.querySelector('.uap-dossier.claims');
+      const open = !!(d && !d.hidden);
+      const dl = d ? d.querySelector('dl')?.textContent || '' : '';
+      const nearbyCountText =
+        d?.querySelector('.uap-nearby-count')?.textContent ?? null;
+      const nearbyRowsText = d
+        ? [...d.querySelectorAll('.uap-nearby-row')].map(
+            (row) => row.textContent,
+          )
+        : [];
+      d?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      );
+      return { open, dl, nearbyCountText, nearbyRowsText };
+    });
+    parisDossier.flyProbe = flyProbe;
+  }
+  check(
+    'clicking the Paris fixture claim opens its dossier',
+    parisClickPoint !== null && /Place/.test(parisDossier.dl || ''),
+    JSON.stringify({ parisTarget, parisDossier }),
+  );
+  const parisExpectedCountText = parisTruth
+    ? `${parisTruth.count} historical case${parisTruth.count === 1 ? '' : 's'} within ${NEARBY_RADIUS_KM} km`
+    : null;
+  const parisExpectedRows = parisTruth
+    ? parisTruth.top.map(
+        (c) =>
+          `${c.year ?? 'unknown'}, ${c.status ?? 'unknown'}, ${Math.round(c.distanceKm)} km`,
+      )
+    : null;
+  check(
+    'nearby block shows the correct nonzero case count for Paris (computed truth, not a hardcoded number)',
+    parisDossier.nearbyCountText === parisExpectedCountText,
+    JSON.stringify({
+      expected: parisExpectedCountText,
+      got: parisDossier.nearbyCountText,
+    }),
+  );
+  check(
+    'nearby block lists the nearest cases for Paris, nearest first, matching the computed truth (top rows render)',
+    JSON.stringify(parisDossier.nearbyRowsText) ===
+      JSON.stringify(parisExpectedRows),
+    JSON.stringify({
+      expected: parisExpectedRows,
+      got: parisDossier.nearbyRowsText,
+    }),
+  );
+  check(
+    'clicking a nearby-case row invokes the camera fly-to (the nonzero branch is interactive, not just rendered)',
+    parisDossier.flyProbe?.rowFound === true &&
+      parisDossier.flyProbe?.calledAfter >
+        (parisDossier.flyProbe?.calledBefore ?? -1),
+    JSON.stringify(parisDossier.flyProbe),
   );
 
   // --- Stream ticker: newest ~10 claims, newest first, a row click flies
@@ -388,14 +511,17 @@ try {
     tickerOpen.visible && tickerOpen.count > 0,
     JSON.stringify(tickerOpen),
   );
-  // buildFixtureClaims() (server/providers/claims.js) already lists its
-  // ~8 fictional claims newest first by `fetchedAt`; the ticker sorts
-  // independently, so this also proves that sort is correct, not just
-  // pass-through.
+  // buildFixtureClaims() (server/providers/claims.js) deliberately does NOT
+  // list its ~9 fictional claims newest first by `fetchedAt`: the Paris
+  // entry sits at the end of that array but is chronologically the fourth
+  // newest, so this assertion only passes if the ticker genuinely sorts by
+  // `fetchedAt` itself. A pass-through of feed order would put Paris last,
+  // not fourth, and fail this check.
   const expectedTickerPlaceOrder = [
     'New York City, New York, United States',
     'London, United Kingdom',
     'Tokyo, Japan',
+    'Paris, France',
     'Sydney, Australia',
     'Mexico City, Mexico',
     'Open Pacific Ocean',

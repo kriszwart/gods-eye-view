@@ -1026,6 +1026,109 @@ try {
   );
   check('Escape closes the dossier', dossier.closed === true);
 
+  // Cross-click dossier switch (feat/atlas: the Void style and spectrum
+  // accents, piece 6): with one sweep dossier open, a real click on a
+  // different sweep site must replace it in the same gesture, no Close
+  // step in between (regression: clicking a different point used to do
+  // nothing until Close was pressed). Reuses setViewAndProject and
+  // sweepTarget (the first sweep row, already proven clickable above) for
+  // the first click, a second sweep row for the switch.
+  const secondSweepTarget = await page.evaluate(async () => {
+    const res = await fetch('/ancient-sites/sites.v2.json');
+    const json = await res.json();
+    return {
+      lat: json.sites.lat[1],
+      lon: json.sites.lon[1],
+      name: json.sites.name[1],
+    };
+  });
+  // setView, then settle, then recompute the click point fresh right
+  // before clicking (see setViewAndProject's own top-of-file comment) -
+  // the same two-step pattern the first sweep click above uses, not a
+  // single fire-and-click that can race the camera settling.
+  await page.evaluate(setViewAndProject, sweepTarget);
+  await new Promise((r) => setTimeout(r, 700));
+  const reopenClick = await page.evaluate(setViewAndProject, sweepTarget);
+  const switchCheck = {
+    firstOpen: false,
+    firstTitle: null,
+    secondOpen: false,
+    secondTitle: null,
+  };
+  if (reopenClick) {
+    await page.mouse.click(reopenClick.x, reopenClick.y);
+    await page
+      .waitForFunction(
+        () => {
+          const d = document.querySelector('.uap-dossier.ancient');
+          return d && !d.hidden;
+        },
+        { timeout: 8000 },
+      )
+      .catch(() => {});
+    const firstState = await page.evaluate(() => {
+      const d = document.querySelector('.uap-dossier.ancient');
+      return {
+        open: d && !d.hidden,
+        title: d?.querySelector('h2')?.textContent,
+      };
+    });
+    switchCheck.firstOpen = firstState.open;
+    switchCheck.firstTitle = firstState.title;
+
+    await page.evaluate(setViewAndProject, secondSweepTarget);
+    await new Promise((r) => setTimeout(r, 700));
+    const secondClick = await page.evaluate(
+      setViewAndProject,
+      secondSweepTarget,
+    );
+    if (secondClick) {
+      // No Escape, no Close click here: the dossier is left exactly as the
+      // first click made it, then a second real click picks a different
+      // site directly.
+      await page.mouse.click(secondClick.x, secondClick.y);
+      await page
+        .waitForFunction(
+          (name) =>
+            document.querySelector('.uap-dossier.ancient h2')?.textContent ===
+            name,
+          { timeout: 8000 },
+          secondSweepTarget.name,
+        )
+        .catch(() => {});
+      const secondState = await page.evaluate(() => {
+        const d = document.querySelector('.uap-dossier.ancient');
+        return {
+          open: d && !d.hidden,
+          title: d?.querySelector('h2')?.textContent,
+        };
+      });
+      switchCheck.secondOpen = secondState.open;
+      switchCheck.secondTitle = secondState.title;
+    }
+  }
+  check(
+    'clicking a different sweep site while a dossier is open switches its title in the same gesture, no Close needed',
+    switchCheck.firstOpen === true &&
+      switchCheck.firstTitle === sweepTarget.name &&
+      switchCheck.secondOpen === true &&
+      switchCheck.secondTitle === secondSweepTarget.name &&
+      switchCheck.secondTitle !== switchCheck.firstTitle,
+    JSON.stringify({
+      switchCheck,
+      expectedFirst: sweepTarget.name,
+      expectedSecond: secondSweepTarget.name,
+    }),
+  );
+  // Leave it closed for the checks that follow.
+  await page.evaluate(() => {
+    document
+      .querySelector('.uap-dossier.ancient')
+      ?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      );
+  });
+
   check(
     'no page errors during the interactive pass',
     pageErrors.length === 0,

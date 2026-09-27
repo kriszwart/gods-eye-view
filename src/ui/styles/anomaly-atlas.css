@@ -15,6 +15,26 @@
   --uap-amber: #ffb547;
   --uap-mono: 'Martian Mono', 'IBM Plex Mono', ui-monospace, monospace;
   --uap-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  /* The specimens page's spectrum accent, reused as the dossier plate's
+     title hairline. Dark values above; the light (clean room) palette
+     from DESIGN_SYSTEM.md takes over under prefers-color-scheme: light. */
+  --uap-spectrum: linear-gradient(
+    90deg,
+    var(--uap-magenta),
+    var(--uap-violet) 55%,
+    var(--uap-ion)
+  );
+  /* The dossier plate's own background: near-opaque rather than the shared
+     --glass-bg (88%). Cyber HUD's sonar sweep and corner telemetry sit
+     underneath at a lower z-index but bright/high-contrast enough to read
+     through 88% opacity as legible ghost text, measured on a live 390px
+     screenshot with Cyber HUD active; 99% leaves it unreadable. No
+     backdrop-filter here (unlike GEV's other glass panels): blurring the
+     WebGL canvas behind an almost-opaque plate bought nothing and, in
+     headless Chrome specifically, measurably worsened the residual ghost,
+     so plain opacity carries this alone. Kept local to the dossier so the
+     rest of the glass-panel family is unaffected. */
+  --uap-dossier-bg: rgba(7, 8, 18, 0.99);
 
   /* Re-point GEV's own tokens so existing panels follow the atlas.
      --panel-radius squares every rounded glass card GEV builds from it
@@ -37,6 +57,12 @@
   --btn-radius: 2px;
 }
 
+@media (prefers-color-scheme: light) {
+  :root.anomaly-atlas {
+    --uap-spectrum: linear-gradient(90deg, #d1127f, #5b3fe0 55%, #0a93b8);
+  }
+}
+
 /* Hairline plates with registration corners instead of rounded glass cards. */
 .anomaly-atlas .uap-dossier {
   position: absolute;
@@ -44,7 +70,7 @@
   top: calc(96px + env(safe-area-inset-top, 0px));
   width: min(340px, calc(100vw - 48px));
   padding: 20px;
-  background: var(--glass-bg);
+  background: var(--uap-dossier-bg);
   color: var(--uap-ink);
   font: 400 14px/1.55 var(--uap-sans);
   /* Clear the right rail (#right-context-rail and its DISPLAY, CCTV and
@@ -74,9 +100,24 @@
   border-width: 0 1px 1px 0;
 }
 .anomaly-atlas .uap-dossier h2 {
+  position: relative;
   margin: 6px 0 12px;
+  padding-bottom: 10px;
   font: 400 21px/1.2 var(--uap-mono);
   letter-spacing: -0.01em;
+}
+/* Spectrum hairline: the specimens page's accent under the plate title,
+   shared by the anomaly and ancient dossiers (the ancient register's own
+   gold accent lives on .uap-debated below, not here). */
+.anomaly-atlas .uap-dossier h2::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--uap-spectrum);
+  opacity: 0.55;
 }
 .anomaly-atlas .uap-dossier .uap-code {
   margin: 0;
@@ -316,6 +357,39 @@
 .uap-readout {
   margin: 0;
   color: var(--uap-ink, #d9dce6);
+}
+/* Status tint: when exactly one status filter is left on, the readout takes
+   its hue at a muted blend toward ink, keeping AA contrast against the void
+   background instead of the token's full saturation. Set only by the sky
+   register's status filters (see index.js); the deep-time dial never calls
+   setReadoutTint, so its era readout is unaffected. */
+.uap-readout-explained {
+  color: color-mix(
+    in srgb,
+    var(--uap-dim, #7c8195) 70%,
+    var(--uap-ink, #d9dce6)
+  );
+}
+.uap-readout-insufficient {
+  color: color-mix(
+    in srgb,
+    var(--uap-violet, #7b5cff) 70%,
+    var(--uap-ink, #d9dce6)
+  );
+}
+.uap-readout-unresolved {
+  color: color-mix(
+    in srgb,
+    var(--uap-magenta, #ff2e9a) 70%,
+    var(--uap-ink, #d9dce6)
+  );
+}
+.uap-readout-contested {
+  color: color-mix(
+    in srgb,
+    var(--uap-amber, #ffb547) 70%,
+    var(--uap-ink, #d9dce6)
+  );
 }
 .uap-chrono :focus-visible {
   outline: 2px solid var(--uap-ink, #d9dce6);

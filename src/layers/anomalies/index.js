@@ -22,6 +22,15 @@ const escapeHtml = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
 /**
+ * Fired on `window` whenever either register's dossier plate opens, so the
+ * other register can close its own (both plates share one on-screen slot).
+ * Kept a plain window event rather than a shared module: the anomaly and
+ * ancient-sites layers are independent, sibling-only-by-the-shell modules,
+ * and a matching listener lives in src/layers/ancientSites/index.js.
+ */
+const DOSSIER_OPEN_EVENT = 'gev:dossier-open';
+
+/**
  * An escaped, safeSourceUrl-guarded link for the Sources panel. Returns an
  * empty string (no dangling anchor) when the URL fails the guard.
  */
@@ -121,6 +130,7 @@ export function createAnomaliesLayer({
   let lastError = null;
   let removeCamera = null;
   let clickHandler = null;
+  let onOtherDossierOpen = null;
   let lastLayout = '';
   let lastYear = null;
   let restoreAtmosphere = null;
@@ -244,6 +254,13 @@ export function createAnomaliesLayer({
           ? `<p class="uap-source">${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open record</a>` : ''}${wikipediaUrl ? `<a href="${escapeHtml(wikipediaUrl)}" target="_blank" rel="noopener noreferrer">Wikipedia</a>` : ''}${streetViewUrl ? `<a href="${escapeHtml(streetViewUrl)}" target="_blank" rel="noopener noreferrer"${streetViewTitle}>Street view</a>` : ''}</p>`
           : ''
       }`;
+    // Both registers' dossiers share one on-screen slot: opening this one
+    // tells the ancient-sites layer to close its own, if it has one open.
+    window.dispatchEvent(
+      new CustomEvent(DOSSIER_OPEN_EVENT, {
+        detail: { register: ANOMALY_LAYER_ID },
+      }),
+    );
     dossier.hidden = false;
     dossier.querySelector('.uap-close').focus();
   }
@@ -363,6 +380,17 @@ export function createAnomaliesLayer({
         (e) => e.key === 'Escape' && (dossier.hidden = true),
       );
       host.appendChild(dossier);
+      // Mirror of the dispatch in openDossier: the ancient-sites dossier
+      // opening closes this one, so the two plates never stack.
+      onOtherDossierOpen = (e) => {
+        if (
+          e.detail?.register !== ANOMALY_LAYER_ID &&
+          dossier &&
+          !dossier.hidden
+        )
+          dossier.hidden = true;
+      };
+      window.addEventListener(DOSSIER_OPEN_EVENT, onOtherDossierOpen);
       legend = document.createElement('div');
       legend.className = 'uap-legend';
       legend.hidden = true;
@@ -413,6 +441,12 @@ export function createAnomaliesLayer({
         ['contested', 'Contested'],
       ];
       const enabledStatuses = new Set(STATUS_FILTERS.map(([k]) => k));
+      // The readout takes on the one active status's hue only when exactly
+      // one filter is left on; two or more (or the all-on default) stay ink.
+      const syncReadoutTint = () =>
+        chrono.setReadoutTint(
+          enabledStatuses.size === 1 ? [...enabledStatuses][0] : null,
+        );
       for (const [key, label] of STATUS_FILTERS) {
         const btn = chrono.addAction(label, () => {
           enabledStatuses.has(key)
@@ -423,6 +457,7 @@ export function createAnomaliesLayer({
             enabledStatuses.size === STATUS_FILTERS.length
               ? null
               : new Set(enabledStatuses);
+          syncReadoutTint();
           refreshTime();
         });
         btn.setAttribute('aria-pressed', 'true');
@@ -612,6 +647,9 @@ export function createAnomaliesLayer({
       overlayHost?.clearSource?.(ANOMALY_LAYER_ID);
       renderer?.destroy();
       chrono?.destroy();
+      if (onOtherDossierOpen)
+        window.removeEventListener(DOSSIER_OPEN_EVENT, onOtherDossierOpen);
+      onOtherDossierOpen = null;
       dossier?.remove();
       legend?.remove();
       legend = null;

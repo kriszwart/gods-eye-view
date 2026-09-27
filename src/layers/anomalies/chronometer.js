@@ -355,6 +355,17 @@ export function createChronometer({
     setReadout(text) {
       readout.textContent = text;
     },
+    /**
+     * Tint the readout with one status hue (explained, insufficient,
+     * unresolved or contested), or clear it back to plain ink with `null`.
+     * A caller-driven accent, never set by the dial itself, so a scale that
+     * never calls it (the deep-time dial's era readout) stays untinted.
+     */
+    setReadoutTint(status) {
+      readout.className = status
+        ? `uap-readout uap-readout-${status}`
+        : 'uap-readout';
+    },
     setYear,
     /** Add a text button to the dial's panel (for example a guided tour). */
     addAction(label, fn) {

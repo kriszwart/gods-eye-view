@@ -32,6 +32,7 @@ const STYLE_TO_URL = {
   spectral: 'spectral',
   radar: 'radar',
   infrared: 'ir',
+  void: 'void',
 };
 
 const SHARE_UI_STATE_PARAM = 'ui';

@@ -7,6 +7,7 @@ import { thermalShader } from '../styles/thermal.js';
 import { spectralShader } from '../styles/spectral.js';
 import { radarShader } from '../styles/radar.js';
 import { infraredShader } from '../styles/infrared.js';
+import { voidShader } from '../styles/void.js';
 import { BLOOM_INTENSITY_DEFAULT } from '../bloom.js';
 
 /** Duration (ms) for shader intensity crossfade between style presets. */
@@ -22,6 +23,7 @@ export const STYLES = {
   spectral: spectralShader,
   radar: radarShader,
   infrared: infraredShader,
+  void: voidShader,
 };
 
 /**

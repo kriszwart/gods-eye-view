@@ -46,6 +46,15 @@ const escapeHtml = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
 /**
+ * Fired on `window` whenever either register's dossier plate opens, so the
+ * other register can close its own (both plates share one on-screen slot).
+ * The matching listener and dispatch live in src/layers/anomalies/index.js;
+ * kept a plain window event rather than a shared module since the two
+ * layers are independent, sibling-only-by-the-shell modules.
+ */
+const DOSSIER_OPEN_EVENT = 'gev:dossier-open';
+
+/**
  * The honesty line the deep-time dial's era band requires wherever it
  * surfaces (see eras.js's own top-of-file note): undated sweep sites are
  * placed by their type's typical worldwide period, never by anything
@@ -147,6 +156,7 @@ export function createAncientSitesLayer({
   let lastUpdate = null;
   let lastError = null;
   let clickHandler = null;
+  let onOtherDossierOpen = null;
   // Deep-time dial: `host` is stashed at init() for reuse (the dial mounts
   // and unmounts on demand, long after init() has returned). `isSkyActive`
   // is the shell's live signal (attachShellServices below); it defaults to
@@ -174,6 +184,22 @@ export function createAncientSitesLayer({
   // closer, naming the cluster's per-type counts (see clusters.js's
   // `byType`). Created once in init(), like the dossier and legend.
   let breakdownPlate = null;
+
+  /**
+   * Reveals the (already-populated) dossier and moves focus to its close
+   * button, shared by openHeroDossier, openSweepDossier and openTmaDossier.
+   * Both registers' dossiers share one on-screen slot: this also tells the
+   * anomalies layer to close its own, if it has one open.
+   */
+  function showDossier() {
+    window.dispatchEvent(
+      new CustomEvent(DOSSIER_OPEN_EVENT, {
+        detail: { register: ANCIENT_LAYER_ID },
+      }),
+    );
+    dossier.hidden = false;
+    dossier.querySelector('.uap-close').focus();
+  }
 
   function openHeroDossier(id) {
     const row = heroRows.find((r) => r.id === id);
@@ -205,8 +231,7 @@ export function createAncientSitesLayer({
           : ''
       }
       ${row.attribution ? `<p class="uap-attribution">${escapeHtml(row.attribution)}</p>` : ''}`;
-    dossier.hidden = false;
-    dossier.querySelector('.uap-close').focus();
+    showDossier();
   }
 
   /**
@@ -249,8 +274,7 @@ export function createAncientSitesLayer({
           ? `<p class="uap-source">${wikidataUrl ? `<a href="${escapeHtml(wikidataUrl)}" target="_blank" rel="noopener noreferrer">Wikidata</a>` : ''}${wikipediaUrl ? `<a href="${escapeHtml(wikipediaUrl)}" target="_blank" rel="noopener noreferrer">Wikipedia</a>` : ''}${streetViewUrl ? `<a href="${escapeHtml(streetViewUrl)}" target="_blank" rel="noopener noreferrer">Street view</a>` : ''}</p>`
           : ''
       }`;
-    dossier.hidden = false;
-    dossier.querySelector('.uap-close').focus();
+    showDossier();
   }
 
   /**
@@ -270,8 +294,7 @@ export function createAncientSitesLayer({
       </dl>
       ${sourceUrl ? `<p class="uap-source"><a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open record</a></p>` : ''}
       <p class="uap-attribution">Source: The Modern Antiquarian. Local reference only, not included in the shared dataset.</p>`;
-    dossier.hidden = false;
-    dossier.querySelector('.uap-close').focus();
+    showDossier();
   }
 
   /**
@@ -661,6 +684,17 @@ export function createAncientSitesLayer({
         (e) => e.key === 'Escape' && (dossier.hidden = true),
       );
       host.appendChild(dossier);
+      // Mirror of the dispatch in showDossier: the anomalies dossier opening
+      // closes this one, so the two plates never stack.
+      onOtherDossierOpen = (e) => {
+        if (
+          e.detail?.register !== ANCIENT_LAYER_ID &&
+          dossier &&
+          !dossier.hidden
+        )
+          dossier.hidden = true;
+      };
+      window.addEventListener(DOSSIER_OPEN_EVENT, onOtherDossierOpen);
       // The register's legend: a glyph key row naming all five sweep types
       // (task 1, ancient-legibility - the same glyphs the closest-band
       // billboards and the hero dossier already use, see glyphMap.js) plus
@@ -861,6 +895,9 @@ export function createAncientSitesLayer({
       overlayHost?.clearSource?.(ANCIENT_LAYER_ID);
       overlayHost?.clearSource?.(ANCIENT_SWEEP_OVERLAY_SOURCE_ID);
       renderer?.destroy();
+      if (onOtherDossierOpen)
+        window.removeEventListener(DOSSIER_OPEN_EVENT, onOtherDossierOpen);
+      onOtherDossierOpen = null;
       dossier?.remove();
       hideClusterBreakdown();
       breakdownPlate?.remove();

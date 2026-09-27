@@ -826,8 +826,17 @@ export function createAncientRenderer(
     requestFrame('ancient-visibility');
   }
 
+  // A wider pick box than Cesium's ~3px default: these points and cluster
+  // badges render small even at close range, and a click-only path (never
+  // hover, so no extra per-frame cost) can afford the looser tolerance.
+  const CLICK_PICK_BOX_PX = 12;
+
   function pick(windowPosition) {
-    const picked = scene.pick(windowPosition);
+    const picked = scene.pick(
+      windowPosition,
+      CLICK_PICK_BOX_PX,
+      CLICK_PICK_BOX_PX,
+    );
     const id = picked?.id ?? picked?.primitive?.id;
     if (!id || typeof id !== 'object') return null;
     if (id.ancientKind === 'hero') return { kind: 'hero', id: id.ancientId };

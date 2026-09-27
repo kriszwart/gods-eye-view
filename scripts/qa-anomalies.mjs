@@ -24,6 +24,53 @@ const check = (name, passed, detail = '') => {
   );
   if (!passed) failures++;
 };
+
+/**
+ * Mean luminance (0-255) and the brightest surviving colour's saturation,
+ * sampled from a full-page screenshot decoded back to a 2D canvas inside the
+ * page (the same PNG-round-trip idiom qa-label-readability.mjs uses to read
+ * a WebGL canvas's actual pixels). Saturation only counts pixels bright
+ * enough (max channel > 80) to be an actual point, craft or heat pixel, so
+ * the near-black void's own tiny channel noise never reads as "saturated".
+ */
+async function measureFrame(page) {
+  const base64 = await page.screenshot({ encoding: 'base64' });
+  return page.evaluate(async (b64) => {
+    const image = new Image();
+    await new Promise((resolve, reject) => {
+      image.onload = resolve;
+      image.onerror = reject;
+      image.src = `data:image/png;base64,${b64}`;
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(image, 0, 0);
+    const x0 = Math.round(image.width * 0.1);
+    const x1 = Math.round(image.width * 0.9);
+    const y0 = Math.round(image.height * 0.1);
+    const y1 = Math.round(image.height * 0.9);
+    const data = ctx.getImageData(x0, y0, x1 - x0, y1 - y0).data;
+    let sum = 0;
+    let count = 0;
+    let maxSaturation = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      sum += r * 0.2126 + g * 0.7152 + b * 0.0722;
+      count++;
+      const max = Math.max(r, g, b);
+      if (max > 80) {
+        const sat = (max - Math.min(r, g, b)) / max;
+        if (sat > maxSaturation) maxSaturation = sat;
+      }
+    }
+    return { meanLuminance: sum / count, maxSaturation };
+  }, base64);
+}
+
 try {
   const isolated = await browser.createBrowserContext();
   const page = await isolated.newPage();
@@ -261,6 +308,116 @@ try {
   });
   check('focusCase opens the dossier', dossier.open === true);
   check('Escape closes the dossier', dossier.closed === true);
+
+  // Cross-click dossier switch (feat/atlas: the Void style and spectrum
+  // accents, piece 6): with one dossier open, a real click on a different
+  // anomaly point must replace it in the same gesture, no Close step in
+  // between (regression: clicking a different point used to do nothing
+  // until Close was pressed). Compares the dl (When/Where/...) rather than
+  // the title, since non-hero cases default their title to plain "Report".
+  const clickSwitchTargets = await page.evaluate(async () => {
+    const r = await fetch('/anomalies/anomalies.v1.json');
+    const json = await r.json();
+    const cols = json.columns;
+    const picked = [];
+    for (let i = 0; i < cols.id.length && picked.length < 2; i++) {
+      if (typeof cols.lat[i] === 'number' && typeof cols.lon[i] === 'number')
+        picked.push({ lat: cols.lat[i], lon: cols.lon[i] });
+    }
+    return picked;
+  });
+  const projectAt = (site) => {
+    const viewer = window.__godsEyeView.viewer;
+    const ellipsoid = viewer.scene.globe.ellipsoid;
+    viewer.camera.cancelFlight();
+    viewer.camera.setView({
+      destination: ellipsoid.cartographicToCartesian({
+        longitude: (site.lon * Math.PI) / 180,
+        latitude: (site.lat * Math.PI) / 180,
+        height: 20000,
+      }),
+      orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 },
+    });
+    const target = ellipsoid.cartographicToCartesian({
+      longitude: (site.lon * Math.PI) / 180,
+      latitude: (site.lat * Math.PI) / 180,
+      height: 0,
+    });
+    const p = viewer.scene.cartesianToCanvasCoordinates(target);
+    return p ? { x: p.x, y: p.y } : null;
+  };
+  const clickSwitch = {
+    firstOpen: false,
+    firstDl: '',
+    secondOpen: false,
+    secondDl: '',
+  };
+  if (clickSwitchTargets.length === 2) {
+    const [siteA, siteB] = clickSwitchTargets;
+    const clickA = await page.evaluate(projectAt, siteA);
+    if (clickA) {
+      await page.mouse.click(clickA.x, clickA.y);
+      await page
+        .waitForFunction(
+          () => {
+            const d = document.querySelector('.uap-dossier');
+            return d && !d.hidden;
+          },
+          { timeout: 8000 },
+        )
+        .catch(() => {});
+      const first = await page.evaluate(() => {
+        const d = document.querySelector('.uap-dossier');
+        return {
+          open: d && !d.hidden,
+          dl: d?.querySelector('dl')?.textContent || '',
+        };
+      });
+      clickSwitch.firstOpen = first.open;
+      clickSwitch.firstDl = first.dl;
+
+      const clickB = await page.evaluate(projectAt, siteB);
+      if (clickB) {
+        // No Escape, no Close: the dossier is left exactly as the first
+        // click opened it, then a second real click picks a different
+        // point directly.
+        await page.mouse.click(clickB.x, clickB.y);
+        await page
+          .waitForFunction(
+            (prevDl) =>
+              (document.querySelector('.uap-dossier dl')?.textContent || '') !==
+              prevDl,
+            { timeout: 8000 },
+            first.dl,
+          )
+          .catch(() => {});
+        const second = await page.evaluate(() => {
+          const d = document.querySelector('.uap-dossier');
+          return {
+            open: d && !d.hidden,
+            dl: d?.querySelector('dl')?.textContent || '',
+          };
+        });
+        clickSwitch.secondOpen = second.open;
+        clickSwitch.secondDl = second.dl;
+      }
+    }
+  }
+  check(
+    'clicking a different anomaly point while a dossier is open switches it in the same gesture, no Close needed',
+    clickSwitch.firstOpen === true &&
+      clickSwitch.secondOpen === true &&
+      clickSwitch.firstDl.length > 0 &&
+      clickSwitch.secondDl !== clickSwitch.firstDl,
+    JSON.stringify(clickSwitch),
+  );
+  await page.evaluate(() => {
+    document
+      .querySelector('.uap-dossier')
+      ?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      );
+  });
 
   // Escape during the debounce window must cancel the pending query: no
   // stale render should land even after the 150 ms debounce would have
@@ -537,6 +694,68 @@ try {
     'toggling Hotspots off returns to the base imagery layer count',
     heat.afterOff === heat.before && heat.ariaPressedOff === 'false',
     JSON.stringify(heat),
+  );
+
+  // The Void style (feat/atlas: the Void style and spectrum accents): the
+  // map should crush to near-black while the anomaly spectrum stays
+  // saturated and glows, proven over France's dense report cluster with
+  // Hotspots lit, the case most likely to wash out into a whiteout.
+  await page.evaluate(() => {
+    const cam = window.__godsEyeView.viewer.camera;
+    cam.cancelFlight?.();
+    const Cartesian3 = cam.position.constructor;
+    cam.setView({
+      destination: Cartesian3.fromDegrees(2.35, 48.85, 900000),
+      orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 },
+    });
+    window.__godsEyeView.viewer.scene.requestRender();
+  });
+  await new Promise((r) => setTimeout(r, 400));
+  const heatWasOn = await page.evaluate(() => {
+    const btn = [...document.querySelectorAll('.uap-chrono-panel button')].find(
+      (b) => b.textContent === 'Hotspots',
+    );
+    const wasOn = btn?.getAttribute('aria-pressed') === 'true';
+    if (!wasOn) btn?.click();
+    return wasOn === true;
+  });
+  await new Promise((r) => setTimeout(r, 400));
+  await page.evaluate(() =>
+    window.__godsEyeView.styleManager.setStyle('normal'),
+  );
+  await new Promise((r) => setTimeout(r, 700));
+  const beforeVoid = await measureFrame(page);
+  await page.evaluate(() => window.__godsEyeView.styleManager.setStyle('void'));
+  await new Promise((r) => setTimeout(r, 700));
+  const afterVoid = await measureFrame(page);
+  const voidStyleApplied = await page.evaluate(
+    () => document.documentElement.dataset.gevStyle === 'void',
+  );
+  // Restore: heat back to how this block found it, style back to normal, so
+  // later checks in this pass see the state they expect.
+  if (!heatWasOn) {
+    await page.evaluate(() => {
+      const btn = [
+        ...document.querySelectorAll('.uap-chrono-panel button'),
+      ].find((b) => b.textContent === 'Hotspots');
+      btn?.click();
+    });
+  }
+  await page.evaluate(() =>
+    window.__godsEyeView.styleManager.setStyle('normal'),
+  );
+  await new Promise((r) => setTimeout(r, 200));
+  check('Void style reaches the layer', voidStyleApplied === true);
+  check(
+    'Void style visibly darkens the globe',
+    afterVoid.meanLuminance < beforeVoid.meanLuminance &&
+      afterVoid.meanLuminance < 90,
+    `before=${beforeVoid.meanLuminance.toFixed(1)} after=${afterVoid.meanLuminance.toFixed(1)}`,
+  );
+  check(
+    'Void keeps the anomaly spectrum saturated over a dense cluster (France) with Hotspots on',
+    afterVoid.maxSaturation > 0.5,
+    `maxSaturation=${afterVoid.maxSaturation.toFixed(2)}`,
   );
 
   // The Spotter plate is a sibling of the viewer container, not a child of

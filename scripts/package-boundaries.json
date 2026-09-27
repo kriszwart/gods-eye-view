@@ -366,7 +366,8 @@
       "src/styles/snow.js",
       "src/styles/spectral.js",
       "src/styles/radar.js",
-      "src/styles/infrared.js"
+      "src/styles/infrared.js",
+      "src/styles/void.js"
     ],
     "external": ["cesium"]
   },
@@ -529,6 +530,7 @@
       "src/styles/spectral.js",
       "src/styles/surveillance.js",
       "src/styles/thermal.js",
+      "src/styles/void.js",
       "src/ui/applicationShell.js",
       "src/ui/cyberSonarControls.js",
       "src/ui/locationNavigation.js",
@@ -1776,6 +1778,7 @@
       "src/styles/spectral.js",
       "src/styles/surveillance.js",
       "src/styles/thermal.js",
+      "src/styles/void.js",
       "src/ui/applicationShell.js",
       "src/ui/cyberSonarControls.js",
       "src/ui/locationNavigation.js",
@@ -2620,6 +2623,7 @@
       "src/styles/spectral.js",
       "src/styles/surveillance.js",
       "src/styles/thermal.js",
+      "src/styles/void.js",
       "src/ui/applicationShortcuts.js",
       "src/ui/effects.js",
       "src/ui/styleParameters.js",

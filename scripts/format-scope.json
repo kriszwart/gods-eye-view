@@ -704,6 +704,7 @@
   "server/providers/transit.js",
   "server/providers/transitHistory.js",
   "server/providers/transitHistory.test.mjs",
+  "server/providers/claims.js",
   "server/providers/claims.test.mjs",
   "src/data/transitFeeds.js",
   "src/data/transitFeeds.test.mjs",
@@ -888,6 +889,8 @@
   "src/layers/liveClaims/records.test.mjs",
   "src/layers/liveClaims/rendering.js",
   "src/layers/liveClaims/index.js",
+  "src/layers/liveClaims/nearby.js",
+  "src/layers/liveClaims/nearby.test.mjs",
   "src/app/layers/liveClaims.js",
   "scripts/qa-claims.mjs"
 ]

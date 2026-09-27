@@ -92,7 +92,7 @@ test('blueskyRowToCandidate derives id and link-out url from the post uri, never
     },
   };
   const candidate = blueskyRowToCandidate(post);
-  assert.equal(candidate.id, 'bluesky:3l7xyzabc12');
+  assert.equal(candidate.id, 'bluesky:did:plc:abcdefghijklmno:3l7xyzabc12');
   assert.equal(
     candidate.url,
     'https://bsky.app/profile/did:plc:abcdefghijklmno/post/3l7xyzabc12',

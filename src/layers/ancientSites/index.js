@@ -46,11 +46,12 @@ const escapeHtml = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
 /**
- * Fired on `window` whenever either register's dossier plate opens, so the
- * other register can close its own (both plates share one on-screen slot).
- * The matching listener and dispatch live in src/layers/anomalies/index.js;
- * kept a plain window event rather than a shared module since the two
- * layers are independent, sibling-only-by-the-shell modules.
+ * Fired on `window` whenever any register's dossier plate opens, so the
+ * other registers can close their own (every register's plate shares one
+ * on-screen slot). Matching dispatch/listen pairs live in
+ * src/layers/anomalies/index.js and src/layers/liveClaims/index.js; kept a
+ * plain window event rather than a shared module since the three layers
+ * are independent, sibling-only-by-the-shell modules.
  */
 const DOSSIER_OPEN_EVENT = 'gev:dossier-open';
 

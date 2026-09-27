@@ -55,17 +55,28 @@ mkdirSync(SHOT_DIR, { recursive: true });
 let failures = 0;
 const check = (name, passed, detail = '') => {
   console.log(
-    `[${passed ? 'PASS' : 'FAIL'}] ${name}${detail ? ` — ${detail}` : ''}`,
+    `[${passed ? 'PASS' : 'FAIL'}] ${name}${detail ? ` - ${detail}` : ''}`,
   );
   if (!passed) failures++;
 };
 
 /** Start a throwaway dev server on `port` with `envExtra` merged over the
- * current process env, and resolve once it answers HTTP requests. */
+ * current process env, and resolve once it answers HTTP requests. Gets its
+ * own Vite cache directory (server/standalone/vite.config.js reads
+ * GEV_VITE_CACHE_DIR), so it never shares - or goes stale against -
+ * node_modules/.vite, which the controller-managed :4173 server keeps. */
 function startServer(port, envExtra) {
   const child = spawn(VITE_BIN, [], {
     cwd: REPO_ROOT,
-    env: { ...process.env, PORT: String(port), ...envExtra },
+    env: {
+      ...process.env,
+      PORT: String(port),
+      GEV_VITE_CACHE_DIR: resolve(
+        REPO_ROOT,
+        `node_modules/.vite-qa-claims-${port}`,
+      ),
+      ...envExtra,
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
   });
@@ -236,7 +247,6 @@ try {
   await page.evaluate(projectAt, target);
   await new Promise((r) => setTimeout(r, 700));
 
-  await mkdirSync(SHOT_DIR, { recursive: true });
   await page.screenshot({ path: resolve(SHOT_DIR, 'points-1440.png') });
 
   const clickPoint = await page.evaluate(projectAt, target);
@@ -577,17 +587,17 @@ try {
     JSON.stringify(afterTickerClick),
   );
 
-  // Reduced motion: close the dossier, emulate the preference, reopen the
-  // ticker, and confirm no row ever carries the slide-in animation class.
+  // Close the dossier and reopen the ticker on the main page, ready for the
+  // disable check below. openTicker() always renders with animateNew:false
+  // ("a fresh open is not a new arrival" - src/layers/liveClaims/index.js)
+  // so this reopen alone proves nothing about the entrance animation; that
+  // is what the two fresh-page checks right after this actually drive.
   await page.evaluate(() => {
     const d = document.querySelector('.uap-dossier.claims');
     d?.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
     );
   });
-  await page.emulateMediaFeatures([
-    { name: 'prefers-reduced-motion', value: 'reduce' },
-  ]);
   await page.evaluate(() =>
     document.querySelector('.uap-claims-stream-toggle')?.click(),
   );
@@ -600,27 +610,73 @@ try {
       { timeout: 8000 },
     )
     .catch(() => {});
-  const reducedMotionTicker = await page.evaluate(() => {
-    const t = document.querySelector('.uap-claims-ticker');
-    const rows = t ? [...t.querySelectorAll('.uap-claims-ticker-row')] : [];
-    return {
-      visible: !!(t && !t.hidden),
-      count: rows.length,
-      anyAnimated: rows.some((r) =>
-        r.classList.contains('uap-ticker-row-enter'),
-      ),
-    };
-  });
+
+  // Reduced motion: the entrance class only ever comes from update()'s own
+  // renderTicker({ animateNew: true }) call while the ticker plate is
+  // already open. openTicker() forces animateNew:false unconditionally, so
+  // reopening the ticker (as above) can never reach that path - this check
+  // must drive update() itself while the plate is open. Every fixture
+  // claim id is only ever "new" the first time the ticker renders it, so
+  // each branch below runs on its own fresh page (a fresh layer instance
+  // that has never rendered the ticker, so no id is marked seen yet),
+  // reveals the ticker plate directly through the DOM - never through
+  // openTicker() - and then calls the layer's own update() with the plate
+  // already open, via the same dataManager module handle used throughout
+  // this script.
+  async function tickerAnimateOnFreshPage(reduceMotion) {
+    const ctx = await browser.createBrowserContext();
+    const p = await ctx.newPage();
+    if (reduceMotion) {
+      await p.emulateMediaFeatures([
+        { name: 'prefers-reduced-motion', value: 'reduce' },
+      ]);
+    }
+    await p.goto(`${fixtureBase}/?welcome=0`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await p.waitForFunction(() => window.__godsEyeView?.dataManager, {
+      timeout: 60000,
+    });
+    await p.evaluate(() =>
+      window.__godsEyeView.dataManager.setEnabled('live-claims', true, {
+        origin: 'user',
+      }),
+    );
+    await p.waitForFunction(
+      () =>
+        (window.__godsEyeView.dataManager.layers
+          .get('live-claims')
+          ?.module?.getStats?.().count ?? 0) > 0,
+      { timeout: 30000 },
+    );
+    return p.evaluate(async () => {
+      const entry = window.__godsEyeView.dataManager.layers.get('live-claims');
+      const ticker = document.querySelector('.uap-claims-ticker');
+      ticker.hidden = false;
+      await entry.module.update();
+      const rows = [...ticker.querySelectorAll('.uap-claims-ticker-row')];
+      return {
+        count: rows.length,
+        anyAnimated: rows.some((r) =>
+          r.classList.contains('uap-ticker-row-enter'),
+        ),
+      };
+    });
+  }
+
+  const reducedMotionTicker = await tickerAnimateOnFreshPage(true);
   check(
     'stream ticker never carries the slide-in animation class under prefers-reduced-motion',
-    reducedMotionTicker.visible &&
-      reducedMotionTicker.count > 0 &&
-      reducedMotionTicker.anyAnimated === false,
+    reducedMotionTicker.count > 0 && reducedMotionTicker.anyAnimated === false,
     JSON.stringify(reducedMotionTicker),
   );
-  await page.emulateMediaFeatures([
-    { name: 'prefers-reduced-motion', value: 'no-preference' },
-  ]);
+
+  const fullMotionTicker = await tickerAnimateOnFreshPage(false);
+  check(
+    'stream ticker carries the slide-in animation class on a genuinely new arrival without prefers-reduced-motion',
+    fullMotionTicker.count > 0 && fullMotionTicker.anyAnimated === true,
+    JSON.stringify(fullMotionTicker),
+  );
 
   // Disable: the ticker plate must close, not stay open with a dead
   // channel behind it (the Spotter plate orphan lesson).

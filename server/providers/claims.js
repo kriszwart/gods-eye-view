@@ -165,8 +165,9 @@ const BLUESKY_POST_URI =
 /**
  * Map one Bluesky `app.bsky.feed.searchPosts` result to a classification
  * candidate. Only the DID embedded in the post's own `at://` uri is used to
- * build the link-out url; the author's handle and display name are never
- * read, so they cannot leak even if present on the input row.
+ * build the id (globally unique, `did:rkey`) and the link-out url; the
+ * author's handle and display name are never read, so they cannot leak
+ * even if present on the input row.
  *
  * @param {*} post - one entry of `posts` from app.bsky.feed.searchPosts.
  * @returns {{id: string, url: string, source: 'bluesky', text: string, when: string}|null}
@@ -185,7 +186,9 @@ export function blueskyRowToCandidate(post) {
     ? new Date(parsed).toISOString()
     : new Date().toISOString();
   return {
-    id: `bluesky:${rkey}`,
+    // The did:rkey pair is what Bluesky itself treats as globally unique;
+    // the rkey alone is only unique per-author.
+    id: `bluesky:${did}:${rkey}`,
     url: `https://bsky.app/profile/${did}/post/${rkey}`,
     source: 'bluesky',
     text,
@@ -561,7 +564,19 @@ async function classifyBatch(
       controller.signal,
     );
     const content = body?.choices?.[0]?.message?.content;
-    const parsed = typeof content === 'string' ? JSON.parse(content) : null;
+    let parsed = null;
+    if (typeof content === 'string') {
+      try {
+        parsed = JSON.parse(content);
+      } catch {
+        // Never let a malformed-JSON SyntaxError carry a snippet of the
+        // classifier's raw output to console.warn (some JSON.parse
+        // implementations quote nearby input in the error message): a
+        // fixed message only. The batch stays un-considered and the next
+        // poll retries it, same as any other classifier failure.
+        throw new Error('deepseek_malformed_json');
+      }
+    }
     const results = Array.isArray(parsed?.results) ? parsed.results : [];
     const byId = new Map();
     for (const item of results) {

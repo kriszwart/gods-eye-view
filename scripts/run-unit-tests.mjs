@@ -21,9 +21,11 @@ export function assertNode24AllocationRuntime(version = process.versions.node) {
   return version;
 }
 
+/** Roots this repository keeps unit tests under. */
+export const UNIT_TEST_ROOTS = Object.freeze(['src', 'server']);
+
 /** Discover repository unit tests in stable path order. */
 export function discoverUnitTestFiles(root = process.cwd()) {
-  const sourceRoot = path.join(root, 'src');
   const files = [];
   const visit = (directory) => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -34,7 +36,7 @@ export function discoverUnitTestFiles(root = process.cwd()) {
       }
     }
   };
-  visit(sourceRoot);
+  for (const testRoot of UNIT_TEST_ROOTS) visit(path.join(root, testRoot));
   return files.sort();
 }
 

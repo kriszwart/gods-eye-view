@@ -19,6 +19,11 @@ export default defineConfig(({ command, mode }) => {
     phenomenaLocalTma: process.env.PHENOMENA_LOCAL_TMA,
     host: process.env.HOST,
     port: process.env.PORT,
+    // Unset for the controller-managed dev server, which keeps Vite's
+    // ordinary node_modules/.vite. A throwaway qa server sets this to its
+    // own directory so it never shares - or invalidates - that cache (see
+    // scripts/qa-claims.mjs's startServer()).
+    cacheDir: process.env.GEV_VITE_CACHE_DIR,
     command,
   });
 });

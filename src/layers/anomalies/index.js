@@ -22,11 +22,12 @@ const escapeHtml = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
 /**
- * Fired on `window` whenever either register's dossier plate opens, so the
- * other register can close its own (both plates share one on-screen slot).
- * Kept a plain window event rather than a shared module: the anomaly and
- * ancient-sites layers are independent, sibling-only-by-the-shell modules,
- * and a matching listener lives in src/layers/ancientSites/index.js.
+ * Fired on `window` whenever any register's dossier plate opens, so the
+ * other registers can close their own (every register's plate shares one
+ * on-screen slot). Kept a plain window event rather than a shared module:
+ * the anomaly, ancient-sites and live-claims layers are independent,
+ * sibling-only-by-the-shell modules. Matching dispatch/listen pairs live in
+ * src/layers/ancientSites/index.js and src/layers/liveClaims/index.js.
  */
 const DOSSIER_OPEN_EVENT = 'gev:dossier-open';
 

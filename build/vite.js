@@ -11,13 +11,21 @@ export function createBrowserViteConfig({
   host = 'localhost',
   port = 4173,
   command,
+  cacheDir,
 } = {}) {
   return {
     plugins: [cesium(), applicationHtmlPlugin(), ...plugins],
     ...(publicDir === undefined ? {} : { publicDir }),
     // A production build must not clean the dependency cache a running dev
-    // server is still serving optimized module URLs from.
-    ...(command === 'build' ? { cacheDir: 'node_modules/.vite-build' } : {}),
+    // server is still serving optimized module URLs from. An explicit
+    // `cacheDir` (e.g. a throwaway qa dev server) always wins over that
+    // default, so a short-lived server never shares - and cannot go stale
+    // against - the long-running dev server's own node_modules/.vite.
+    ...(cacheDir
+      ? { cacheDir }
+      : command === 'build'
+        ? { cacheDir: 'node_modules/.vite-build' }
+        : {}),
     optimizeDeps: {
       // First reached through the SDR worker or a dynamic import. Pre-bundle
       // them at startup so first use cannot invalidate already-transformed

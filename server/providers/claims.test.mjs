@@ -5,7 +5,9 @@ import {
   CLAIM_FIELDS,
   CLAIM_WINDOW_MS,
   FALLBACK_SHAPE_CATEGORIES,
+  MAX_CLASSIFY_ATTEMPTS,
   blueskyRowToCandidate,
+  classifyWithRetryLimit,
   dedupeById,
   evictWindow,
   loadShapeCategories,
@@ -303,4 +305,141 @@ test('loadShapeCategories reads the bundled craft manifest and pins known archet
 test('loadShapeCategories falls back to the pinned list when the manifest is unreadable', () => {
   const categories = loadShapeCategories({ sourceRoot: '/nonexistent-root' });
   assert.deepEqual(categories, FALLBACK_SHAPE_CATEGORIES);
+});
+
+/** Swap console.warn for the duration of `fn`, returning its captured
+ * calls (each an argument array) alongside `fn`'s own return value. Always
+ * restores the original console.warn, even if `fn` throws. */
+async function captureWarnings(fn) {
+  const calls = [];
+  const original = console.warn;
+  console.warn = (...args) => calls.push(args);
+  try {
+    const result = await fn();
+    return { result, calls };
+  } finally {
+    console.warn = original;
+  }
+}
+
+test('classifyWithRetryLimit drops a poisoned post after exactly three failed attempts and never retries it again', async () => {
+  assert.equal(MAX_CLASSIFY_ATTEMPTS, 3);
+  const retryCounts = new Map();
+  const candidates = [
+    { id: 'reddit:poison', url: 'https://reddit.com/poison', source: 'reddit' },
+  ];
+  // A classifier stub that always throws, mirroring classifyBatch's own
+  // deepseek_malformed_json case (a fixed message, never a snippet of raw
+  // classifier output). Each attempt is awaited, and its effect on
+  // `retryCounts` checked, before the next one runs: the map is mutated in
+  // place, so checking it only after all three calls would just see its
+  // final, post-give-up state.
+  const classify = async () => {
+    throw new Error('deepseek_malformed_json');
+  };
+
+  const { result: first, calls: warnings1 } = await captureWarnings(() =>
+    classifyWithRetryLimit(candidates, classify, retryCounts),
+  );
+  assert.equal(first.failed, true);
+  assert.deepEqual(first.gaveUp, []);
+  assert.equal(retryCounts.get('reddit:poison'), 1);
+  assert.equal(
+    warnings1.some((args) => String(args[0]).includes('deepseek_gave_up')),
+    false,
+    'the first failed attempt never gives up',
+  );
+
+  const { result: second, calls: warnings2 } = await captureWarnings(() =>
+    classifyWithRetryLimit(candidates, classify, retryCounts),
+  );
+  assert.equal(second.failed, true);
+  assert.deepEqual(second.gaveUp, []);
+  assert.equal(retryCounts.get('reddit:poison'), 2);
+  assert.equal(
+    warnings2.some((args) => String(args[0]).includes('deepseek_gave_up')),
+    false,
+    'the second failed attempt never gives up either',
+  );
+
+  const { result: third, calls: warnings3 } = await captureWarnings(() =>
+    classifyWithRetryLimit(candidates, classify, retryCounts),
+  );
+  assert.equal(third.failed, true);
+  assert.deepEqual(
+    third.gaveUp,
+    ['reddit:poison'],
+    'gives up on exactly the third attempt (MAX_CLASSIFY_ATTEMPTS)',
+  );
+  assert.equal(
+    retryCounts.has('reddit:poison'),
+    false,
+    'the retry count is cleared once given up, so a caller adding this id back in never retries it starting mid-count',
+  );
+  const giveUpWarnings = warnings3.filter((args) =>
+    String(args[0]).includes('deepseek_gave_up'),
+  );
+  assert.equal(
+    giveUpWarnings.length,
+    1,
+    'exactly one deepseek_gave_up warning, on the attempt that actually gives up',
+  );
+  assert.deepEqual(
+    giveUpWarnings[0],
+    [
+      '[claims-proxy] deepseek_gave_up:',
+      'reddit:poison',
+      'after',
+      3,
+      'attempts',
+    ],
+    'the give-up warning carries only the id and the attempt count, never the classifier text',
+  );
+});
+
+test('classifyWithRetryLimit classifies normally once the stub recovers on a later attempt, and resets the retry count on success', async () => {
+  const retryCounts = new Map();
+  const candidates = [
+    { id: 'bluesky:paris', url: 'https://bsky.app/paris', source: 'bluesky' },
+  ];
+  let attempts = 0;
+  const classify = async (batch) => {
+    attempts++;
+    if (attempts === 1) throw new Error('deepseek_upstream_500');
+    return new Map(
+      batch.map((c) => [
+        c.id,
+        {
+          sighting: true,
+          place: 'Paris, France',
+          lat: 48.8566,
+          lon: 2.3522,
+          shape: null,
+          when: null,
+        },
+      ]),
+    );
+  };
+
+  const first = await classifyWithRetryLimit(candidates, classify, retryCounts);
+  assert.equal(first.failed, true);
+  assert.deepEqual(first.gaveUp, []);
+  assert.equal(retryCounts.get('bluesky:paris'), 1);
+
+  const second = await classifyWithRetryLimit(
+    candidates,
+    classify,
+    retryCounts,
+  );
+  assert.equal(second.failed, false);
+  assert.deepEqual(second.gaveUp, []);
+  assert.equal(
+    second.classifiedById.get('bluesky:paris')?.place,
+    'Paris, France',
+  );
+  assert.equal(
+    retryCounts.has('bluesky:paris'),
+    false,
+    'a success clears the retry count, so a later transient failure starts counting from zero again',
+  );
 });

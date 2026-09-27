@@ -36,6 +36,12 @@ import { makeRateLimiter } from '../../src/sources/rateLimit.js';
 export const CLAIM_WINDOW_MS = 48 * 60 * 60 * 1000;
 export const CLAIM_CAP = 500;
 
+/** How many times a single post may fail classification before it is given
+ * up on (marked considered/dropped without ever being classified), so a
+ * persistently malformed or failing batch cannot retry the same post
+ * forever (see `classifyWithRetryLimit`). */
+export const MAX_CLASSIFY_ATTEMPTS = 3;
+
 /** Exactly the fields a stored claim may carry. */
 export const CLAIM_FIELDS = Object.freeze([
   'id',
@@ -590,6 +596,82 @@ async function classifyBatch(
   }
 }
 
+/** Bound on how many distinct post ids `classifyWithRetryLimit` tracks a
+ * retry count for at once, the same "bounded, in-memory" shape as
+ * `state.considered`'s own `CONSIDERED_CAP`: a post that fails once or
+ * twice and then simply never reappears in a later feed poll must not hold
+ * its count forever. Eviction is oldest-tracked-first, not a strict LRU;
+ * good enough for a soft memory bound on a best-effort retry counter. */
+const RETRY_TRACK_CAP = 5000;
+
+/**
+ * Classify one batch of fresh candidates via `classify`, tracking each
+ * post's consecutive-failure count across calls in the caller-owned
+ * `retryCounts` map (bounded to `RETRY_TRACK_CAP` ids). Guards against a
+ * persistently malformed or failing classifier batch retrying the same
+ * post forever (the `deepseek_malformed_json` case in `classifyBatch`,
+ * or any other rejection): once a post's count reaches
+ * `MAX_CLASSIFY_ATTEMPTS`, it is reported back in `gaveUp` (so the caller
+ * can mark it considered/dropped, never retried again) and its count is
+ * cleared, with exactly one `console.warn('deepseek_gave_up', ...)` per
+ * post that gives up, carrying only its id and the attempt count - never
+ * the classifier's raw response. A post below the limit is left off
+ * `gaveUp` so the caller can leave it un-considered and retry it next
+ * poll, same as before this guard existed. A successful `classify` call
+ * clears every one of `candidates`' retry counts (a later transient
+ * failure starts counting from zero again) and never rejects: this
+ * function always resolves, so a classifier or network failure never
+ * surfaces past it.
+ *
+ * @param {Array<{id: string}>} candidates
+ * @param {(candidates: Array<{id: string}>) => Promise<Map<string, object>>} classify
+ * @param {Map<string, number>} retryCounts
+ * @returns {Promise<{classifiedById: Map<string, object>, gaveUp: string[], failed: boolean}>}
+ */
+export async function classifyWithRetryLimit(
+  candidates,
+  classify,
+  retryCounts,
+) {
+  try {
+    const classifiedById = await classify(candidates);
+    for (const item of candidates) retryCounts.delete(item.id);
+    return { classifiedById, gaveUp: [], failed: false };
+  } catch (error) {
+    // Never let a malformed-JSON or upstream error carry a snippet of the
+    // classifier's raw output to console.warn: a fixed message plus the
+    // thrown Error's own message only (classifyBatch's errors are already
+    // fixed strings such as deepseek_malformed_json or
+    // deepseek_upstream_<status>, never raw content).
+    console.warn(
+      '[claims-proxy] classifier call failed:',
+      error?.message || error,
+    );
+    const gaveUp = [];
+    for (const item of candidates) {
+      const attempts = (retryCounts.get(item.id) || 0) + 1;
+      if (attempts >= MAX_CLASSIFY_ATTEMPTS) {
+        retryCounts.delete(item.id);
+        gaveUp.push(item.id);
+        console.warn(
+          '[claims-proxy] deepseek_gave_up:',
+          item.id,
+          'after',
+          attempts,
+          'attempts',
+        );
+      } else {
+        retryCounts.set(item.id, attempts);
+        if (retryCounts.size > RETRY_TRACK_CAP) {
+          const oldest = retryCounts.keys().next().value;
+          if (oldest !== undefined) retryCounts.delete(oldest);
+        }
+      }
+    }
+    return { classifiedById: new Map(), gaveUp, failed: true };
+  }
+}
+
 const DEFAULT_DEEPSEEK_RATE_PER_MIN = 20;
 let deepseekLimiter;
 
@@ -629,12 +711,16 @@ export function claimsProxy({
   pollIntervalMs = POLL_INTERVAL_MS,
   timeoutMs = 15_000,
 } = {}) {
-  /** @type {{claims: Array<object>, considered: Array<{id: string, fetchedAt: string}>, unplacedAt: number[], lastPollAt: number}} */
+  /** @type {{claims: Array<object>, considered: Array<{id: string, fetchedAt: string}>, unplacedAt: number[], lastPollAt: number, retryCounts: Map<string, number>}} */
   const state = {
     claims: [],
     considered: [],
     unplacedAt: [],
     lastPollAt: -Infinity,
+    // Per-post classification-failure counts, bounded per
+    // classifyWithRetryLimit's own RETRY_TRACK_CAP; see that function's doc
+    // comment for the give-up guard this backs.
+    retryCounts: new Map(),
   };
   let inflight = null;
 
@@ -656,29 +742,46 @@ export function claimsProxy({
     );
     if (fresh.length && classifierRateLimiter()('deepseek')) {
       try {
-        const classifiedById = await classifyBatch(fresh, {
-          fetchImpl,
-          apiKey: apiKey(),
-          model: model(),
-          shapeCategories,
-          signal,
-          timeoutMs,
-        });
+        const { classifiedById, gaveUp, failed } = await classifyWithRetryLimit(
+          fresh,
+          (batch) =>
+            classifyBatch(batch, {
+              fetchImpl,
+              apiKey: apiKey(),
+              model: model(),
+              shapeCategories,
+              signal,
+              timeoutMs,
+            }),
+          state.retryCounts,
+        );
         const fetchedAt = new Date(nowMs).toISOString();
-        for (const item of fresh) {
-          state.considered.push({ id: item.id, fetchedAt });
-          const classified = classifiedById.get(item.id) ?? null;
-          const claim = validateClassified(
-            { id: item.id, url: item.url, source: item.source, fetchedAt },
-            classified,
-            shapeCategories,
-          );
-          if (claim) state.claims.push(claim);
-          else if (classified?.sighting === true) state.unplacedAt.push(nowMs);
+        if (failed) {
+          // A poisoned or transiently failing batch: only the posts that
+          // have now exhausted MAX_CLASSIFY_ATTEMPTS are dropped (marked
+          // considered without ever being classified); every other post in
+          // `fresh` is left un-considered, same as before this guard
+          // existed, so the next poll retries it.
+          for (const id of gaveUp) state.considered.push({ id, fetchedAt });
+        } else {
+          for (const item of fresh) {
+            state.considered.push({ id: item.id, fetchedAt });
+            const classified = classifiedById.get(item.id) ?? null;
+            const claim = validateClassified(
+              { id: item.id, url: item.url, source: item.source, fetchedAt },
+              classified,
+              shapeCategories,
+            );
+            if (claim) state.claims.push(claim);
+            else if (classified?.sighting === true)
+              state.unplacedAt.push(nowMs);
+          }
         }
       } catch (error) {
-        // Leave `fresh` un-considered so the next poll retries them; never
-        // let a classifier or network failure surface to the client.
+        // classifyWithRetryLimit never rejects for a classifier or network
+        // failure (it resolves with failed: true instead); this is a
+        // last-resort net for anything else going wrong in the block
+        // above, so a bug here still never surfaces to the client.
         console.warn(
           '[claims-proxy] classifier call failed:',
           error?.message || error,

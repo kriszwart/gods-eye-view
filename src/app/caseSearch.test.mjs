@@ -333,6 +333,62 @@ test('indexed: a record carrying no matching field is excluded', () => {
   );
 });
 
+// Unicode-aware word starts (fix round, finding 1): `WORD_SPLIT_RE` used to
+// be ASCII-only (`/[^a-z0-9]+/`), which treated every accented or non-Latin
+// opening letter as a separator, so the word before it (usually the whole
+// title, when it is the title's first word) was silently dropped from
+// `wordStartBuckets` and the record became unreachable by its own name. 224
+// of 81,293 sweep titles in the shipped dataset open this way; these five
+// are the ones named in the review finding.
+const NON_ASCII_TITLE_RECORDS = [
+  {
+    id: 'arslev',
+    register: 'ancient',
+    title: 'Årslev Dyssen',
+    type: 'megalith',
+  },
+  { id: 'certuv', register: 'ancient', title: 'Čertův stůl', type: 'megalith' },
+  { id: 'hagar', register: 'ancient', title: 'Ħaġar Qim', type: 'temple' },
+  {
+    id: 'ile-milliau',
+    register: 'ancient',
+    title: 'Île Milliau gallery grave',
+    type: 'megalith',
+  },
+  {
+    id: 'oyu',
+    register: 'ancient',
+    title: 'Ōyu Stone Circles',
+    type: 'megalith',
+  },
+];
+
+test('indexed: a title opening on an accented letter is reachable by that letter', () => {
+  const index = buildCaseSearchIndex(NON_ASCII_TITLE_RECORDS);
+  assert.deepEqual(
+    searchCasesWithIndex('årslev', index).map((r) => r.id),
+    ['arslev'],
+  );
+});
+
+test('indexed: a title opening on a non-Latin letter is reachable by that letter', () => {
+  const index = buildCaseSearchIndex(NON_ASCII_TITLE_RECORDS);
+  assert.deepEqual(
+    searchCasesWithIndex('ħaġar', index).map((r) => r.id),
+    ['hagar'],
+  );
+});
+
+test('indexed: agrees with the unindexed search across non-ASCII first letters', () => {
+  const index = buildCaseSearchIndex(NON_ASCII_TITLE_RECORDS);
+  for (const q of ['årslev', 'čertův', 'ħaġar', 'île', 'ōyu']) {
+    const indexed = searchCasesWithIndex(q, index).map((r) => r.id);
+    const unindexed = searchCases(q, NON_ASCII_TITLE_RECORDS).map((r) => r.id);
+    assert.ok(indexed.length > 0, `expected a match for query "${q}"`);
+    assert.deepEqual(indexed, unindexed, `mismatch for query "${q}"`);
+  }
+});
+
 test('indexed: agrees with the unindexed search on word-boundary queries', () => {
   const records = [
     {

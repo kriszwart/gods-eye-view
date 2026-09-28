@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { LayerBindings } from './layerBindings.js';
+import { searchCasesWithIndex } from '../app/caseSearch.js';
 
 /** Minimal LayerBindings instance: `_connectAncientSitesShell` only ever
  * touches `this._dataManager` and the ancient-sites module it looks up
@@ -173,4 +174,134 @@ test('_connectLiveClaimsShell detaching to no manager detaches the outgoing modu
   bindings._connectLiveClaimsShell();
   assert.equal(liveClaims.calls.length, 2, 'the detach call');
   assert.equal(liveClaims.calls[1], null);
+});
+
+// Cross-register search caching (fix round, finding 2): a transient
+// tier-fetch failure on the very first search call must not strand a
+// degraded corpus (or an index built from it) in the instance cache for the
+// rest of the session. `_anomalySearchSource`/`_ancientSearchSource` are
+// plain instance fields set lazily with `||=` inside `_getSkySearchRecords`/
+// `_getAncientSnapshot`, so pre-setting them here before the first call
+// substitutes a fake in place of the real `createAnomalySource`/
+// `createAncientSource` fetches, without needing to mock a module.
+
+/** A fake search source that throws on every `getSnapshot()` call while
+ * `state.failing` is true, and returns `makeValue()` once flipped to false.
+ * `_getSkySearchRecords` is called twice within a single
+ * `_buildCaseSearchRecords()` round (directly, and again inside
+ * `_getGeipanSearchRecords`, since neither call has resolved and cached yet
+ * when the other starts) - scripting by a shared failing/succeeding state
+ * rather than a fixed per-call sequence keeps both of that round's calls
+ * consistent with each other, the way a real network outage would, rather
+ * than one arbitrarily drawing a later "already recovered" step. */
+function makeSwitchableSearchSource(makeValue) {
+  const state = { failing: true };
+  return {
+    state,
+    async getSnapshot() {
+      if (state.failing) throw new Error('network hiccup');
+      return makeValue();
+    },
+  };
+}
+
+/** An ancient-sites snapshot with a given hero list and an empty sweep -
+ * enough shape for `_getAncientSearchRecords`/`_getAncientSweepSearchRecords`
+ * to run without needing a real `sites.v2.json`. */
+function makeAncientSnapshot(heroes = []) {
+  return {
+    heroes,
+    sweep: { length: 0, name: () => '', typeName: () => '', countryName: () => '' },
+    count: heroes.length,
+  };
+}
+
+test('_buildCaseSearchRecords does not cache a corpus degraded by a transient tier-fetch failure, and completes on retry', async () => {
+  const bindings = makeBindings();
+  const skyRows = [
+    { id: 'sky-1', title: 'Roswell debris', year: 1947, craft: 'disc' },
+  ];
+  const skySource = makeSwitchableSearchSource(() => skyRows);
+  bindings._anomalySearchSource = skySource;
+  bindings._ancientSearchSource = {
+    async getSnapshot() {
+      return makeAncientSnapshot([
+        {
+          id: 'ancient-1',
+          name: 'Stonehenge',
+          type: 'circle',
+          period: 'c. 2500 BCE',
+          country: 'United Kingdom',
+        },
+      ]);
+    },
+  };
+
+  const firstPass = await bindings._buildCaseSearchRecords();
+  assert.equal(
+    firstPass.some((r) => r.title === 'Roswell debris'),
+    false,
+    'the sky tier failed this round, so its record is missing from this call',
+  );
+  assert.equal(
+    firstPass.some((r) => r.title === 'Stonehenge'),
+    true,
+    'the ancient tier succeeded and is still present',
+  );
+  assert.equal(
+    bindings._caseSearchRecords,
+    null,
+    'a corpus degraded by a tier failure must not be cached',
+  );
+
+  skySource.state.failing = false;
+  const secondPass = await bindings._buildCaseSearchRecords();
+  assert.equal(
+    secondPass.some((r) => r.title === 'Roswell debris'),
+    true,
+    'a retry after the transient failure completes the corpus',
+  );
+  assert.equal(
+    bindings._caseSearchRecords,
+    secondPass,
+    'a fully-succeeded corpus is now cached',
+  );
+});
+
+test('_getCaseSearchIndex does not cache an index built from a degraded corpus, and completes on retry', async () => {
+  const bindings = makeBindings();
+  const skySource = makeSwitchableSearchSource(() => [
+    { id: 'sky-1', title: 'Roswell debris', year: 1947, craft: 'disc' },
+  ]);
+  bindings._anomalySearchSource = skySource;
+  bindings._ancientSearchSource = {
+    async getSnapshot() {
+      return makeAncientSnapshot([]);
+    },
+  };
+
+  const firstIndex = await bindings._getCaseSearchIndex();
+  assert.equal(
+    bindings._caseSearchIndex,
+    null,
+    'an index built from a degraded corpus must not be cached',
+  );
+  assert.deepEqual(
+    searchCasesWithIndex('roswell', firstIndex),
+    [],
+    'the sky tier failed this round, so this call\'s own index cannot find it',
+  );
+
+  skySource.state.failing = false;
+  const secondIndex = await bindings._getCaseSearchIndex();
+  assert.notEqual(
+    bindings._caseSearchIndex,
+    null,
+    'the fully-succeeded index is now cached',
+  );
+  assert.equal(
+    searchCasesWithIndex('roswell', secondIndex)[0]?.id,
+    'sky-1',
+    'a retry after the transient failure finds the sky record',
+  );
 });

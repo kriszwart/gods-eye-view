@@ -831,7 +831,7 @@ export class LayerBindings {
   async _getGeipanSearchRecords() {
     if (this._geipanSearchRecords) return this._geipanSearchRecords;
     const rows = await this._getSkySearchRecords();
-    this._geipanSearchRecords = rows
+    const records = rows
       .filter((r) => !r.title)
       .map((r) => ({
         id: r.id,
@@ -841,6 +841,16 @@ export class LayerBindings {
         craft: null,
         country: 'France',
       }));
+    // `_getSkySearchRecords` only sets `this._skySearchRecords` when its own
+    // fetch succeeded (a failed fetch returns a fresh `[]` without caching -
+    // see its own doc comment); a falsy `_skySearchRecords` here means that
+    // just happened, so `rows` is a transient empty result, not a genuine
+    // one, and caching this tier off it would strand a degraded (empty)
+    // GEIPAN tier in the search corpus for the rest of the session (fix
+    // round, finding 2). Skip the cache write in that case; the very next
+    // search call will retry `_getSkySearchRecords` on its own.
+    if (!this._skySearchRecords) return records;
+    this._geipanSearchRecords = records;
     return this._geipanSearchRecords;
   }
 
@@ -853,7 +863,16 @@ export class LayerBindings {
    * (see the task report's honesty pins). Each tier is fetched once and
    * cached on this instance (see the fields above); this method's own
    * combined result is cached too, so the ~85k-record concatenation itself
-   * runs once, not once per keystroke.
+   * runs once, not once per keystroke - but only once every tier's own
+   * fetch has actually succeeded (fix round, finding 2). A transient
+   * fetch failure on the very first search (a tier-fetch hiccup, not a
+   * genuinely empty dataset) must not freeze a degraded corpus in place
+   * for the rest of the session: each tier getter above already leaves
+   * its own cache field unset when its own fetch failed rather than
+   * caching the empty result it returns for that one call (see their own
+   * doc comments), so checking those four fields here tells a real,
+   * cacheable empty result apart from a failure that should retry next
+   * time.
    */
   async _buildCaseSearchRecords() {
     if (this._caseSearchRecords) return this._caseSearchRecords;
@@ -869,8 +888,14 @@ export class LayerBindings {
     // its titled (hero/sample) rows here, since the untitled ones already
     // have their own richer entry above, from `_getGeipanSearchRecords`.
     const sky = skyAll.filter((r) => r.title);
-    this._caseSearchRecords = [...sky, ...ancient, ...geipan, ...sweep];
-    return this._caseSearchRecords;
+    const records = [...sky, ...ancient, ...geipan, ...sweep];
+    const everyTierSucceeded =
+      Boolean(this._skySearchRecords) &&
+      Boolean(this._ancientSearchRecords) &&
+      Boolean(this._geipanSearchRecords) &&
+      Boolean(this._ancientSweepSearchRecords);
+    if (everyTierSucceeded) this._caseSearchRecords = records;
+    return records;
   }
 
   /**
@@ -878,14 +903,20 @@ export class LayerBindings {
    * from `_buildCaseSearchRecords` and cached: `buildCaseSearchIndex` is
    * itself a single O(n) pass over the ~85k-record corpus, measured in the
    * task report at tens of milliseconds, so this runs it once per session
-   * rather than once per keystroke.
+   * rather than once per keystroke. Cached only when
+   * `_buildCaseSearchRecords` itself cached (see its own doc comment,
+   * fix round finding 2) - an index built from a degraded corpus is
+   * returned for this one call but never stranded in `_caseSearchIndex`,
+   * so a retried search after a transient failure gets a freshly built
+   * index over the now-complete corpus rather than a stale, incomplete
+   * one.
    */
   async _getCaseSearchIndex() {
     if (this._caseSearchIndex) return this._caseSearchIndex;
-    this._caseSearchIndex = buildCaseSearchIndex(
-      await this._buildCaseSearchRecords(),
-    );
-    return this._caseSearchIndex;
+    const records = await this._buildCaseSearchRecords();
+    const index = buildCaseSearchIndex(records);
+    if (this._caseSearchRecords) this._caseSearchIndex = index;
+    return index;
   }
 
   /**

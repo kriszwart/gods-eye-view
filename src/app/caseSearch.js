@@ -61,10 +61,20 @@ export function searchCases(query, records) {
 }
 
 /** A record's title, split into lower-cased word tokens on any run of
- * non-alphanumeric characters, so "Dolmen de Carnac-Plage" tokenises to
- * ["dolmen", "de", "carnac", "plage"]. Digits count as word characters, so
- * an id like "geipan-1954-08-..." tokenises with "1954" as its own word. */
-const WORD_SPLIT_RE = /[^a-z0-9]+/;
+ * non-word characters, so "Dolmen de Carnac-Plage" tokenises to ["dolmen",
+ * "de", "carnac", "plage"]. Digits count as word characters, so an id like
+ * "geipan-1954-08-..." tokenises with "1954" as its own word. Unicode-aware
+ * (`\p{L}`/`\p{N}` via the `u` flag, not the ASCII `a-z0-9` this shipped
+ * with first): the corpus carries titles that open on an accented or
+ * non-Latin letter ("Årslev Dyssen", "Čertův stůl", "Ħaġar Qim", "Île
+ * Milliau gallery grave", "Ōyu Stone Circles" - 224 of 81,293 sweep titles
+ * in the shipped dataset) - an ASCII-only class treats every one of those
+ * opening letters as a separator, so the word before it is dropped and the
+ * real first letter never keys a bucket, making the whole record
+ * unreachable by its own name. `searchCasesWithIndex` re-lower-cases and
+ * reads the query's own first character the same way (see its own doc
+ * comment), so build and query stay in step. */
+const WORD_SPLIT_RE = /[^\p{L}\p{N}]+/u;
 
 /** Push `record` onto `map.get(key)`, creating the bucket on first use. */
 function pushBucket(map, key, record) {
@@ -104,13 +114,14 @@ const FIELD_NAMES = ['craft', 'type', 'country'];
  *
  * `searchCasesWithIndex` still runs every candidate it gathers through the
  * exact same `rankRecord` used by `searchCases`, so a record that reaches
- * the ranking step is ranked identically either way. The one behavioural
- * difference from a full scan: a query that matches strictly *inside* a
- * word (for example "orb" inside "Morbihan", not at a word boundary) is
- * not found here, since no bucket is keyed by a mid-word character.
- * `searchCases` remains the exact, unindexed reference implementation for
- * small inputs where that gap does not matter and the O(n) scan is cheap
- * anyway.
+ * the ranking step is ranked identically either way. Word *starts* are now
+ * Unicode-correct (see `WORD_SPLIT_RE`), so the only behavioural gap left
+ * against a full scan is a query that matches strictly *inside* a word (for
+ * example "orb" inside "Morbihan", not at a word boundary): it is not found
+ * here, since no bucket is keyed by a mid-word character, whatever script
+ * that character is in. `searchCases` remains the exact, unindexed
+ * reference implementation for small inputs where that gap does not matter
+ * and the O(n) scan is cheap anyway.
  *
  * @param {Array<Object>} records Same shape `searchCases` accepts.
  * @returns {{wordStartBuckets: Map<string, Array<Object>>, fieldValueBuckets: Map<string, Array<Object>>, distinctFieldValues: Array<{value: string, key: string}>, yearBuckets: Map<number, Array<Object>>, order: Map<Object, number>}}

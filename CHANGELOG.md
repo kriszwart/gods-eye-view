@@ -1,5 +1,32 @@
 # Changelog
 
+- Luminous pins: points across all three registers (sky events, ancient
+  sites, live claims) render as glow sprites, a soft radial-gradient
+  billboard with a bright core, rather than flat Cesium points. Below a
+  close-zoom camera-height threshold, sky-event points swap to a small
+  composed billboard showing the case's own reported shape glyph in its
+  status hue, mirroring the existing ancient-sites close-range glyph tier.
+  Every dossier whose case or claim has a shape now carries a small
+  animated craft preview in its header, drifting slowly with a thin-film
+  sheen sweep, static under reduced motion.
+
+  Presentation only: brightness, hue and size still mean exactly what they
+  meant before (status, recency, unexplainedness), never credibility or
+  importance, and every pick id, dossier and encoding stayed unchanged.
+
+  A real Cesium bug turned up along the way: repeatedly reassigning a
+  billboard's `image`/`imageId` on the same frame as its `width`/`height`
+  reliably breaks `scene.pick()` for that billboard within about a second,
+  even when the assigned value is unchanged. Every glow sprite and shape
+  glyph is now composed once per (hue, size bucket) or (shape, hue) pair
+  and cached, so a billboard's own per-tick updates touch only
+  `width`/`height`/`colour`, never `image`/`imageId`, avoiding the bug
+  rather than working around it.
+
+  Measured cost: roughly +0.3ms/frame at world zoom with all three
+  registers on, comfortably inside the 16.7ms/frame 60fps budget, accepted
+  rather than reverting any register to flat points.
+
 - Live claims register: a fourth register, share token 5, ion accent,
   showing unverified public sighting claims pulled live from Reddit's
   public JSON (r/UFOs, r/HighStrangeness, r/aliens) and Bluesky's public

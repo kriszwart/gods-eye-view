@@ -355,7 +355,7 @@ try {
   );
   check(
     "the craft preview's accent border matches the case's own status hue",
-    previewCase.accent.toLowerCase() ===
+    previewCase.accent?.toLowerCase() ===
       statusHue(previewCase.status).toLowerCase(),
     JSON.stringify(previewCase),
   );
@@ -998,9 +998,13 @@ try {
   }
   check(
     'close zoom over a dense area (France) renders shape-glyph billboards, present and bounded',
+    // maxShapeGlyphBillboards caps candidate ROWS, not billboards: a hero
+    // row adds a second billboard (its ion ring), so the true bound is 2x
+    // the row cap, never more - see rendering.js's own MAX_SHAPE_GLYPH_
+    // BILLBOARDS doc comment.
     closeGlyph?.diag?.glyphBillboardCount > 0 &&
       closeGlyph.diag.glyphBillboardCount <
-        closeGlyph.diag.maxShapeGlyphBillboards,
+        closeGlyph.diag.maxShapeGlyphBillboards * 2,
     JSON.stringify(closeGlyph?.diag),
   );
   check(

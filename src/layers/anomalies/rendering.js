@@ -103,7 +103,7 @@ function withAlphaHex(hex, alpha) {
  * @param {string} hue - A `#rrggbb` colour.
  * @returns {HTMLCanvasElement}
  */
-function recolorShapeGlyph(image, hue) {
+function recolourShapeGlyph(image, hue) {
   const width = image.naturalWidth || image.width || SHAPE_GLYPH_CANVAS_DIM;
   const height = image.naturalHeight || image.height || SHAPE_GLYPH_CANVAS_DIM;
   const canvas = document.createElement('canvas');
@@ -149,7 +149,7 @@ function composeShapeGlyphCanvas(glyphImage, hue) {
   const glyphSize = dim * 0.6;
   const offset = (dim - glyphSize) / 2;
   ctx.drawImage(
-    recolorShapeGlyph(glyphImage, hue),
+    recolourShapeGlyph(glyphImage, hue),
     offset,
     offset,
     glyphSize,
@@ -746,6 +746,13 @@ export function createAnomalyRenderer(
    * rectangle's own centre (nearest first, see renderShapeGlyphBillboards),
    * never arbitrarily, so a capped view still reads as "the middle of
    * what's on screen" rather than a ragged partial fill.
+   *
+   * This caps candidate ROWS, not billboards: a hero row adds a second
+   * billboard (its ion ring, see the `r.hero` branch in
+   * renderShapeGlyphBillboards), so the actual billboard count for a capped
+   * view can run up to 2x this figure when every capped-in candidate
+   * happens to be a hero - never more, since the row scan itself is capped
+   * here before any billboards are added.
    */
   const MAX_SHAPE_GLYPH_BILLBOARDS = 2000;
   const SHAPE_RECOMPUTE_THROTTLE_MS = 250;
@@ -753,10 +760,15 @@ export function createAnomalyRenderer(
   /** Current view rectangle padded outward, in degrees; null off-globe or
    * when the camera is pitched above the horizon (no rectangle to bound
    * against - routine at close range). No antimeridian unwrap, unlike
-   * ancientSites/clusters.js's wrapLon-aware version: this tier only ever
-   * operates at close range, over a small viewport, so a row just outside
-   * the ±180° seam simply keeps its ordinary glow sprite instead of a
-   * glyph - a cosmetic miss, not a correctness bug. */
+   * ancientSites/clusters.js's wrapLon-aware version: when a view straddles
+   * the ±180° seam, `west` ends up greater than `east` here, and the
+   * candidate scan's plain `r.lon < bounds.west || r.lon > bounds.east`
+   * check (renderShapeGlyphBillboards) then rejects every row, not just
+   * the ones near the seam - the WHOLE view keeps its ordinary glow sprites
+   * instead of glyphs until the camera moves off the seam. A cosmetic miss,
+   * not a correctness bug (picking, hue and count stay right; only the
+   * close-range glyph swap sits out), and rare enough at the close ranges
+   * this tier operates in to leave unhandled here. */
   function paddedShapeGlyphViewBoundsDeg() {
     let rect;
     try {
@@ -774,6 +786,15 @@ export function createAnomalyRenderer(
       east: Cesium.Math.toDegrees(rect.east + padRad),
       north: Math.min(90, Cesium.Math.toDegrees(rect.north + padRad)),
     };
+  }
+
+  /** Stable string key for a bounds rectangle (or its absence), for the
+   * nothing-changed guard below; mirrors ancientSites/rendering.js's own
+   * boundsKeyOf. */
+  function shapeGlyphBoundsKeyOf(bounds) {
+    return bounds
+      ? `${bounds.west.toFixed(3)},${bounds.south.toFixed(3)},${bounds.east.toFixed(3)},${bounds.north.toFixed(3)}`
+      : null;
   }
 
   /** Whether the status filter currently passes a row (same predicate
@@ -800,6 +821,30 @@ export function createAnomalyRenderer(
         }
   }
 
+  // Nothing-changed guard for the tier rebuilt below: while the camera sits
+  // parked below SHAPE_GLYPH_HEIGHT_THRESHOLD_M with heroes or pulses
+  // holding continuous render (see syncHold), scene.postRender fires every
+  // frame and installShapeGlyphWatcher's listener calls recomputeShapeGlyphs()
+  // at most every SHAPE_RECOMPUTE_THROTTLE_MS - still up to 4 times a
+  // second, forever, with nothing new to draw. These hold the inputs of the
+  // last actual rebuild (the same predicate inputs apply() uses to decide
+  // bright/faded/status visibility, plus the camera-height band), so a
+  // recompute whose inputs all match can skip the removeAll()/row-scan/
+  // billboard-add/syncPointVisibility work entirely. Mirrors
+  // ancientSites/rendering.js's own recomputeSweep guard, whose comment
+  // names this exact hazard. `undefined` on every field until the first
+  // real build, so that build is never mistaken for a match.
+  let lastGlyphRenderBand;
+  let lastGlyphRenderBoundsKey;
+  let lastGlyphRenderYear;
+  let lastGlyphRenderMode;
+  let lastGlyphRenderSpan;
+  let lastGlyphRenderStatuses;
+  /** Rebuilds actually performed (i.e. not short-circuited by the guard
+   * above) this session - a qa/diagnostic counter only (see getDiagnostics
+   * below), not read by any rendering logic. */
+  let shapeGlyphRebuildCount = 0;
+
   /**
    * Rebuild the shape-glyph billboard tier from scratch for the current
    * camera view and dial/filter state: candidates are rows currently
@@ -807,9 +852,40 @@ export function createAnomalyRenderer(
    * apply() uses) and the status filter, whose position falls inside the
    * padded view rectangle. Never a tick path - see the recompute/watcher
    * functions below, which throttle and settle calls into this one.
+   *
+   * Guarded by the nothing-changed check above: a call whose bounds key,
+   * year, mode, span and statuses (by reference - index.js only ever
+   * reassigns `activeStatuses` to a new Set when the filter itself changes,
+   * never on every apply()) all match the last real build returns
+   * immediately. `force` bypasses the guard for onShapeGlyphReady's own
+   * redraw, whose recompute inputs are unchanged but whose glyph IMAGE just
+   * did (a (shape, hue) pair upgraded from the placeholder to a real
+   * composed glyph, or to the failure fallback).
+   * @param {{force?: boolean}} [options]
    */
-  function renderShapeGlyphBillboards() {
+  function renderShapeGlyphBillboards({ force = false } = {}) {
     const bounds = paddedShapeGlyphViewBoundsDeg();
+    const band =
+      cameraHeight() >= SHAPE_GLYPH_HEIGHT_THRESHOLD_M ? 'above' : 'below';
+    const boundsKey = shapeGlyphBoundsKeyOf(bounds);
+    if (
+      !force &&
+      band === lastGlyphRenderBand &&
+      boundsKey === lastGlyphRenderBoundsKey &&
+      state.year === lastGlyphRenderYear &&
+      state.mode === lastGlyphRenderMode &&
+      state.span === lastGlyphRenderSpan &&
+      state.statuses === lastGlyphRenderStatuses
+    ) {
+      return;
+    }
+    lastGlyphRenderBand = band;
+    lastGlyphRenderBoundsKey = boundsKey;
+    lastGlyphRenderYear = state.year;
+    lastGlyphRenderMode = state.mode;
+    lastGlyphRenderSpan = state.span;
+    lastGlyphRenderStatuses = state.statuses;
+    shapeGlyphRebuildCount += 1;
     shapeGlyphBillboards.removeAll();
     const nextIds = new Set();
     if (bounds) {
@@ -884,16 +960,27 @@ export function createAnomalyRenderer(
     requestFrame('anomalies-shape-glyphs');
   }
 
-  /** Glyph assets load asynchronously (see requestShapeGlyph above), though
-   * kicking off every shape's every hue's load at creation time below means
-   * this almost never has visible work left to do by the time a user
-   * actually reaches close range. When a pair does finish loading after a
-   * billboard was already drawn with the placeholder, redraw so it upgrades
-   * without waiting for the next camera move (mirrors
-   * ancientSites/rendering.js's own onGlyphReady). */
+  /** Glyph assets load asynchronously (see requestShapeGlyph above). Eager,
+   * not lazy per pair: every (shape, hue) combination is requested below,
+   * at renderer creation - which is already deferred to the layer's own
+   * first enable, not app boot (src/data/lifecycle.js only calls a layer's
+   * `init` the first time it is enabled), so this warm-up costs nothing
+   * before a visitor ever opens the register. Firing the whole burst at
+   * once (rather than, say, only the pair a billboard first needs) is
+   * deliberate: they are 30 tiny, same-origin SVGs
+   * (public/anomalies/glyphs/), cheap enough as one burst that the cache is
+   * normally warm well before a visitor reaches close-zoom range - which is
+   * what "composed lazily" in the plan's own Task 2 checklist means
+   * (composed on first use of the SESSION, never per row), not staggered
+   * further. When a pair does finish loading after a billboard was already
+   * drawn with the placeholder, redraw so it upgrades without waiting for
+   * the next camera move (mirrors ancientSites/rendering.js's own
+   * onGlyphReady); `force: true` bypasses renderShapeGlyphBillboards's own
+   * nothing-changed guard, since the recompute inputs have not changed here
+   * - only the glyph image has. */
   function onShapeGlyphReady() {
     if (state.visible && glyphedIds.size) {
-      renderShapeGlyphBillboards();
+      renderShapeGlyphBillboards({ force: true });
       requestFrame('anomalies-shape-glyph-ready');
     }
   }
@@ -915,6 +1002,13 @@ export function createAnomalyRenderer(
         shapeGlyphBillboards.show = false;
         requestFrame('anomalies-shape-glyphs-off');
       }
+      // Invalidate renderShapeGlyphBillboards's own nothing-changed guard:
+      // the tier was just cleared out from under whatever key it last built
+      // with (or was already empty), so a later return below threshold must
+      // rebuild even if bounds/year/mode/span/statuses land back on exactly
+      // the values the tier was last built with - a real threshold crossing,
+      // not a no-op recompute.
+      lastGlyphRenderBand = undefined;
       return;
     }
     renderShapeGlyphBillboards();
@@ -1126,6 +1220,12 @@ export function createAnomalyRenderer(
         glyphedIds = new Set();
         shapeGlyphBillboards.show = false;
       }
+      // Same invalidation as recomputeShapeGlyphs's own above-threshold
+      // branch: disabling clears the tier outside renderShapeGlyphBillboards's
+      // own nothing-changed guard, so a later re-enable landing back on the
+      // exact bounds/year/mode/span/statuses the tier was last built with
+      // must still rebuild rather than see a stale match and stay empty.
+      lastGlyphRenderBand = undefined;
     }
     syncHold();
     requestFrame('anomalies-apply');
@@ -1166,6 +1266,12 @@ export function createAnomalyRenderer(
       glyphCacheSize: shapeGlyphCache.size,
       shapeGlyphHeightThreshold: SHAPE_GLYPH_HEIGHT_THRESHOLD_M,
       maxShapeGlyphBillboards: MAX_SHAPE_GLYPH_BILLBOARDS,
+      // Rebuilds renderShapeGlyphBillboards actually performed (not
+      // short-circuited by its own nothing-changed guard) so far this
+      // session - read this twice a few seconds apart with the camera
+      // parked below threshold and heroes visible to confirm idle churn is
+      // gone: it should not move.
+      shapeGlyphRebuildCount,
     };
   }
 

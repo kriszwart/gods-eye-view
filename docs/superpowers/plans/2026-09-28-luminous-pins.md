@@ -56,7 +56,7 @@
 ### Task 3: animated craft preview in dossiers
 
 **Files:**
-- Create: `src/ui/craftPreview.js` (builds an inline SVG preview for a shape category: the glyph with specimens-language motion — slow hover drift and a thin-film sheen sweep — pure SVG/CSS, no WebGL, no external fetches beyond the already-shipped glyph SVGs; reduced motion renders static)
+- Create: `src/ui/craftPreview.js` (builds an inline SVG preview for a shape category: the glyph with specimens-language motion, slow hover drift and a thin-film sheen sweep, pure SVG/CSS, no WebGL, no external fetches beyond the already-shipped glyph SVGs; reduced motion renders static)
 - Modify: `src/layers/anomalies/index.js` and `src/layers/liveClaims/index.js` (dossier header gains the preview when the case/claim has a shape; ancient dossiers untouched), `src/ui/styles/anomaly-atlas.css`, `scripts/qa-anomalies.mjs` and `scripts/qa-claims.mjs` (dossier shows the preview for a shaped case; reduced-motion emulation yields no running animation, via a class or computed-style assertion), boundary/format-scope declarations
 - [ ] Escape/lifecycle: preview dies with the dossier; no leaked animation timers (CSS animation only, no JS timers).
 - [ ] Gates; qa-anomalies 3x, qa-claims 1x; screenshots of a dossier with the preview at 1440/390.

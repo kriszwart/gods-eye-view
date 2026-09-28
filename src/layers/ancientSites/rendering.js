@@ -14,6 +14,23 @@ import {
   glyphUrlForType,
   glyphUrlForTmaCategory,
 } from './glyphMap.js';
+import {
+  composeGlowSprite,
+  glowCacheKey,
+  sizeBucket,
+} from '../../ui/glowSprite.js';
+
+// Luminous points (task: luminous pins): every hero, mid-band single and
+// cluster badge point is a glow billboard rather than a flat
+// PointPrimitive. Unlike the anomalies register, ancient sites paints every
+// point tier the SAME single fixed gold hue, so one sprite family (baked
+// gold, one canvas per size bucket) covers heroes, sweep singles and
+// cluster badges alike - only size and overall alpha differ per tier,
+// exactly as they did on the plain points before. The close-range glyph
+// billboards (sweepBillboards/tmaBillboards below) are untouched: they were
+// already billboards before this task and stay exactly as they are.
+const goldGlowImageId = (sizePx) => glowCacheKey(GOLD, sizeBucket(sizePx));
+const goldGlowImage = (sizePx) => composeGlowSprite({ hue: GOLD, sizePx });
 
 /**
  * Local-only Modern Antiquarian overlay (see tmaLocal.js): every reference
@@ -36,7 +53,6 @@ const SWEEP_RECOMPUTE_THROTTLE_MS = 250;
 const CLOSE_BAND_VIEW_PADDING = 0.3;
 
 const gold = () => Cesium.Color.fromCssColorString(GOLD);
-const goldAlpha = (alpha) => gold().withAlpha(alpha);
 
 /** `count >= 1000` compacts to e.g. "1.2k" so the badge stays narrow. */
 function formatClusterCount(count) {
@@ -247,6 +263,12 @@ function requestBillboardGlyph(url) {
 const MID_BAND_FAR_CELL_DEG = CAMERA_BANDS[0].cellDeg;
 const MID_BAND_NEAR_CELL_DEG = SKYWARD_FALLBACK_CELL_DEG;
 
+/** Display sizes (px) for the two other glow point tiers (mid-band singles
+ * ramp continuously via `midBandSingleStyle` below, so they need no fixed
+ * constant of their own). */
+const HERO_POINT_SIZE_PX = 7;
+const CLUSTER_POINT_SIZE_PX = 14;
+
 /**
  * Point size and alpha for the sweep's unclustered singles at every camera
  * band except the closest one (which renders billboards instead - see
@@ -272,7 +294,9 @@ function midBandSingleStyle(cellDeg) {
  * Owns every Cesium primitive for the ancient register.
  *
  * The curated hero tier renders exactly as before: one static gold point per
- * site, unclustered. The worldwide sweep (~81k sites) never becomes ~81k
+ * site, unclustered - a glow billboard since the luminous-pins task (see
+ * glowSprite.js), a plain PointPrimitive before it, with no change to the
+ * tier's own behaviour. The worldwide sweep (~81k sites) never becomes ~81k
  * primitives: it renders through camera-height-banded grid clustering
  * (`clusters.js`, portable): coarse grid badges (a larger gold point plus a
  * `LabelCollection` count) at world/continent/country zoom, individual
@@ -306,12 +330,14 @@ export function createAncientRenderer(
 ) {
   const scene = viewer.scene;
   const heroPoints = scene.primitives.add(
-    new Cesium.PointPrimitiveCollection({
+    new Cesium.BillboardCollection({
+      scene,
       blendOption: Cesium.BlendOption.TRANSLUCENT,
     }),
   );
   const sweepPoints = scene.primitives.add(
-    new Cesium.PointPrimitiveCollection({
+    new Cesium.BillboardCollection({
+      scene,
       blendOption: Cesium.BlendOption.TRANSLUCENT,
     }),
   );
@@ -325,7 +351,8 @@ export function createAncientRenderer(
     }),
   );
   const clusterPoints = scene.primitives.add(
-    new Cesium.PointPrimitiveCollection({
+    new Cesium.BillboardCollection({
+      scene,
       blendOption: Cesium.BlendOption.TRANSLUCENT,
     }),
   );
@@ -430,11 +457,15 @@ export function createAncientRenderer(
       heroPoints.add({
         id: { id: `ancient:${r.id}`, ancientKind: 'hero', ancientId: r.id },
         position: Cesium.Cartesian3.fromDegrees(r.lon, r.lat, 0),
-        pixelSize: 7,
-        color: goldAlpha(0.9),
-        outlineColor: goldAlpha(0.35),
-        outlineWidth: 2,
+        image: goldGlowImage(HERO_POINT_SIZE_PX),
+        imageId: goldGlowImageId(HERO_POINT_SIZE_PX),
+        width: HERO_POINT_SIZE_PX,
+        height: HERO_POINT_SIZE_PX,
+        color: Cesium.Color.WHITE.withAlpha(0.9),
+        verticalOrigin: Cesium.VerticalOrigin.CENTER,
+        horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
         scaleByDistance: new Cesium.NearFarScalar(2.0e5, 1.5, 2.0e7, 0.8),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
       });
     requestFrame('ancient-heroes');
   }
@@ -505,11 +536,15 @@ export function createAncientRenderer(
           ancientIndex: i,
         },
         position: Cesium.Cartesian3.fromDegrees(sweep.lon(i), sweep.lat(i), 0),
-        pixelSize: size,
-        color: goldAlpha(alpha),
-        outlineColor: goldAlpha(alpha * 0.36),
-        outlineWidth: 1,
+        image: goldGlowImage(size),
+        imageId: goldGlowImageId(size),
+        width: size,
+        height: size,
+        color: Cesium.Color.WHITE.withAlpha(alpha),
+        verticalOrigin: Cesium.VerticalOrigin.CENTER,
+        horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
         scaleByDistance: new Cesium.NearFarScalar(2.0e5, 1.3, 2.0e7, 0.6),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
       });
     }
   }
@@ -532,11 +567,15 @@ export function createAncientRenderer(
       clusterPoints.add({
         id,
         position,
-        pixelSize: 14,
-        color: goldAlpha(0.85),
-        outlineColor: goldAlpha(0.4),
-        outlineWidth: 2,
+        image: goldGlowImage(CLUSTER_POINT_SIZE_PX),
+        imageId: goldGlowImageId(CLUSTER_POINT_SIZE_PX),
+        width: CLUSTER_POINT_SIZE_PX,
+        height: CLUSTER_POINT_SIZE_PX,
+        color: Cesium.Color.WHITE.withAlpha(0.85),
+        verticalOrigin: Cesium.VerticalOrigin.CENTER,
+        horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
         scaleByDistance: new Cesium.NearFarScalar(2.0e5, 1.4, 3.0e7, 0.7),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
       });
       clusterLabels.add({
         id,

@@ -8,6 +8,29 @@ import {
 } from './model.js';
 import { binRows, blurBins, heatAlpha } from './hotspots.js';
 import { resolveImageryHost, NO_IMAGERY_HOST } from '../../maps/imageryHost.js';
+import {
+  composeGlowSprite,
+  glowCacheKey,
+  sizeBucket,
+} from '../../ui/glowSprite.js';
+
+// Luminous points (task: luminous pins): every status-hued point is a glow
+// sprite billboard rather than a flat Cesium PointPrimitive. The anomalies
+// register's hue varies continuously per row (see model.js's pointColor - a
+// mix along the dim/violet/magenta ramp, or a fixed amber/dim for
+// contested/explained), so composing one sprite per distinct row colour
+// would leave the cache unbounded. Every row instead shares ONE neutral
+// white-core sprite per size bucket (see glowSprite.js's own doc comment for
+// why this differs from live claims and ancient sites, which each bake
+// their single fixed hue into the sprite instead); the row's actual colour
+// and alpha apply via the billboard's own `color`, which Cesium multiplies
+// against the sprite's white core - reproducing pointColor()/pointAlpha()'s
+// output exactly, with no quantisation.
+const GLOW_NEUTRAL_HUE = '#ffffff';
+const glowImageId = (sizePx) =>
+  glowCacheKey(GLOW_NEUTRAL_HUE, sizeBucket(sizePx));
+const glowImage = (sizePx) =>
+  composeGlowSprite({ hue: GLOW_NEUTRAL_HUE, sizePx });
 
 // Thin-film sheen for hero craft: strongest at grazing angles, drifting slowly.
 const SPECTRAL_FS = /* glsl */ `
@@ -113,7 +136,6 @@ export function createAnomalyRenderer(
     uniforms: uniforms(),
     fragmentShaderText: INFRARED_FS,
   });
-  const ion = Cesium.Color.fromCssColorString(PALETTE.ion);
 
   // Heat overlay: reports binned onto hotspots.js's default grid (so
   // blurBins's radius keeps the real-world extent it was tuned for), then
@@ -350,7 +372,8 @@ export function createAnomalyRenderer(
     let c = map.get(year);
     if (!c) {
       c = scene.primitives.add(
-        new Cesium.PointPrimitiveCollection({
+        new Cesium.BillboardCollection({
+          scene,
           blendOption: Cesium.BlendOption.TRANSLUCENT,
         }),
       );
@@ -358,6 +381,40 @@ export function createAnomalyRenderer(
       map.set(year, c);
     }
     return c;
+  }
+
+  // Hero ion ring (DESIGN_SYSTEM.md: "ion ring: curated hero case with a 3D
+  // craft"): today's PointPrimitive draws this as an outlineColor/
+  // outlineWidth ring straddling the point's own edge. A billboard has no
+  // outline concept, so a hero row instead gets a SECOND billboard: a
+  // ring-only sprite (transparent centre, a stroked ion ring, transparent
+  // outside), added just after the row's own glow sprite at a slightly
+  // larger display size so the ring sits just outside the glow rather than
+  // overlapping it. Composed once, lazily, and cached forever (a single
+  // canvas, not bucketed by size: the ring is a thin vector stroke, and the
+  // billboard's own width/height scale it continuously to match the row's
+  // point size exactly as the old outline scaled with pixelSize).
+  const HERO_RING_IMAGE_ID = 'anomaly-hero-ring';
+  const HERO_RING_DISPLAY_SCALE = 1.35;
+  const HERO_RING_CANVAS_DIM = 48;
+  let heroRingCanvasEl = null;
+  function heroRingImage() {
+    if (heroRingCanvasEl) return heroRingCanvasEl;
+    const dim = HERO_RING_CANVAS_DIM;
+    const canvas = document.createElement('canvas');
+    canvas.width = dim;
+    canvas.height = dim;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      const centre = dim / 2;
+      ctx.beginPath();
+      ctx.arc(centre, centre, centre * 0.72, 0, Math.PI * 2);
+      ctx.lineWidth = dim * 0.09;
+      ctx.strokeStyle = PALETTE.ion;
+      ctx.stroke();
+    }
+    heroRingCanvasEl = canvas;
+    return heroRingCanvasEl;
   }
 
   function clearPoints() {
@@ -378,17 +435,40 @@ export function createAnomalyRenderer(
         [bright, true],
         [faded, false],
       ]) {
-        collection(map, r.year).add({
+        const size = pointSize(r, { current });
+        const coll = collection(map, r.year);
+        coll.add({
           id: { id: `anomaly:${r.id}`, anomalyId: r.id, status: r.status },
           position,
-          pixelSize: pointSize(r, { current }),
+          image: glowImage(size),
+          imageId: glowImageId(size),
+          width: size,
+          height: size,
           color: new Cesium.Color(red, green, blue, pointAlpha(r, { current })),
-          outlineColor: r.hero
-            ? ion.withAlpha(current ? 0.9 : 0.35)
-            : Cesium.Color.TRANSPARENT,
-          outlineWidth: r.hero ? 1.5 : 0,
+          verticalOrigin: Cesium.VerticalOrigin.CENTER,
+          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
           scaleByDistance: far,
+          // Ground-level billboards depth-test against the globe by default,
+          // unlike the plain points they replace (see the matching comment
+          // on ancientSites/rendering.js's own sweep billboards, which hit
+          // the identical intermittent depth-precision miss at close range).
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
         });
+        if (r.hero) {
+          coll.add({
+            id: { id: `anomaly:${r.id}`, anomalyId: r.id, status: r.status },
+            position,
+            image: heroRingImage(),
+            imageId: HERO_RING_IMAGE_ID,
+            width: size * HERO_RING_DISPLAY_SCALE,
+            height: size * HERO_RING_DISPLAY_SCALE,
+            color: Cesium.Color.WHITE.withAlpha(current ? 0.9 : 0.35),
+            verticalOrigin: Cesium.VerticalOrigin.CENTER,
+            horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+            scaleByDistance: far,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          });
+        }
       }
     }
     apply();

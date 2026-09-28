@@ -892,5 +892,7 @@
   "src/layers/liveClaims/nearby.js",
   "src/layers/liveClaims/nearby.test.mjs",
   "src/app/layers/liveClaims.js",
-  "scripts/qa-claims.mjs"
+  "scripts/qa-claims.mjs",
+  "src/ui/glowSprite.js",
+  "src/ui/glowSprite.test.mjs"
 ]

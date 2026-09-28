@@ -1,5 +1,76 @@
 # Changelog
 
+- Atlas instruments: three additions that let the atlas answer questions
+  about itself, all reading the shipped datasets live rather than a fixed
+  sample.
+
+  Observatory: a layer-independent readout naming what the atlas actually
+  holds, opened from its own standalone toggle so it works even before
+  either register's own layer is switched on. Sky and ancient-sites counts,
+  the sky status split and a decade histogram all trace to the same
+  `stats.json`/`sites.v2.json` the layers themselves load, never a separate
+  guess, with a footer stating so plainly; the toggle, its counts and its
+  open state all survive the anomalies layer being disabled and
+  re-enabled underneath it.
+
+  Documented waves: the sky chronometer now carries one landmark mark per
+  documented report wave (six today: 1947 United States, 1952 Washington
+  DC, 1954 French, 1977 Colares (Brazil), 1989 Belgian, 2017 Pentagon UAP
+  disclosure), each worded as reports or reporting rather than a claim an
+  object was present, and sourced to a real reference. Clicking a mark
+  opens a small note plate with its label, note and source link; Escape
+  closes it. Landmarks live only on the sky scale (1940-2026) - the
+  deep-time dial (ancient sites on, sky off) carries none, so the ancient
+  register's own "documented archaeology, not speculative dating" honesty
+  line is never muddied by an event marker.
+
+  Search reaches every register: the cross-register case search (previously
+  hero cases and curated ancient sites only, about 44 records) now also
+  searches GEIPAN's real caseload (3,381 cases - present in the corpus
+  before this, but mapped with no title of their own, since GEIPAN's
+  columnar rows carry none, and matchable only by an exact 4-digit year,
+  never by name or id) and the worldwide ancient-sites sweep (81,293 rows,
+  previously left out of the search corpus entirely) - an ~85,000-record
+  corpus in total. A GEIPAN case's search entry synthesises `GEIPAN case
+  <id>`, the id verbatim and nothing else invented (no place name; the
+  dataset ships rounded coordinates only), which doubles as how a query for
+  the id, or a fragment of it, finds the case, since the search only ever
+  looks at title text. An ancient-sweep entry carries the site's own real
+  name, type and country, read off the same columnar accessors the sweep's
+  own renderer and dossier already use. Hero-tier records for both
+  registers stay first in the combined corpus, so a tied rank always
+  favours the richer, curated entry over a swept one. Picking a sweep
+  result flies to it and opens its existing compact dossier (a new
+  `focusSweep`, mirroring `focusSite`'s shape but addressed by index rather
+  than id); picking a real GEIPAN case now flies to its own reported
+  coordinates too, not only hero cases (`focusCase` fell back to a
+  hero-only lookup before).
+
+  Measured before optimising: an exhaustive scan of the full ~85k-record
+  corpus (the previous `searchCases`, unchanged and still used for small
+  inputs) took up to 26ms for a single-letter query on this machine, over
+  the roughly 10ms per-keystroke budget worth targeting. `caseSearch.js`
+  gained a portable, unit-tested prefix-bucket index
+  (`buildCaseSearchIndex`/`searchCasesWithIndex`, built once and cached,
+  never rebuilt per keystroke): buckets by each title word's first letter,
+  by exact field value rather than a field's first letter (two-thirds of
+  the ancient sweep shares one type, "mound", so a first-character bucket
+  there would scan most of the corpus regardless of query), and by year.
+  Indexed, the same worst case falls to about 3ms on average and stays
+  under 15ms even at the single-letter worst case, comfortably under the
+  qa gate's 50ms sanity bound. One accepted behavioural gap: a query
+  matching strictly inside a word (for example "orb" inside "Morbihan", not
+  at a word boundary) is found by the exact `searchCases` but not by the
+  indexed path.
+
+  Gates: `npm run format:check` (1,152 files clean), `npm test` (5,241
+  tests, 5,240 passing, 1 pre-existing skip), `npm run check:boundaries`,
+  `npm run build` all clean. `node scripts/qa-anomalies.mjs` 3 consecutive
+  clean runs (0 failures each) against the live controller-managed :4173
+  server, covering all three additions above; `node
+  scripts/qa-ancient-sites.mjs` and `node scripts/qa-claims.mjs` 1 clean
+  run each.
+
 - Luminous pins: points across all three registers (sky events, ancient
   sites, live claims) render as glow sprites, a soft radial-gradient
   billboard with a bright core, rather than flat Cesium points. Below a

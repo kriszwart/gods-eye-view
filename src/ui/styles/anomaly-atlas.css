@@ -1026,6 +1026,213 @@
   font-size: 11px;
 }
 
+/* Observatory: "the atlas at a glance", a layer-independent plate
+   summarising every register at once (sky reports, ancient sites, live
+   claims) plus a decade histogram. Every other interactive plate already
+   claims a corner - the dossier top-right, Spotter bottom-right, the
+   legend top-left, and Sources filling the left edge's own gap between
+   the legend and the dial band (see the Sources plate's own placement
+   note above) - so this taller, four-section plate centres on the
+   viewport instead of contesting a fifth corner slot, scrolling
+   internally past whichever section runs longest at 390px. z-index sits
+   one above the dossier/Spotter/Sources band (140) so it reads on top if
+   a visitor opens it alongside one of those, since it is the one plate
+   meant to be read as an overview of everything else. */
+.anomaly-atlas .uap-observatory {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(480px, calc(100vw - 48px));
+  max-height: min(76vh, 640px);
+  overflow-y: auto;
+  padding: 20px 24px;
+  background: var(--uap-dossier-bg);
+  color: var(--uap-ink);
+  font: 400 13px/1.5 var(--uap-sans);
+  z-index: 141;
+}
+.anomaly-atlas .uap-observatory::before,
+.anomaly-atlas .uap-observatory::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: solid var(--uap-hair-strong);
+}
+.anomaly-atlas .uap-observatory::before {
+  top: 0;
+  left: 0;
+  border-width: 1px 0 0 1px;
+}
+.anomaly-atlas .uap-observatory::after {
+  bottom: 0;
+  right: 0;
+  border-width: 0 1px 1px 0;
+}
+.anomaly-atlas .uap-observatory-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 16px;
+}
+.anomaly-atlas .uap-observatory-head h2 {
+  margin: 0;
+  font: 400 20px/1.2 var(--uap-mono);
+  letter-spacing: -0.01em;
+}
+.anomaly-atlas .uap-observatory .uap-close {
+  background: none;
+  border: 1px solid var(--uap-hair, rgba(217, 220, 230, 0.16));
+  color: var(--uap-ink);
+  font: 400 11px var(--uap-mono);
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.anomaly-atlas .uap-observatory .uap-close:hover,
+.anomaly-atlas .uap-observatory .uap-close:focus-visible {
+  border-color: var(--uap-hair-strong, rgba(217, 220, 230, 0.32));
+}
+.anomaly-atlas .uap-observatory .uap-close:focus-visible {
+  outline: 2px solid var(--uap-ink, #d9dce6);
+  outline-offset: 2px;
+}
+.anomaly-atlas .uap-observatory-body {
+  display: grid;
+  gap: 20px;
+}
+.anomaly-atlas .uap-observatory-section h3 {
+  margin: 0 0 8px;
+  font: 400 12px var(--uap-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--uap-dim);
+}
+.anomaly-atlas .uap-observatory-count {
+  margin: 0 0 8px;
+  font: 400 15px var(--uap-mono);
+  color: var(--uap-ink);
+}
+.anomaly-atlas .uap-observatory-status {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.anomaly-atlas .uap-observatory-status li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.anomaly-atlas .uap-observatory-status b {
+  font-weight: 400;
+  font-family: var(--uap-mono);
+}
+/* Same status-tint formulas as .uap-readout-* above (the sky register's
+   status filter readout): grey explained, violet thin data, magenta
+   unresolved, amber contested. Scoped separately rather than shared,
+   matching this file's own convention of duplicating small plate rules
+   per plate instead of reaching across to another plate's class. */
+.anomaly-atlas .uap-observatory-status-explained {
+  color: color-mix(
+    in srgb,
+    var(--uap-dim, #7c8195) 70%,
+    var(--uap-ink, #d9dce6)
+  );
+}
+.anomaly-atlas .uap-observatory-status-insufficient {
+  color: color-mix(
+    in srgb,
+    var(--uap-violet, #7b5cff) 70%,
+    var(--uap-ink, #d9dce6)
+  );
+}
+.anomaly-atlas .uap-observatory-status-unresolved {
+  color: color-mix(
+    in srgb,
+    var(--uap-magenta, #ff2e9a) 70%,
+    var(--uap-ink, #d9dce6)
+  );
+}
+.anomaly-atlas .uap-observatory-status-contested {
+  color: color-mix(
+    in srgb,
+    var(--uap-amber, #ffb547) 70%,
+    var(--uap-ink, #d9dce6)
+  );
+}
+.anomaly-atlas .uap-observatory-source,
+.anomaly-atlas .uap-observatory-countries,
+.anomaly-atlas .uap-observatory-live,
+.anomaly-atlas .uap-observatory-unavailable {
+  margin: 0;
+  color: var(--uap-dim);
+  font-size: 12px;
+}
+.anomaly-atlas .uap-observatory-types {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.anomaly-atlas .uap-observatory-types li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* The ancient register's own gold glyph icon (see .uap-legend
+   .uap-glyph-icon above), scoped to this plate rather than sharing that
+   selector, same duplication convention as the status tints above. */
+.anomaly-atlas .uap-observatory-types .uap-glyph-icon {
+  display: inline-block;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  background-color: #d8b36a;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+.anomaly-atlas .uap-observatory-types code {
+  margin-left: auto;
+  color: var(--uap-dim);
+  font: 400 11px var(--uap-mono);
+}
+.anomaly-atlas .uap-observatory-decades svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin-top: 4px;
+}
+.anomaly-atlas .uap-observatory-bar {
+  fill: var(--uap-ion);
+}
+.anomaly-atlas .uap-observatory-baseline {
+  stroke: #d8b36a;
+  stroke-width: 1;
+}
+.anomaly-atlas .uap-observatory-decade-label {
+  fill: var(--uap-dim);
+  font: 400 8px var(--uap-mono);
+}
+.anomaly-atlas .uap-observatory-footer {
+  margin: 18px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--uap-hair, rgba(217, 220, 230, 0.16));
+  color: var(--uap-dim);
+  font-size: 11px;
+}
+.anomaly-atlas .uap-observatory :focus-visible {
+  outline: 2px solid var(--uap-ink, #d9dce6);
+  outline-offset: 2px;
+}
+
 /* Ion register: the live claims dossier variant. The source tag reads ion
    here instead of the sky register's status magenta, and the honesty line
    gets its own quiet rule, mirroring the ancient register's .uap-debated. */

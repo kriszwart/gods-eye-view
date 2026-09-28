@@ -899,5 +899,8 @@
   "src/ui/glowSprite.js",
   "src/ui/glowSprite.test.mjs",
   "src/ui/craftPreview.js",
-  "src/ui/craftPreview.test.mjs"
+  "src/ui/craftPreview.test.mjs",
+  "src/app/observatory.js",
+  "src/app/observatoryModel.js",
+  "src/app/observatoryModel.test.mjs"
 ]

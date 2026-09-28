@@ -1053,6 +1053,31 @@ try {
     JSON.stringify(spotterCloses),
   );
 
+  // Same orphan lesson for the Observatory plate (task 1, atlas-instruments):
+  // it too is a sibling of the viewer container, not a child of the
+  // anomalies layer's own DOM, so disabling the layer must still close it.
+  const observatoryCloses = await page.evaluate(async () => {
+    const btn = [...document.querySelectorAll('.uap-chrono-panel button')].find(
+      (b) => b.textContent === 'Observatory',
+    );
+    btn?.click();
+    const opened = document.querySelector('.uap-observatory');
+    const openedVisible = !!opened && !opened.hidden;
+    const m = window.__godsEyeView.dataManager;
+    await m.setEnabled('anomalies', false, { origin: 'user' });
+    const after = document.querySelector('.uap-observatory');
+    const afterHiddenOrAbsent = !after || after.hidden === true;
+    // Restore for the rest of this pass (re-enable is already proven safe above).
+    await m.setEnabled('anomalies', true, { origin: 'user' });
+    return { openedVisible, afterHiddenOrAbsent };
+  });
+  check(
+    'disabling the anomalies layer closes the Observatory plate',
+    observatoryCloses.openedVisible === true &&
+      observatoryCloses.afterHiddenOrAbsent === true,
+    JSON.stringify(observatoryCloses),
+  );
+
   const sourcesPanel = await page.evaluate(async () => {
     const btn = [...document.querySelectorAll('.uap-chrono-panel button')].find(
       (b) => b.textContent === 'Sources',
@@ -1083,6 +1108,106 @@ try {
     'Escape closes the Sources panel',
     sourcesPanel.closed === true,
     JSON.stringify({ closed: sourcesPanel.closed }),
+  );
+
+  // Observatory (task 1, atlas-instruments): a layer-independent readout of
+  // every register at a glance, opened from the same chrono-panel action
+  // row as Spotter and Sources above. Every number it shows must trace back
+  // to the same shipped datasets, computed here from a fresh fetch rather
+  // than pinned, so this gate stays valid as GEIPAN and the ancient sweep
+  // grow. The plate's sky and ancient sections render asynchronously (each
+  // fetch resolves and paints independently - see src/app/observatory.js's
+  // refresh()), so the count elements are awaited before being read.
+  const [obsSkyStats, obsAncientJson] = await Promise.all([
+    page.evaluate(async () => (await fetch('/anomalies/stats.json')).json()),
+    page.evaluate(async () =>
+      (await fetch('/ancient-sites/sites.v2.json')).json(),
+    ),
+  ]);
+  await page.evaluate(() => {
+    const btn = [...document.querySelectorAll('.uap-chrono-panel button')].find(
+      (b) => b.textContent === 'Observatory',
+    );
+    btn?.click();
+  });
+  const observatoryOpened = await page.evaluate(() => {
+    const plate = document.querySelector('.uap-observatory');
+    return !!plate && !plate.hidden;
+  });
+  await page
+    .waitForFunction(
+      () =>
+        document.querySelector(
+          '.uap-observatory-section[data-register="sky"] .uap-observatory-count[data-count]',
+        ) &&
+        document.querySelector(
+          '.uap-observatory-section[data-register="ancient"] .uap-observatory-count[data-count]',
+        ),
+      { timeout: 20000 },
+    )
+    .catch(() => {});
+  const observatory = await page.evaluate(() => {
+    const plate = document.querySelector('.uap-observatory');
+    const skyCountEl = plate?.querySelector(
+      '.uap-observatory-section[data-register="sky"] .uap-observatory-count',
+    );
+    const ancientCountEl = plate?.querySelector(
+      '.uap-observatory-section[data-register="ancient"] .uap-observatory-count',
+    );
+    const statusValues = [
+      ...(plate?.querySelectorAll('.uap-observatory-status li') || []),
+    ].map((li) => Number(li.dataset.count));
+    const footerText =
+      plate?.querySelector('.uap-observatory-footer')?.textContent || '';
+    return {
+      skyCount: skyCountEl ? Number(skyCountEl.dataset.count) : null,
+      ancientCount: ancientCountEl
+        ? Number(ancientCountEl.dataset.count)
+        : null,
+      statusSum: statusValues.reduce((a, b) => a + b, 0),
+      statusValues,
+      footerText,
+    };
+  });
+  check(
+    'Observatory plate opens from the chronometer panel',
+    observatoryOpened === true,
+    JSON.stringify({ observatoryOpened }),
+  );
+  check(
+    'Observatory sky count equals the fetched stats.json count',
+    observatory.skyCount === obsSkyStats.count,
+    `plate=${observatory.skyCount} stats.json=${obsSkyStats.count}`,
+  );
+  check(
+    'Observatory status split rows sum to the sky count',
+    observatory.statusValues.length > 0 &&
+      observatory.statusSum === obsSkyStats.count,
+    `sum=${observatory.statusSum} count=${obsSkyStats.count} rows=${JSON.stringify(observatory.statusValues)}`,
+  );
+  check(
+    'Observatory ancient count equals the fetched v2 dataset count',
+    observatory.ancientCount === obsAncientJson.count,
+    `plate=${observatory.ancientCount} sites.v2.json=${obsAncientJson.count}`,
+  );
+  check(
+    'Observatory footer states counts reflect the shipped datasets and the live window',
+    observatory.footerText.includes(
+      'Counts reflect the shipped datasets and the live window.',
+    ),
+    observatory.footerText,
+  );
+  const observatoryEscape = await page.evaluate(() => {
+    const plate = document.querySelector('.uap-observatory');
+    plate?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    return { closed: plate ? plate.hidden : null };
+  });
+  check(
+    'Escape closes the Observatory plate',
+    observatoryEscape.closed === true,
+    JSON.stringify(observatoryEscape),
   );
 
   check(

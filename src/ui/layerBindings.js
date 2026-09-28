@@ -14,6 +14,7 @@ import { createPhenomenaMode } from '../app/phenomenaMode.js';
 import { searchCases } from '../app/caseSearch.js';
 import { createSpotter } from '../app/spotter.js';
 import { rankCandidates } from '../spotter/rank.js';
+import { createObservatory } from '../app/observatory.js';
 import { createAnomalySource } from '../layers/anomalies/source.js';
 import { createAncientSource } from '../layers/ancientSites/source.js';
 /** Own manager subscriptions and the camera-entry events that outlive controls. */
@@ -45,10 +46,14 @@ export class LayerBindings {
     this._anomaliesMode = null;
     this._anomaliesSetPhenomenaActive = null;
     this._anomaliesSetSpotterOpen = null;
+    this._anomaliesSetObservatoryOpen = null;
     this._ancientShellModule = null;
     this._ancientNotifySkyChanged = null;
     this._liveClaimsShellModule = null;
     this._spotter = null;
+    this._observatory = null;
+    this._observatorySkyStats = null;
+    this._observatoryAncientStats = null;
     this._cctvRequestFocusHandler = null;
     this._removeCctvRequestFocusListener = null;
     this._worldRequestFocusHandler = null;
@@ -173,15 +178,17 @@ export class LayerBindings {
    * about the button's aria-pressed state by itself.
    *
    * The same channel also carries the Spotter panel's toggle
-   * (`_toggleSpotter`) and close (`_closeSpotter`). The panel itself is
-   * built lazily, on the first press, and then lives for as long as this
-   * instance does (`stop()` destroys it); the two callbacks are
-   * re-attached on every connect, same as the mode and search callbacks
-   * above. Unlike Phenomena mode, closing has no "restore" step to force,
-   * so this function just closes the plate unconditionally on every
-   * connect (below) rather than tracking an active/inactive pair: a
-   * plate that was never opened has nothing to close, and one left open
-   * across a rewire is exactly the orphaned-plate bug this fixes.
+   * (`_toggleSpotter`) and close (`_closeSpotter`), and the Observatory
+   * plate's own toggle (`_toggleObservatory`) and close
+   * (`_closeObservatory`) alongside it, same idiom. Both panels are built
+   * lazily, on the first press, and then live for as long as this instance
+   * does (`stop()` destroys them); the callbacks are re-attached on every
+   * connect, same as the mode and search callbacks above. Unlike Phenomena
+   * mode, closing has no "restore" step to force, so this function just
+   * closes both plates unconditionally on every connect (below) rather
+   * than tracking an active/inactive pair: a plate that was never opened
+   * has nothing to close, and one left open across a rewire is exactly the
+   * orphaned-plate bug this fixes.
    */
   _connectAnomaliesShell() {
     if (this._anomaliesMode?.active) {
@@ -192,17 +199,21 @@ export class LayerBindings {
     }
     this._anomaliesMode = null;
     this._anomaliesSetPhenomenaActive = null;
-    // The Spotter plate is a sibling of the viewer container, not a child
-    // of the anomalies module's own DOM, so a rewire (teardown or a fresh
-    // manager) must close it here too, otherwise a live-data plate could
-    // be left on screen with the very channel that can reach it about to
-    // be torn down and rebuilt. `_closeSpotter` also resets the Spotter
-    // button's `aria-pressed` (via `_anomaliesSetSpotterOpen`, still the
-    // outgoing module's callback at this point), so the button and the
-    // plate stay in lockstep; the field is then nulled below so a stale
-    // callback is never used before the new module attaches its own.
+    // The Spotter and Observatory plates are siblings of the viewer
+    // container, not children of the anomalies module's own DOM, so a
+    // rewire (teardown or a fresh manager) must close both here too,
+    // otherwise a live-data plate could be left on screen with the very
+    // channel that can reach it about to be torn down and rebuilt.
+    // `_closeSpotter`/`_closeObservatory` also reset their button's
+    // `aria-pressed` (via `_anomaliesSetSpotterOpen`/
+    // `_anomaliesSetObservatoryOpen`, still the outgoing module's callback
+    // at this point), so each button and its plate stay in lockstep; the
+    // fields are then nulled below so a stale callback is never used
+    // before the new module attaches its own.
     this._closeSpotter();
     this._anomaliesSetSpotterOpen = null;
+    this._closeObservatory();
+    this._anomaliesSetObservatoryOpen = null;
     if (!this._dataManager) {
       this._anomaliesShellModule?.attachShellServices?.(null);
       this._anomaliesShellModule = null;
@@ -245,6 +256,10 @@ export class LayerBindings {
       // tearing down) closes the plate the shell owns, instead of leaving
       // it orphaned with a dead Spotter button behind it.
       closeSpotter: () => this._closeSpotter(),
+      // The Observatory plate: same lazy-build-on-first-press and
+      // shell-closes-it-back idiom as the Spotter pair above.
+      toggleObservatory: () => this._toggleObservatory(),
+      closeObservatory: () => this._closeObservatory(),
       // Same channel the weather layers use (_connectWeatherCamera above)
       // so the Hotspots heat overlay drapes on whatever surface the active
       // map stack can host imagery on, globe or 3D tileset, instead of
@@ -258,6 +273,10 @@ export class LayerBindings {
     this._anomaliesSetSpotterOpen =
       typeof attached?.setSpotterOpen === 'function'
         ? attached.setSpotterOpen
+        : null;
+    this._anomaliesSetObservatoryOpen =
+      typeof attached?.setObservatoryOpen === 'function'
+        ? attached.setObservatoryOpen
         : null;
   }
 
@@ -380,6 +399,131 @@ export class LayerBindings {
   _closeSpotter() {
     this._spotter?.close?.();
     this._anomaliesSetSpotterOpen?.(false);
+  }
+
+  /**
+   * Show or hide the Observatory plate, building it on first use. Same
+   * lazy-build idiom as `_toggleSpotter`: the plate is a shell-owned
+   * sibling of the viewer container, layer-independent (it reads shipped
+   * datasets and live getStats() straight through the functions below,
+   * never through the anomalies layer's own enabled/loaded state), so it
+   * keeps answering "what does the atlas hold" even while every register's
+   * own layer sits off. Returns the plate's new open state.
+   * @returns {boolean}
+   */
+  _toggleObservatory() {
+    this._observatory ||= createObservatory({
+      fetchSkyStats: () => this._fetchObservatorySkyStats(),
+      fetchSkyYears: () => this._fetchObservatorySkyYears(),
+      fetchAncientStats: () => this._fetchObservatoryAncientStats(),
+      getLiveClaimsStats: () => this._observatoryLiveClaimsStats(),
+      container: this.viewer.container,
+    });
+    return this._observatory.toggle();
+  }
+
+  /**
+   * Close the Observatory plate if one has been built, and reset its
+   * button's `aria-pressed` through the currently attached module's
+   * `setObservatoryOpen`, if any. Mirrors `_closeSpotter`: idempotent and
+   * always safe to call unconditionally, so a shell rewire or teardown
+   * never has to check whether the plate exists or is open first (the
+   * Spotter orphan lesson this plate must not repeat).
+   */
+  _closeObservatory() {
+    this._observatory?.close?.();
+    this._anomaliesSetObservatoryOpen?.(false);
+  }
+
+  /**
+   * Sky reports summary for the Observatory plate: `public/anomalies/
+   * stats.json`, the pre-aggregated dataset totals (count, year range, the
+   * status and source splits) rather than the anomalies layer's own live
+   * `getStats()`, which reports 0 while that layer has never been enabled
+   * and loaded. Fetched once and cached; a failed fetch is not cached, so
+   * a later open tries again (mirrors `_getSkySearchRecords`'s own
+   * cache-the-result idiom above).
+   * @returns {Promise<Object|null>}
+   */
+  async _fetchObservatorySkyStats() {
+    if (this._observatorySkyStats) return this._observatorySkyStats;
+    try {
+      const res = await fetch(this._caseSearchBaseUrl('anomalies/stats.json'));
+      if (!res.ok) throw new Error(`Sky stats fetch failed: ${res.status}`);
+      const json = await res.json();
+      this._observatorySkyStats = {
+        count: json.count,
+        range: json.range,
+        bySource: json.bySource || {},
+        byStatus: json.byStatus || {},
+      };
+    } catch (error) {
+      console.warn('[UI:Observatory] Sky stats unavailable', error);
+      return null;
+    }
+    return this._observatorySkyStats;
+  }
+
+  /**
+   * Per-record years for the Observatory's decade histogram, read from the
+   * same cached cross-register search records `_getSkySearchRecords`
+   * already fetches (each row carries its own `.year`), rather than a
+   * second fetch of the same anomalies.v1.json dataset.
+   * @returns {Promise<Array<number>>}
+   */
+  async _fetchObservatorySkyYears() {
+    const records = await this._getSkySearchRecords();
+    return records.map((r) => r.year).filter((y) => Number.isFinite(y));
+  }
+
+  /**
+   * Ancient sites header stats for the Observatory plate: count, the
+   * sweep's own `types[]` and `countries[]`. `normalizeAncientSitesV2`
+   * (the ancient source module's own portable decoder, used by
+   * `_getAncientSearchRecords` above) drops these header fields on the way
+   * to its heroes/sweep shape, so this fetches `sites.v2.json` directly
+   * rather than through `createAncientSource`, reading only the small
+   * header fields the document carries alongside its ~81k-row sweep.
+   * Fetched once and cached, same failed-fetch-not-cached rule as sky
+   * stats above.
+   * @returns {Promise<Object|null>}
+   */
+  async _fetchObservatoryAncientStats() {
+    if (this._observatoryAncientStats) return this._observatoryAncientStats;
+    try {
+      const res = await fetch(
+        this._caseSearchBaseUrl('ancient-sites/sites.v2.json'),
+      );
+      if (!res.ok) throw new Error(`Ancient sites fetch failed: ${res.status}`);
+      const json = await res.json();
+      this._observatoryAncientStats = {
+        count: json.count,
+        types: Array.isArray(json.types) ? json.types : [],
+        countries: Array.isArray(json.countries)
+          ? json.countries.filter((c) => typeof c === 'string' && c)
+          : [],
+      };
+    } catch (error) {
+      console.warn('[UI:Observatory] Ancient sites stats unavailable', error);
+      return null;
+    }
+    return this._observatoryAncientStats;
+  }
+
+  /**
+   * Live claims register stats for the Observatory plate, read straight
+   * off the layer module's own `getStats()` (see
+   * `src/layers/liveClaims/index.js`): `{count, status, unplaced,
+   * lastUpdate, error}`. Read fresh on every open rather than cached: this
+   * register's window genuinely changes over time, unlike the two shipped
+   * datasets above. Returns null with no data manager or no live-claims
+   * module attached, so the plate can show an honest "unavailable" line
+   * rather than a bare zero presented as fact.
+   * @returns {Object|null}
+   */
+  _observatoryLiveClaimsStats() {
+    const module = this._dataManager?.layers?.get('live-claims')?.module;
+    return typeof module?.getStats === 'function' ? module.getStats() : null;
   }
 
   /**
@@ -752,6 +896,8 @@ export class LayerBindings {
     this._removeNavigationAuthorityListener = null;
     this._spotter?.destroy?.();
     this._spotter = null;
+    this._observatory?.destroy?.();
+    this._observatory = null;
   }
   disconnect() {
     this._dataManagerUnsubscribe?.();

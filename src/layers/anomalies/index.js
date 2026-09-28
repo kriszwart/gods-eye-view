@@ -154,6 +154,9 @@ export function createAnomaliesLayer({
   let toggleSpotter = null;
   let shellCloseSpotter = null;
   let spotterBtn = null;
+  let toggleObservatory = null;
+  let shellCloseObservatory = null;
+  let observatoryBtn = null;
   let shellSearchCases = null;
   let shellFocusResult = null;
   let searchControl = null;
@@ -302,6 +305,18 @@ export function createAnomaliesLayer({
   function closeSpotterPanel() {
     shellCloseSpotter?.();
     spotterBtn?.setAttribute('aria-pressed', 'false');
+  }
+  /**
+   * Close the shell-owned Observatory plate and reset this layer's own
+   * button. Mirrors `closeSpotterPanel`: the plate sits outside this
+   * layer's DOM (also a sibling of the viewer container, shell-owned), so
+   * leaving it open across a disable would strand a readout plate on
+   * screen with no reachable control once the chronometer that opened it
+   * disappears.
+   */
+  function closeObservatoryPanel() {
+    shellCloseObservatory?.();
+    observatoryBtn?.setAttribute('aria-pressed', 'false');
   }
   /** Fly through hero cases in date order, setting the dial and opening each dossier. */
   async function playTour() {
@@ -486,6 +501,11 @@ export function createAnomaliesLayer({
         btn.setAttribute('aria-pressed', String(toggleSpotter()));
       });
       spotterBtn.setAttribute('aria-pressed', 'false');
+      observatoryBtn = chrono.addAction('Observatory', (btn) => {
+        if (typeof toggleObservatory !== 'function') return;
+        btn.setAttribute('aria-pressed', String(toggleObservatory()));
+      });
+      observatoryBtn.setAttribute('aria-pressed', 'false');
       searchControl = chrono.addSearch({
         onQuery: (query) => shellSearchCases?.(query) || [],
         onPick: (result) => shellFocusResult?.(result),
@@ -496,14 +516,15 @@ export function createAnomaliesLayer({
 
     /**
      * The shell supplies the Phenomena mode toggle, the cross-register case
-     * search and the Spotter panel's toggle and close; the layer only
-     * exposes the buttons and the search box. Returns
-     * `{ setPhenomenaActive, setSpotterOpen }` so the shell can reset each
+     * search, the Spotter panel's toggle and close, and the Observatory
+     * plate's toggle and close alongside it; the layer only exposes the
+     * buttons and the search box. Returns `{ setPhenomenaActive,
+     * setSpotterOpen, setObservatoryOpen }` so the shell can reset each
      * button's `aria-pressed` when it force-exits a live mode (manager
      * reconnect or teardown) without the layer having asked for it.
-     * `closeSpotter` runs the other direction: this layer calls it from
-     * `disable()`/`destroy()` so the shell-owned plate never outlives the
-     * button that opened it.
+     * `closeSpotter`/`closeObservatory` run the other direction: this layer
+     * calls them from `disable()`/`destroy()` so neither shell-owned plate
+     * outlives the button that opened it.
      */
     attachShellServices(services) {
       togglePhenomenaMode =
@@ -526,6 +547,14 @@ export function createAnomaliesLayer({
         typeof services?.closeSpotter === 'function'
           ? services.closeSpotter
           : null;
+      toggleObservatory =
+        typeof services?.toggleObservatory === 'function'
+          ? services.toggleObservatory
+          : null;
+      shellCloseObservatory =
+        typeof services?.closeObservatory === 'function'
+          ? services.closeObservatory
+          : null;
       getImageryHost =
         typeof services?.imageryHost === 'function'
           ? services.imageryHost
@@ -537,6 +566,9 @@ export function createAnomaliesLayer({
         },
         setSpotterOpen(on) {
           spotterBtn?.setAttribute('aria-pressed', String(Boolean(on)));
+        },
+        setObservatoryOpen(on) {
+          observatoryBtn?.setAttribute('aria-pressed', String(Boolean(on)));
         },
       };
     },
@@ -577,6 +609,7 @@ export function createAnomaliesLayer({
       searchControl?.clear();
       stopTour();
       closeSpotterPanel();
+      closeObservatoryPanel();
       closeCredits();
       heatOn = false;
       heatBtn?.setAttribute('aria-pressed', 'false');
@@ -641,10 +674,12 @@ export function createAnomaliesLayer({
 
     destroy() {
       layer.disable();
-      // disable() above already closes the Spotter plate; called again
-      // explicitly so this path stays correct even if a future edit ever
-      // stops destroy() from delegating to disable() first.
+      // disable() above already closes the Spotter and Observatory plates;
+      // called again explicitly so this path stays correct even if a
+      // future edit ever stops destroy() from delegating to disable()
+      // first.
       closeSpotterPanel();
+      closeObservatoryPanel();
       searchControl?.clear();
       searchControl = null;
       overlayHost?.clearSource?.(ANOMALY_LAYER_ID);

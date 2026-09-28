@@ -9,6 +9,7 @@
 import puppeteer from 'puppeteer';
 import { SHAPE_GLYPH_URLS } from '../src/layers/anomalies/shapeGlyphs.js';
 import { statusHue } from '../src/layers/anomalies/model.js';
+import { WAVES } from '../src/layers/anomalies/waves.js';
 const base = process.env.QA_BASE_URL || 'http://localhost:4173';
 const browser = await puppeteer.launch({
   headless: true,
@@ -156,6 +157,61 @@ try {
     'chronometer wraps the globe when zoomed out',
     chrono?.layout === 'ring',
     JSON.stringify(chrono),
+  );
+
+  // Documented report waves (task 2, atlas-instruments): a small landmark
+  // mark on the sky dial's corona for each entry in waves.js, checked here
+  // while the dial is in its ring layout from the step just above.
+  const landmarkCount = await page.evaluate(
+    () => document.querySelectorAll('.uap-landmark').length,
+  );
+  check(
+    'the sky dial carries exactly one landmark mark per documented report wave',
+    landmarkCount === WAVES.length,
+    `marks=${landmarkCount} waves=${WAVES.length}`,
+  );
+
+  const wave1952 = WAVES.find((w) => w.year === 1952);
+  const landmark1952 = await page.evaluate(() => {
+    const mark = document.querySelector('.uap-landmark[data-year="1952"]');
+    mark?.focus();
+    const plate = document.querySelector('.uap-landmark-plate');
+    const opened = !!plate && !plate.hidden;
+    const label = plate?.querySelector('.uap-landmark-label')?.textContent;
+    const note = plate?.querySelector('.uap-landmark-note')?.textContent;
+    const link = plate?.querySelector('.uap-landmark-link');
+    const href = link && !link.hidden ? link.getAttribute('href') : null;
+    mark?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    const closedAfterEscape = plate ? plate.hidden : null;
+    return {
+      found: !!mark,
+      opened,
+      label,
+      note,
+      href,
+      closedAfterEscape,
+    };
+  });
+  check(
+    'focusing the 1952 landmark mark opens the note plate with its own label and note',
+    landmark1952.found &&
+      landmark1952.opened === true &&
+      landmark1952.label === wave1952?.label &&
+      landmark1952.note === wave1952?.note,
+    JSON.stringify(landmark1952),
+  );
+  check(
+    "the 1952 landmark's note plate carries an https source link",
+    typeof landmark1952.href === 'string' &&
+      landmark1952.href.startsWith('https://'),
+    JSON.stringify({ href: landmark1952.href }),
+  );
+  check(
+    'Escape closes the landmark note plate',
+    landmark1952.closedAfterEscape === true,
+    JSON.stringify({ closedAfterEscape: landmark1952.closedAfterEscape }),
   );
 
   // Phase 5b deep-time dial: the sky register's own dial must behave
@@ -1277,6 +1333,35 @@ try {
   );
   await page.evaluate(() => {
     document.querySelector('.uap-observatory-toggle')?.click();
+  });
+
+  // Deep-time dial decoupling (task 2, atlas-instruments): landmark marks
+  // belong to the sky scale only (see chronometer.js's `landmarksLayer`
+  // guard on the scale identity). Ancient sites has been on since the
+  // cross-register search step earlier in this script; switching the sky
+  // (anomalies) register off here hands `.uap-chrono` to the deep-time
+  // dial (its own reactive engagement is already proven in
+  // qa-ancient-sites.mjs), which must carry zero landmark marks.
+  await page.evaluate(async () => {
+    await window.__godsEyeView.dataManager.setEnabled('anomalies', false, {
+      origin: 'user',
+    });
+  });
+  const deepTimeLandmarks = await page.evaluate(
+    () => document.querySelectorAll('.uap-landmark').length,
+  );
+  check(
+    'the deep-time dial (ancient on, sky off) carries zero landmark marks',
+    deepTimeLandmarks === 0,
+    `count=${deepTimeLandmarks}`,
+  );
+  // Restore for the checks below (pageErrors is a plain array unaffected by
+  // layer state, but leaving the layer on matches every check before this
+  // block and keeps this script's end state sensible for future edits).
+  await page.evaluate(async () => {
+    await window.__godsEyeView.dataManager.setEnabled('anomalies', true, {
+      origin: 'user',
+    });
   });
 
   check(

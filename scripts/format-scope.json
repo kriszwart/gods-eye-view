@@ -856,6 +856,8 @@
   "src/layers/anomalies/hotspots.js",
   "src/layers/anomalies/hotspots.test.mjs",
   "src/layers/anomalies/records.test.mjs",
+  "src/layers/anomalies/waves.js",
+  "src/layers/anomalies/waves.test.mjs",
   "src/styles/spectral.js",
   "src/styles/radar.js",
   "src/styles/infrared.js",

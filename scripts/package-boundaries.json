@@ -901,6 +901,7 @@
       "src/layers/anomalies/hotspots.js",
       "src/layers/anomalies/atmosphere.js",
       "src/layers/anomalies/chronometer.js",
+      "src/layers/anomalies/waves.js",
       "src/sources/safeUrl.js",
       "src/maps/imageryHost.js",
       "src/ui/glowSprite.js",
@@ -922,6 +923,7 @@
       "src/layers/ancientSites/glyphMap.js",
       "src/sources/safeUrl.js",
       "src/layers/anomalies/chronometer.js",
+      "src/layers/anomalies/waves.js",
       "src/ui/glowSprite.js"
     ],
     "external": ["cesium"]
@@ -1376,6 +1378,7 @@
       "src/layers/anomalies/hotspots.js",
       "src/layers/anomalies/atmosphere.js",
       "src/layers/anomalies/chronometer.js",
+      "src/layers/anomalies/waves.js",
       "src/sources/safeUrl.js",
       "src/app/layers/ancientSites.js",
       "src/layers/ancientSites/index.js",
@@ -2126,6 +2129,7 @@
       "src/layers/anomalies/hotspots.js",
       "src/layers/anomalies/atmosphere.js",
       "src/layers/anomalies/chronometer.js",
+      "src/layers/anomalies/waves.js",
       "src/sources/safeUrl.js",
       "src/app/layers/ancientSites.js",
       "src/layers/ancientSites/index.js",

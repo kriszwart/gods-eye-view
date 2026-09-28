@@ -4,6 +4,9 @@
  * screen it collapses to a band along the bottom edge. Plain DOM and SVG; the
  * layer feeds it the projected Earth disc each frame.
  */
+import { WAVES } from './waves.js';
+import { safeSourceUrl } from '../../sources/safeUrl.js';
+
 const NS = 'http://www.w3.org/2000/svg';
 const el = (tag, attrs = {}, parent) => {
   const node = document.createElementNS(NS, tag);
@@ -99,6 +102,29 @@ export function createChronometer({
     </div>
     <p class="uap-readout" aria-live="polite"></p>`;
   root.appendChild(panel);
+
+  // Documented report waves (waves.js), marked on the sky scale's corona
+  // only: `scale` is null for the sky dial and an object for the deep-time
+  // (era) dial, so this overlay and the note plate are never even created
+  // for the deep-time dial, keeping its construction byte-equivalent to
+  // before this landmark feature existed (guard on the scale identity).
+  // Plain HTML, not SVG: the dial's `<svg>` carries aria-hidden="true"
+  // (every meaningful control lives outside it, in `panel`), so a focusable,
+  // announced mark has to live outside it too.
+  const landmarksLayer = scale ? null : document.createElement('div');
+  const landmarkPlate = scale ? null : document.createElement('div');
+  if (landmarksLayer) {
+    landmarksLayer.className = 'uap-landmarks';
+    root.appendChild(landmarksLayer);
+    landmarkPlate.className = 'uap-landmark-plate';
+    landmarkPlate.hidden = true;
+    landmarkPlate.innerHTML = `
+      <p class="uap-landmark-label"></p>
+      <p class="uap-landmark-note"></p>
+      <a class="uap-landmark-link" target="_blank" rel="noopener noreferrer">Source</a>`;
+    root.appendChild(landmarkPlate);
+  }
+
   container.appendChild(root);
   const slider = panel.querySelector('.uap-slider');
   const playBtn = panel.querySelector('.uap-play');
@@ -124,6 +150,85 @@ export function createChronometer({
       Math.max(from, scale ? scale.fromPos(f) : from + Math.floor(f * years)),
     );
   };
+
+  /** The wave currently shown in the note plate, or null: tracked so a
+   * redraw (the dial relayouts every time the projected Earth disc moves)
+   * can carry an open plate's position along with its mark rather than
+   * leaving it stale. */
+  let openWave = null;
+
+  /** Fill and show the landmark note plate at a mark's own screen point (CSS
+   * pixels within `root`, which both the svg and `landmarksLayer` fill
+   * edge-to-edge, so the mark's own left/top double as the plate's anchor
+   * with no extra conversion). No-op on the deep-time dial, where
+   * `landmarkPlate` was never created. */
+  function openLandmark(wave, point) {
+    if (!landmarkPlate) return;
+    openWave = wave;
+    landmarkPlate.querySelector('.uap-landmark-label').textContent = wave.label;
+    landmarkPlate.querySelector('.uap-landmark-note').textContent = wave.note;
+    const link = landmarkPlate.querySelector('.uap-landmark-link');
+    const safe = safeSourceUrl(wave.source_url);
+    if (safe) {
+      link.href = safe;
+      link.hidden = false;
+    } else {
+      link.removeAttribute('href');
+      link.hidden = true;
+    }
+    landmarkPlate.style.left = `${point.x}px`;
+    landmarkPlate.style.top = `${point.y}px`;
+    landmarkPlate.hidden = false;
+  }
+
+  function closeLandmark() {
+    openWave = null;
+    if (landmarkPlate) landmarkPlate.hidden = true;
+  }
+
+  /** One keyboard-reachable landmark mark per waves.js entry, built once (not
+   * per draw()): a real `<button>`, natively focusable, so it needs no
+   * explicit tabindex or role. Hover or focus opens the note plate, Escape
+   * or blur closes it. Built once rather than replaced every draw() so an
+   * open plate's own focus survives a relayout - replacing a focused
+   * element fires blur, which would otherwise close the plate on every
+   * redraw while the globe (and so the projected disc) is still moving. */
+  const landmarkEntries = landmarksLayer
+    ? WAVES.map((wave) => {
+        const point = { x: 0, y: 0 };
+        const mark = document.createElement('button');
+        mark.type = 'button';
+        mark.className = 'uap-landmark';
+        mark.dataset.year = String(wave.year);
+        mark.setAttribute('aria-label', `${wave.year}: ${wave.label}`);
+        mark.addEventListener('mouseenter', () => openLandmark(wave, point));
+        mark.addEventListener('mouseleave', closeLandmark);
+        mark.addEventListener('focus', () => openLandmark(wave, point));
+        mark.addEventListener('blur', closeLandmark);
+        mark.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') closeLandmark();
+        });
+        landmarksLayer.appendChild(mark);
+        return { wave, mark, point };
+      })
+    : [];
+
+  /** Reposition every landmark mark from `pointFor(wave)` (CSS pixels within
+   * `root`); if the note plate is currently open, carries it to the same
+   * mark's fresh position rather than leaving it stale after a relayout. */
+  function positionLandmarks(pointFor) {
+    for (const entry of landmarkEntries) {
+      const p = pointFor(entry.wave);
+      entry.point.x = p.x;
+      entry.point.y = p.y;
+      entry.mark.style.left = `${p.x}px`;
+      entry.mark.style.top = `${p.y}px`;
+    }
+    if (openWave) {
+      const entry = landmarkEntries.find((e) => e.wave === openWave);
+      if (entry) openLandmark(openWave, entry.point);
+    }
+  }
 
   function draw() {
     if (!layout) return;
@@ -183,6 +288,18 @@ export function createChronometer({
             );
           }
         }
+      }
+      // Documented report waves (waves.js): a small mark inside the tick
+      // ring, in the gap between the major ticks' inner end (R-7) and the
+      // labels (R-18), so it never collides with a tick, a label or the
+      // histogram bars (which grow outward from R+3). Sky scale only:
+      // `landmarksLayer` is null on the deep-time dial.
+      if (landmarksLayer) {
+        const lr = R - 12;
+        positionLandmarks((wave) => {
+          const wa = angleOf(wave.year);
+          return { x: cx + Math.cos(wa) * lr, y: cy + Math.sin(wa) * lr };
+        });
       }
       const a = angleOf(year);
       needleLine.setAttribute('x1', cx + Math.cos(a) * (R - 10));
@@ -244,6 +361,13 @@ export function createChronometer({
               gBars,
             );
         }
+      }
+      // Documented report waves (waves.js): a small mark in the band's own
+      // gap between the tick ends (base+7) and the labels (base+20). Sky
+      // scale only: `landmarksLayer` is null on the deep-time dial.
+      if (landmarksLayer) {
+        const ly = base + 13;
+        positionLandmarks((wave) => ({ x: x(wave.year), y: ly }));
       }
       needleLine.setAttribute('x1', x(year));
       needleLine.setAttribute('x2', x(year));
@@ -503,12 +627,14 @@ export function createChronometer({
         if (!root.isConnected) container.appendChild(root);
       } else {
         setPlaying(false);
+        closeLandmark();
         root.hidden = true;
         root.remove();
       }
     },
     destroy() {
       setPlaying(false);
+      closeLandmark();
       root.remove();
     },
   };

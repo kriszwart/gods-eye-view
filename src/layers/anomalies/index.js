@@ -705,7 +705,15 @@ export function createAnomaliesLayer({
     playTour,
     stopTour,
     async focusCase(id) {
-      const target = renderer?.heroPosition(id);
+      // Hero cases fly via the renderer's own animated position; every
+      // other row (task 3, atlas-instruments - a real GEIPAN case the
+      // cross-register search found) still has a lat/lon in `rows`, so a
+      // search hit for one flies there too rather than only opening its
+      // dossier in place.
+      const row = rows.find((r) => r.id === id);
+      const target =
+        renderer?.heroPosition(id) ??
+        (row ? Cesium.Cartesian3.fromDegrees(row.lon, row.lat, 4000) : null);
       if (target) viewer.camera.flyTo({ destination: target, duration: 2.2 });
       await openDossier(id);
     },

@@ -11,7 +11,10 @@ import {
 } from '../worldFocus.js';
 import { registerNavigationAuthorityListener } from '../navigationPolicy.js';
 import { createPhenomenaMode } from '../app/phenomenaMode.js';
-import { searchCases } from '../app/caseSearch.js';
+import {
+  buildCaseSearchIndex,
+  searchCasesWithIndex,
+} from '../app/caseSearch.js';
 import { createSpotter } from '../app/spotter.js';
 import { rankCandidates } from '../spotter/rank.js';
 import { createObservatory } from '../app/observatory.js';
@@ -65,6 +68,18 @@ export class LayerBindings {
     this._ancientSearchSource = null;
     this._skySearchRecords = null;
     this._ancientSearchRecords = null;
+    // Search's cross-register corpus (task 3, atlas-instruments): the
+    // GEIPAN and ancient-sweep tiers derive from the same two fetches as
+    // the fields above rather than a fetch of their own (see
+    // `_getGeipanSearchRecords` and `_getAncientSnapshot`/
+    // `_getAncientSweepSearchRecords`), and the built ~85k-record corpus
+    // and its prefix-bucket index (src/app/caseSearch.js) are each cached
+    // once here, never rebuilt per keystroke.
+    this._ancientSnapshot = null;
+    this._ancientSweepSearchRecords = null;
+    this._geipanSearchRecords = null;
+    this._caseSearchRecords = null;
+    this._caseSearchIndex = null;
     // Always present, independent of every layer's own enabled state (see
     // `_createObservatoryToggle`'s doc comment) - built last, once every
     // other field this class's methods can reach for is already in place.
@@ -260,7 +275,7 @@ export class LayerBindings {
         return mode.active;
       },
       searchCases: async (query) =>
-        searchCases(query, await this._buildCaseSearchRecords()),
+        searchCasesWithIndex(query, await this._getCaseSearchIndex()),
       focusResult: (result) => this._focusCaseSearchResult(result),
       // Built lazily, on the first press, so wiring this channel never
       // requires a document (a headless unit-test shell attaches a data
@@ -719,52 +734,169 @@ export class LayerBindings {
   }
 
   /**
-   * Ancient-sites register records, same independence and caching as above.
-   * Hero tier only: the worldwide sweep (~81k rows) is deliberately left out
-   * of this in-memory matcher to avoid bloating it, a searchable sweep
-   * needs its own index, ledgered as a phase 5b follow-up.
+   * The raw ancient-sites snapshot (`{heroes, sweep, count}`, decoded by
+   * `normalizeAncientSitesV2` inside `createAncientSource`), fetched once
+   * and cached so `_getAncientSearchRecords` (heroes) and
+   * `_getAncientSweepSearchRecords` (the ~81k-row sweep, task 3,
+   * atlas-instruments) share one fetch of `sites.v2.json` rather than one
+   * each. Not the Observatory's own `_fetchObservatoryAncientStats` fetch
+   * of the same file (task 1): that one keeps only the header fields
+   * (`count`/`types`/`countries`) and throws the columnar `sites` block
+   * away, so it cannot supply the per-site names this search needs - the
+   * sanctioned reader for those is `createAncientSource`'s own decode, used
+   * here exactly as `_getAncientSearchRecords` already used it. A failed
+   * fetch is not cached, so the next call tries again.
    */
-  async _getAncientSearchRecords() {
-    if (this._ancientSearchRecords) return this._ancientSearchRecords;
+  async _getAncientSnapshot() {
+    if (this._ancientSnapshot) return this._ancientSnapshot;
     this._ancientSearchSource ||= createAncientSource({
       baseUrl: this._caseSearchBaseUrl('ancient-sites/'),
     });
     try {
-      const { heroes } = await this._ancientSearchSource.getSnapshot();
-      this._ancientSearchRecords = heroes.map((r) => ({
-        id: r.id,
-        register: 'ancient',
-        title: r.name,
-        type: r.type,
-        period: r.period,
-        country: r.country,
-      }));
+      this._ancientSnapshot = await this._ancientSearchSource.getSnapshot();
     } catch (error) {
       console.warn('[UI:CaseSearch] Ancient sites dataset unavailable', error);
-      return [];
+      return null;
     }
+    return this._ancientSnapshot;
+  }
+
+  /**
+   * Ancient-sites hero-tier records for the cross-register search, same
+   * independence and caching as `_getSkySearchRecords` above, read off the
+   * shared snapshot cache (`_getAncientSnapshot`) rather than a fetch of
+   * its own.
+   */
+  async _getAncientSearchRecords() {
+    if (this._ancientSearchRecords) return this._ancientSearchRecords;
+    const snapshot = await this._getAncientSnapshot();
+    if (!snapshot) return [];
+    this._ancientSearchRecords = snapshot.heroes.map((r) => ({
+      id: r.id,
+      register: 'ancient',
+      title: r.name,
+      type: r.type,
+      period: r.period,
+      country: r.country,
+    }));
     return this._ancientSearchRecords;
   }
 
   /**
-   * Records for the chronometer's cross-register search: the sky register
-   * plus the ancient-sites register, mapped into the shared search shape.
-   * Each register is fetched once, independent of whether its own layer is
-   * currently enabled, and the mapped result is cached for reuse on every
-   * subsequent query; only a prior failed fetch triggers a refetch.
+   * The worldwide ancient-sites sweep (~81k rows), mapped into the shared
+   * search shape from the same columnar accessors `rendering.js` and the
+   * sweep dossier already read (task 3, atlas-instruments): id
+   * `ancient:sweep:<i>`, the site's real name as its title, and its type
+   * and country - nothing invented, no place name beyond what the sweep
+   * itself carries. Read off the same shared snapshot cache as the hero
+   * tier above (one fetch of `sites.v2.json` serves both), and, like every
+   * cache on this class, built once: this allocates one small plain object
+   * per sweep row (id/register/title/type/country, five string/number
+   * fields) rather than 81k copies of anything already held by the
+   * decoded snapshot, which `sweepAccessor` above still owns.
+   */
+  async _getAncientSweepSearchRecords() {
+    if (this._ancientSweepSearchRecords) return this._ancientSweepSearchRecords;
+    const snapshot = await this._getAncientSnapshot();
+    if (!snapshot) return [];
+    const { sweep } = snapshot;
+    const records = new Array(sweep.length);
+    for (let i = 0; i < sweep.length; i++) {
+      records[i] = {
+        id: `ancient:sweep:${i}`,
+        register: 'ancient',
+        title: sweep.name(i),
+        type: sweep.typeName(i),
+        country: sweep.countryName(i),
+      };
+    }
+    this._ancientSweepSearchRecords = records;
+    return this._ancientSweepSearchRecords;
+  }
+
+  /**
+   * Real (non-hero, non-sample) GEIPAN cases for the cross-register search:
+   * every row `_getSkySearchRecords` already fetched and cached that
+   * carries no title of its own (GEIPAN's columnar rows ship none - see
+   * DATA_PIPELINE.md's privacy rule, no place names, rounded coordinates
+   * only). Reuses that same cached fetch rather than a second one; the
+   * title synthesised here is `GEIPAN case <id>`, the id verbatim from the
+   * shipped dataset and nothing invented, which doubles as how a query for
+   * the id itself (or a fragment of it) finds the case, since `rankRecord`
+   * only ever looks at `title`, never at `id` directly. `country: 'France'`
+   * is likewise not a placement guess: GEIPAN's whole caseload is French
+   * airspace. `craft: null` throughout - the search entry does not carry a
+   * shape claim the dataset's own title never made.
+   */
+  async _getGeipanSearchRecords() {
+    if (this._geipanSearchRecords) return this._geipanSearchRecords;
+    const rows = await this._getSkySearchRecords();
+    this._geipanSearchRecords = rows
+      .filter((r) => !r.title)
+      .map((r) => ({
+        id: r.id,
+        register: 'sky',
+        title: `GEIPAN case ${r.id}`,
+        year: r.year,
+        craft: null,
+        country: 'France',
+      }));
+    return this._geipanSearchRecords;
+  }
+
+  /**
+   * Records for the chronometer's cross-register search: hero-tier sky and
+   * ancient-sites records first, then the two worldwide tiers (GEIPAN's
+   * real caseload, then the ancient-sites sweep) - heroes carry the
+   * richer, curated entries, and `searchCases`/`searchCasesWithIndex` are
+   * stable sorts, so on a tied rank a hero always outranks a swept row
+   * (see the task report's honesty pins). Each tier is fetched once and
+   * cached on this instance (see the fields above); this method's own
+   * combined result is cached too, so the ~85k-record concatenation itself
+   * runs once, not once per keystroke.
    */
   async _buildCaseSearchRecords() {
-    const [sky, ancient] = await Promise.all([
+    if (this._caseSearchRecords) return this._caseSearchRecords;
+    const [skyAll, ancient, geipan, sweep] = await Promise.all([
       this._getSkySearchRecords(),
       this._getAncientSearchRecords(),
+      this._getGeipanSearchRecords(),
+      this._getAncientSweepSearchRecords(),
     ]);
-    return [...sky, ...ancient];
+    // `skyAll` is `_getSkySearchRecords`'s own full, unfiltered result
+    // (also used by `_fetchObservatorySkyYears` for its histogram, so that
+    // method's own fetch must keep every row, titled or not) - narrowed to
+    // its titled (hero/sample) rows here, since the untitled ones already
+    // have their own richer entry above, from `_getGeipanSearchRecords`.
+    const sky = skyAll.filter((r) => r.title);
+    this._caseSearchRecords = [...sky, ...ancient, ...geipan, ...sweep];
+    return this._caseSearchRecords;
+  }
+
+  /**
+   * The cross-register search index (src/app/caseSearch.js), built once
+   * from `_buildCaseSearchRecords` and cached: `buildCaseSearchIndex` is
+   * itself a single O(n) pass over the ~85k-record corpus, measured in the
+   * task report at tens of milliseconds, so this runs it once per session
+   * rather than once per keystroke.
+   */
+  async _getCaseSearchIndex() {
+    if (this._caseSearchIndex) return this._caseSearchIndex;
+    this._caseSearchIndex = buildCaseSearchIndex(
+      await this._buildCaseSearchRecords(),
+    );
+    return this._caseSearchIndex;
   }
 
   /**
    * Fly to and open the dossier for a case-search result. The target
    * register's layer is enabled first when it is off (awaited, so its
    * first data load has settled) before the layer's own focus call runs.
+   * An ancient-sites result whose id is `ancient:sweep:<i>` (task 3,
+   * atlas-instruments) routes to the ancient layer's `focusSweep`, mirroring
+   * `focusSite`'s own shape but for a sweep row addressed by index rather
+   * than a hero addressed by id; every other ancient-sites result is a
+   * hero and still goes through `focusSite`.
    */
   async _focusCaseSearchResult(result) {
     const manager = this._dataManager;
@@ -776,8 +908,13 @@ export class LayerBindings {
       await manager.setEnabled(targetId, true, { origin: 'user' });
     }
     const mod = manager.layers.get(targetId)?.module;
-    if (targetId === 'ancient-sites') await mod?.focusSite?.(result.id);
-    else await mod?.focusCase?.(result.id);
+    if (targetId === 'ancient-sites') {
+      const sweepMatch = /^ancient:sweep:(\d+)$/.exec(String(result.id ?? ''));
+      if (sweepMatch) await mod?.focusSweep?.(Number(sweepMatch[1]));
+      else await mod?.focusSite?.(result.id);
+    } else {
+      await mod?.focusCase?.(result.id);
+    }
   }
 
   _persistAwarenessSelection(event, cleared = false) {

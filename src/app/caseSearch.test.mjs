@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { searchCases } from './caseSearch.js';
+import {
+  searchCases,
+  buildCaseSearchIndex,
+  searchCasesWithIndex,
+} from './caseSearch.js';
 
 test('empty or whitespace query returns no results', () => {
   const records = [
@@ -137,4 +141,252 @@ test('a record carrying no matching field is excluded', () => {
     searchCases('nonexistentword', records).map((r) => r.id),
     [],
   );
+});
+
+// buildCaseSearchIndex / searchCasesWithIndex: the prefix-bucket index used
+// for the ~85k-record production corpus (see the task report for the
+// unindexed-vs-indexed latency measurements that motivated it). Every
+// scenario above is re-run through the indexed path too, since the two are
+// meant to agree everywhere except the one documented gap below.
+
+test('indexed: empty or whitespace query returns no results', () => {
+  const records = [
+    { id: 'a', register: 'sky', title: 'Phoenix lights', year: 1997 },
+  ];
+  const index = buildCaseSearchIndex(records);
+  assert.deepEqual(searchCasesWithIndex('', index), []);
+  assert.deepEqual(searchCasesWithIndex('   ', index), []);
+  assert.deepEqual(searchCasesWithIndex(undefined, index), []);
+});
+
+test('indexed: a falsy index returns no results rather than throwing', () => {
+  assert.deepEqual(searchCasesWithIndex('phoenix', null), []);
+  assert.deepEqual(searchCasesWithIndex('phoenix', undefined), []);
+});
+
+test('indexed: title-starts-with ranks above title-contains', () => {
+  const records = [
+    { id: 'contains', register: 'sky', title: 'Bright phoenix event' },
+    { id: 'starts', register: 'sky', title: 'Phoenix lights' },
+  ];
+  const index = buildCaseSearchIndex(records);
+  assert.deepEqual(
+    searchCasesWithIndex('phoenix', index).map((r) => r.id),
+    ['starts', 'contains'],
+  );
+});
+
+test('indexed: title match ranks above a field match', () => {
+  const records = [
+    { id: 'field', register: 'ancient', title: 'Avebury', type: 'circle' },
+    {
+      id: 'title',
+      register: 'sky',
+      title: 'Circle over the harbour',
+      type: 'formation',
+    },
+  ];
+  const index = buildCaseSearchIndex(records);
+  assert.deepEqual(
+    searchCasesWithIndex('circle', index).map((r) => r.id),
+    ['title', 'field'],
+  );
+});
+
+test('indexed: a 4-digit query matches the year exactly, via the year bucket', () => {
+  const records = [
+    { id: 'roswell', register: 'sky', title: 'Roswell debris', year: 1947 },
+    {
+      id: 'rainier',
+      register: 'sky',
+      title: 'Mount Rainier sighting',
+      year: 1947,
+    },
+    { id: 'phoenix', register: 'sky', title: 'Phoenix lights', year: 1997 },
+  ];
+  const index = buildCaseSearchIndex(records);
+  const results = searchCasesWithIndex('1947', index);
+  assert.deepEqual(
+    new Set(results.map((r) => r.id)),
+    new Set(['roswell', 'rainier']),
+  );
+  assert.equal(
+    results.some((r) => r.id === 'phoenix'),
+    false,
+  );
+});
+
+test('indexed: craft, type and country match by prefix, case-insensitively', () => {
+  const records = [
+    {
+      id: 'tic-tac',
+      register: 'sky',
+      title: 'Nimitz encounter',
+      craft: 'tic-tac',
+    },
+    { id: 'nowhere', register: 'sky', title: 'Unrelated report', craft: 'orb' },
+    {
+      id: 'egypt-site',
+      register: 'ancient',
+      title: 'Nabta Playa',
+      country: 'Egypt',
+    },
+  ];
+  const index = buildCaseSearchIndex(records);
+  assert.deepEqual(
+    searchCasesWithIndex('tic', index).map((r) => r.id),
+    ['tic-tac'],
+  );
+  assert.deepEqual(
+    searchCasesWithIndex('EGY', index).map((r) => r.id),
+    ['egypt-site'],
+  );
+});
+
+test('indexed: a field value that dominates the corpus does not swamp a narrower query', () => {
+  // Mirrors the shipped ancient-sites sweep, where about two-thirds of all
+  // ~81k rows share the type "mound" - if the field index bucketed by a
+  // value's first character rather than its whole value, every query
+  // starting with "m" would have to scan that entire majority-type slab
+  // regardless of what it was actually looking for.
+  const records = [
+    ...Array.from({ length: 500 }, (_, i) => ({
+      id: `mound-${i}`,
+      register: 'ancient',
+      title: `Unnamed earthwork ${i}`,
+      type: 'mound',
+    })),
+    {
+      id: 'megalith-1',
+      register: 'ancient',
+      title: 'Standing stone',
+      type: 'megalith',
+    },
+  ];
+  const index = buildCaseSearchIndex(records);
+  assert.deepEqual(
+    searchCasesWithIndex('megalith', index).map((r) => r.id),
+    ['megalith-1'],
+  );
+});
+
+test('indexed: title matches at a word boundary are found (not just at the title start)', () => {
+  const records = [
+    { id: 'great-zim', register: 'ancient', title: 'Great Zimbabwe' },
+    { id: 'carnac', register: 'ancient', title: 'Dolmen de Carnac-Plage' },
+  ];
+  const index = buildCaseSearchIndex(records);
+  assert.deepEqual(
+    searchCasesWithIndex('zimbabwe', index).map((r) => r.id),
+    ['great-zim'],
+  );
+  assert.deepEqual(
+    searchCasesWithIndex('carnac', index).map((r) => r.id),
+    ['carnac'],
+  );
+  assert.deepEqual(
+    searchCasesWithIndex('great zim', index).map((r) => r.id),
+    ['great-zim'],
+  );
+});
+
+test('indexed: a documented gap - a query matching strictly inside a word (not at a word boundary) is not found', () => {
+  // "orb" is a substring of "Morbihan" but does not start any of its words,
+  // so the indexed path misses it - see buildCaseSearchIndex's own doc
+  // comment. searchCases (unindexed) still finds it, for callers with small
+  // enough corpora that the exact O(n) scan is affordable.
+  const records = [
+    { id: 'morbihan', register: 'sky', title: 'GEIPAN case morbihan-1976' },
+  ];
+  const index = buildCaseSearchIndex(records);
+  assert.deepEqual(searchCasesWithIndex('orb', index), []);
+  assert.deepEqual(
+    searchCases('orb', records).map((r) => r.id),
+    ['morbihan'],
+  );
+});
+
+test('indexed: results are capped at 8 and keep the original corpus order on ties', () => {
+  const records = Array.from({ length: 12 }, (_, i) => ({
+    id: `case-${i}`,
+    register: 'sky',
+    title: `Sighting near town ${i}`,
+  }));
+  const index = buildCaseSearchIndex(records);
+  const results = searchCasesWithIndex('sighting', index);
+  assert.equal(results.length, 8);
+  assert.deepEqual(
+    results.map((r) => r.id),
+    records.slice(0, 8).map((r) => r.id),
+  );
+});
+
+test('indexed: a record carrying no matching field is excluded', () => {
+  const records = [
+    { id: 'a', register: 'sky', title: 'Roswell debris', year: 1947 },
+    { id: 'b', register: 'ancient', title: 'Newgrange', type: 'mound' },
+  ];
+  const index = buildCaseSearchIndex(records);
+  assert.deepEqual(
+    searchCasesWithIndex('nonexistentword', index).map((r) => r.id),
+    [],
+  );
+});
+
+test('indexed: agrees with the unindexed search on word-boundary queries', () => {
+  const records = [
+    {
+      id: 'a',
+      register: 'sky',
+      title: 'Roswell debris',
+      year: 1947,
+      craft: 'egg',
+    },
+    {
+      id: 'b',
+      register: 'ancient',
+      title: 'Newgrange',
+      type: 'mound',
+      country: 'Ireland',
+    },
+    {
+      id: 'c',
+      register: 'ancient',
+      title: 'Great Zimbabwe',
+      type: 'settlement',
+      country: 'Zimbabwe',
+    },
+    {
+      id: 'd',
+      register: 'sky',
+      title: 'GEIPAN case geipan-1954-somme-000',
+      year: 1954,
+      craft: null,
+      country: 'France',
+    },
+    {
+      id: 'e',
+      register: 'ancient',
+      title: 'Stonehenge',
+      type: 'circle',
+      country: 'United Kingdom',
+    },
+  ];
+  const index = buildCaseSearchIndex(records);
+  for (const q of [
+    'roswell',
+    'newgrange',
+    'zimbabwe',
+    '1954',
+    'mound',
+    'ireland',
+    'egg',
+    'stonehenge',
+  ]) {
+    assert.deepEqual(
+      searchCasesWithIndex(q, index).map((r) => r.id),
+      searchCases(q, records).map((r) => r.id),
+      `mismatch for query "${q}"`,
+    );
+  }
 });

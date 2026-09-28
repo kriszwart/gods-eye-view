@@ -968,6 +968,46 @@ export function createAncientSitesLayer({
       );
       openHeroDossier(id);
     },
+
+    /**
+     * Search hook (task 3, atlas-instruments): fly to a worldwide-sweep
+     * site by its index into the loaded sweep and open its compact
+     * dossier, mirroring `focusSite` above but for a sweep row (addressed
+     * by index, the same id the pick path already uses - see
+     * `handlePick`'s own `picked.index`) rather than a hero (addressed by
+     * id).
+     */
+    async focusSweep(index) {
+      if (
+        !sweepAccessor ||
+        !viewer ||
+        !Number.isInteger(index) ||
+        index < 0 ||
+        index >= sweepAccessor.length
+      )
+        return;
+      const lat = sweepAccessor.lat(index);
+      const lon = sweepAccessor.lon(index);
+      await new Promise((resolve) =>
+        viewer.camera.flyToBoundingSphere(
+          new Cesium.BoundingSphere(
+            Cesium.Cartesian3.fromDegrees(lon, lat, 0),
+            500,
+          ),
+          {
+            offset: new Cesium.HeadingPitchRange(
+              0,
+              Cesium.Math.toRadians(-30),
+              6000,
+            ),
+            duration: 2.5,
+            complete: resolve,
+            cancel: resolve,
+          },
+        ),
+      );
+      openSweepDossier(index);
+    },
   };
   return layer;
 }

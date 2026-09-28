@@ -810,6 +810,151 @@ try {
     JSON.stringify(countrySearch),
   );
 
+  // Search reaches every register (task 3, atlas-instruments): the
+  // worldwide ancient-sites sweep (~81k rows) and GEIPAN's real caseload
+  // (~3,381 rows), both previously left out of the in-memory corpus, join
+  // the curated hero tiers above. "Carnac" matches only a sweep row here -
+  // the curated hero at that location is catalogued under its precise
+  // name, "Alignements de Menec" (see PHENOMENA_DESIGN.md's curated list),
+  // so a hit here proves the sweep tier itself is reachable, not a hero.
+  await page.evaluate(() => {
+    const input = document.querySelector('.uap-search');
+    input.value = 'Carnac';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page
+    .waitForFunction(
+      () => document.querySelectorAll('.uap-search-results li').length > 0,
+      { timeout: 10000 },
+    )
+    .catch(() => {});
+  const sweepQuery = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('.uap-search-results li')];
+    const text = rows.map((row) => row.textContent).join(' | ');
+    rows[0]?.click();
+    return { rowCount: rows.length, text };
+  });
+  check(
+    'search finds Carnac in the worldwide ancient-sites sweep',
+    sweepQuery.rowCount > 0 && /carnac/i.test(sweepQuery.text),
+    JSON.stringify(sweepQuery),
+  );
+  // The ancient layer's focusSweep flies (flyToBoundingSphere, ~2.5s) before
+  // opening the dossier, exactly like focusSite for a hero - see its own
+  // doc comment in src/layers/ancientSites/index.js - so this waits for the
+  // flight to settle rather than a fixed delay.
+  await page
+    .waitForFunction(
+      () => {
+        const d = document.querySelector('.uap-dossier.ancient');
+        return d && !d.hidden;
+      },
+      { timeout: 15000 },
+    )
+    .catch(() => {});
+  const sweepResult = await page.evaluate(() => {
+    const d = document.querySelector('.uap-dossier.ancient');
+    const open = d && !d.hidden;
+    const text = d ? d.textContent : '';
+    d?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    return { open, text };
+  });
+  check(
+    'picking a sweep result flies there and opens the compact sweep dossier',
+    sweepResult.open === true && /carnac/i.test(sweepResult.text),
+    JSON.stringify(sweepResult),
+  );
+
+  // GEIPAN's columnar rows carry no title of their own (no place names -
+  // see DATA_PIPELINE.md's privacy rule, rounded coordinates only); the
+  // search corpus instead carries "GEIPAN case <id>", the id verbatim, so a
+  // query for the id itself finds the case (rankRecord only ever looks at
+  // title, never id directly - see src/app/caseSearch.js). The id is read
+  // off the live dataset rather than pinned, so this stays valid as the
+  // GEIPAN sync grows.
+  const geipanIdQuery = await page.evaluate(async () => {
+    const res = await fetch('/anomalies/anomalies.v1.json');
+    const json = await res.json();
+    const c = json.columns;
+    let geipanId = null;
+    for (let i = 0; i < json.count; i++) {
+      if (!c.title[i]) {
+        geipanId = c.id[i];
+        break;
+      }
+    }
+    const input = document.querySelector('.uap-search');
+    input.value = geipanId;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 500));
+    const rows = [...document.querySelectorAll('.uap-search-results li')];
+    const text = rows.map((row) => row.textContent).join(' | ');
+    return { geipanId, rowCount: rows.length, text };
+  });
+  check(
+    'searching a GEIPAN case id by itself finds that case',
+    geipanIdQuery.rowCount > 0 &&
+      typeof geipanIdQuery.geipanId === 'string' &&
+      geipanIdQuery.text.includes(geipanIdQuery.geipanId),
+    JSON.stringify(geipanIdQuery),
+  );
+
+  const yearSearch1954 = await page.evaluate(async () => {
+    const input = document.querySelector('.uap-search');
+    input.value = '1954';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 500));
+    const rows = [...document.querySelectorAll('.uap-search-results li')];
+    const text = rows.map((row) => row.textContent).join(' | ');
+    return { rowCount: rows.length, text };
+  });
+  check(
+    'search "1954" finds a GEIPAN case',
+    yearSearch1954.rowCount > 0 && /GEIPAN case/.test(yearSearch1954.text),
+    JSON.stringify(yearSearch1954),
+  );
+
+  const capSearch = await page.evaluate(async () => {
+    const input = document.querySelector('.uap-search');
+    input.value = 'megalith';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 500));
+    const rows = [...document.querySelectorAll('.uap-search-results li')];
+    return { rowCount: rows.length };
+  });
+  check(
+    'results stay capped at 8 even for a broad query over the ~85k corpus',
+    capSearch.rowCount === 8,
+    JSON.stringify(capSearch),
+  );
+
+  // Latency sanity check: the corpus and its prefix-bucket index build once,
+  // lazily, on the first search - every check above already triggered at
+  // least one, so this query's `uapSearchLastMs` (set by chronometer.js's
+  // addSearch around its own onQuery call on every query) reflects a
+  // steady-state search call over the full corpus, not the cold first one.
+  const latency = await page.evaluate(async () => {
+    const input = document.querySelector('.uap-search');
+    input.value = 'stonehenge';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 500));
+    const wrap = document.querySelector('.uap-search-wrap');
+    return { lastMs: Number(wrap?.dataset.uapSearchLastMs) };
+  });
+  check(
+    'a steady-state search call over the full corpus stays under 50ms',
+    Number.isFinite(latency.lastMs) && latency.lastMs < 50,
+    JSON.stringify(latency),
+  );
+
+  await page.evaluate(() => {
+    const input = document.querySelector('.uap-search');
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
   const ir = await page.evaluate(async () => {
     window.__godsEyeView.styleManager.setStyle('infrared');
     await new Promise((r) => setTimeout(r, 600));

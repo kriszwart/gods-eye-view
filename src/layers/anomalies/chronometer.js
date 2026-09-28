@@ -571,11 +571,22 @@ export function createChronometer({
         debounceTimer = setTimeout(async () => {
           const token = ++queryToken;
           let results = [];
+          // `onQuery`'s own synchronous search-call cost, timed separately
+          // from the fixed 150ms debounce above it, so a qa gate (or a
+          // future in-app readout) can read the corpus's actual per-query
+          // latency straight off the DOM (task 3, atlas-instruments -
+          // search now reaches the ~85k-record corpus, see
+          // src/app/caseSearch.js's prefix-bucket index and the task
+          // report's own measurements). A cold first call also carries the
+          // shell's own corpus fetch and index build, so this is only a
+          // steady-state figure once that lazy build has already run once.
+          const queryStart = performance.now();
           try {
             results = (await onQuery?.(query)) || [];
           } catch (error) {
             console.warn('[UAP:Chronometer] Search query failed', error);
           }
+          wrap.dataset.uapSearchLastMs = String(performance.now() - queryStart);
           // A newer query (a fresh keystroke, or Escape/clear) has since
           // superseded this one: never let a slow, stale response overwrite
           // whatever the panel is showing now.

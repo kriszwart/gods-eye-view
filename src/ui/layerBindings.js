@@ -46,7 +46,6 @@ export class LayerBindings {
     this._anomaliesMode = null;
     this._anomaliesSetPhenomenaActive = null;
     this._anomaliesSetSpotterOpen = null;
-    this._anomaliesSetObservatoryOpen = null;
     this._ancientShellModule = null;
     this._ancientNotifySkyChanged = null;
     this._liveClaimsShellModule = null;
@@ -66,6 +65,15 @@ export class LayerBindings {
     this._ancientSearchSource = null;
     this._skySearchRecords = null;
     this._ancientSearchRecords = null;
+    // Always present, independent of every layer's own enabled state (see
+    // `_createObservatoryToggle`'s doc comment) - built last, once every
+    // other field this class's methods can reach for is already in place.
+    // Guarded on `document` existing: this class is also constructed by
+    // headless unit tests with no DOM at all (see layerBindings.test.mjs's
+    // `makeBindings`), and this is the only constructor work that would
+    // otherwise require one.
+    this._observatoryToggleBtn =
+      typeof document !== 'undefined' ? this._createObservatoryToggle() : null;
   }
   get hud() {
     return this.readControls().hud;
@@ -178,17 +186,23 @@ export class LayerBindings {
    * about the button's aria-pressed state by itself.
    *
    * The same channel also carries the Spotter panel's toggle
-   * (`_toggleSpotter`) and close (`_closeSpotter`), and the Observatory
-   * plate's own toggle (`_toggleObservatory`) and close
-   * (`_closeObservatory`) alongside it, same idiom. Both panels are built
-   * lazily, on the first press, and then live for as long as this instance
-   * does (`stop()` destroys them); the callbacks are re-attached on every
-   * connect, same as the mode and search callbacks above. Unlike Phenomena
-   * mode, closing has no "restore" step to force, so this function just
-   * closes both plates unconditionally on every connect (below) rather
-   * than tracking an active/inactive pair: a plate that was never opened
-   * has nothing to close, and one left open across a rewire is exactly the
-   * orphaned-plate bug this fixes.
+   * (`_toggleSpotter`) and close (`_closeSpotter`) alongside it, same
+   * idiom: built lazily, on the first press, and then live for as long as
+   * this instance does (`stop()` destroys it); the callback is re-attached
+   * on every connect, same as the mode and search callbacks above. Unlike
+   * Phenomena mode, closing has no "restore" step to force, so this
+   * function just closes the plate unconditionally on every connect
+   * (below) rather than tracking an active/inactive pair: a plate that was
+   * never opened has nothing to close, and one left open across a rewire
+   * is exactly the orphaned-plate bug this fixes.
+   *
+   * The Observatory plate's own toggle (`_toggleObservatory`) is not part
+   * of this channel (fix round, atlas-instruments task 1): it is a
+   * standalone button built directly by this class (see
+   * `_createObservatoryToggle`), always present regardless of the
+   * anomalies module's own enabled state, so it needs no button to reset
+   * here. `_closeObservatory` is still called unconditionally on every
+   * connect below, for the same orphaned-plate reason as Spotter.
    */
   _connectAnomaliesShell() {
     if (this._anomaliesMode?.active) {
@@ -204,16 +218,17 @@ export class LayerBindings {
     // rewire (teardown or a fresh manager) must close both here too,
     // otherwise a live-data plate could be left on screen with the very
     // channel that can reach it about to be torn down and rebuilt.
-    // `_closeSpotter`/`_closeObservatory` also reset their button's
-    // `aria-pressed` (via `_anomaliesSetSpotterOpen`/
-    // `_anomaliesSetObservatoryOpen`, still the outgoing module's callback
-    // at this point), so each button and its plate stay in lockstep; the
-    // fields are then nulled below so a stale callback is never used
-    // before the new module attaches its own.
+    // `_closeSpotter` also resets its button's `aria-pressed` (via
+    // `_anomaliesSetSpotterOpen`, still the outgoing module's callback at
+    // this point), so the button and its plate stay in lockstep; the field
+    // is then nulled below so a stale callback is never used before the new
+    // module attaches its own. `_closeObservatory` resets its own toggle
+    // directly (that button is not part of this module's channel at all -
+    // see `_toggleObservatory`'s doc comment), so it needs no matching
+    // field here.
     this._closeSpotter();
     this._anomaliesSetSpotterOpen = null;
     this._closeObservatory();
-    this._anomaliesSetObservatoryOpen = null;
     if (!this._dataManager) {
       this._anomaliesShellModule?.attachShellServices?.(null);
       this._anomaliesShellModule = null;
@@ -256,10 +271,6 @@ export class LayerBindings {
       // tearing down) closes the plate the shell owns, instead of leaving
       // it orphaned with a dead Spotter button behind it.
       closeSpotter: () => this._closeSpotter(),
-      // The Observatory plate: same lazy-build-on-first-press and
-      // shell-closes-it-back idiom as the Spotter pair above.
-      toggleObservatory: () => this._toggleObservatory(),
-      closeObservatory: () => this._closeObservatory(),
       // Same channel the weather layers use (_connectWeatherCamera above)
       // so the Hotspots heat overlay drapes on whatever surface the active
       // map stack can host imagery on, globe or 3D tileset, instead of
@@ -273,10 +284,6 @@ export class LayerBindings {
     this._anomaliesSetSpotterOpen =
       typeof attached?.setSpotterOpen === 'function'
         ? attached.setSpotterOpen
-        : null;
-    this._anomaliesSetObservatoryOpen =
-      typeof attached?.setObservatoryOpen === 'function'
-        ? attached.setObservatoryOpen
         : null;
   }
 
@@ -402,6 +409,38 @@ export class LayerBindings {
   }
 
   /**
+   * Build the Observatory plate's own open control: a small, always-present
+   * button appended directly to the viewer container, never to the sky
+   * chronometer's action row (fix round, atlas-instruments task 1, fixing
+   * the blocking finding on the first pass: the chronometer's own
+   * `setVisible(false)` detaches its whole DOM tree - chronometer.js's
+   * `root.remove()` - so a toggle placed there vanished the instant the
+   * sky register was disabled, even though the plate itself reads shipped
+   * datasets and live getStats() through the functions below, never the
+   * anomalies layer's own enabled state, and so has nothing to do with
+   * whether that one register happens to be on). Built once, here, in the
+   * constructor, so the control's own reachability never depends on any
+   * layer's enabled state, or on the anomalies module having loaded at
+   * all. The click handler owns the button's `aria-pressed` sync on open
+   * (mirroring the old chrono-action idiom: set it from the toggle's own
+   * return value); `_closeObservatory` below covers every other path that
+   * can close the plate from outside a click on this button.
+   * @returns {HTMLButtonElement}
+   */
+  _createObservatoryToggle() {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'uap-observatory-toggle';
+    btn.textContent = 'Observatory';
+    btn.setAttribute('aria-pressed', 'false');
+    btn.addEventListener('click', () => {
+      btn.setAttribute('aria-pressed', String(this._toggleObservatory()));
+    });
+    (this.viewer?.container || document.body).appendChild(btn);
+    return btn;
+  }
+
+  /**
    * Show or hide the Observatory plate, building it on first use. Same
    * lazy-build idiom as `_toggleSpotter`: the plate is a shell-owned
    * sibling of the viewer container, layer-independent (it reads shipped
@@ -423,16 +462,18 @@ export class LayerBindings {
   }
 
   /**
-   * Close the Observatory plate if one has been built, and reset its
-   * button's `aria-pressed` through the currently attached module's
-   * `setObservatoryOpen`, if any. Mirrors `_closeSpotter`: idempotent and
-   * always safe to call unconditionally, so a shell rewire or teardown
-   * never has to check whether the plate exists or is open first (the
-   * Spotter orphan lesson this plate must not repeat).
+   * Close the Observatory plate if one has been built, and reset its own
+   * standalone toggle's `aria-pressed` directly (the button this class
+   * built itself in `_createObservatoryToggle`, not a callback borrowed
+   * from the anomalies module - unlike Spotter, this plate has no shell
+   * services channel to go stale). Idempotent and always safe to call
+   * unconditionally, so a shell rewire or teardown never has to check
+   * whether the plate exists or is open first (the orphan lesson this
+   * plate must not repeat).
    */
   _closeObservatory() {
     this._observatory?.close?.();
-    this._anomaliesSetObservatoryOpen?.(false);
+    this._observatoryToggleBtn?.setAttribute('aria-pressed', 'false');
   }
 
   /**
@@ -898,6 +939,8 @@ export class LayerBindings {
     this._spotter = null;
     this._observatory?.destroy?.();
     this._observatory = null;
+    this._observatoryToggleBtn?.remove();
+    this._observatoryToggleBtn = null;
   }
   disconnect() {
     this._dataManagerUnsubscribe?.();

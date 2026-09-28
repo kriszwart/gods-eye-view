@@ -1053,31 +1053,6 @@ try {
     JSON.stringify(spotterCloses),
   );
 
-  // Same orphan lesson for the Observatory plate (task 1, atlas-instruments):
-  // it too is a sibling of the viewer container, not a child of the
-  // anomalies layer's own DOM, so disabling the layer must still close it.
-  const observatoryCloses = await page.evaluate(async () => {
-    const btn = [...document.querySelectorAll('.uap-chrono-panel button')].find(
-      (b) => b.textContent === 'Observatory',
-    );
-    btn?.click();
-    const opened = document.querySelector('.uap-observatory');
-    const openedVisible = !!opened && !opened.hidden;
-    const m = window.__godsEyeView.dataManager;
-    await m.setEnabled('anomalies', false, { origin: 'user' });
-    const after = document.querySelector('.uap-observatory');
-    const afterHiddenOrAbsent = !after || after.hidden === true;
-    // Restore for the rest of this pass (re-enable is already proven safe above).
-    await m.setEnabled('anomalies', true, { origin: 'user' });
-    return { openedVisible, afterHiddenOrAbsent };
-  });
-  check(
-    'disabling the anomalies layer closes the Observatory plate',
-    observatoryCloses.openedVisible === true &&
-      observatoryCloses.afterHiddenOrAbsent === true,
-    JSON.stringify(observatoryCloses),
-  );
-
   const sourcesPanel = await page.evaluate(async () => {
     const btn = [...document.querySelectorAll('.uap-chrono-panel button')].find(
       (b) => b.textContent === 'Sources',
@@ -1111,13 +1086,16 @@ try {
   );
 
   // Observatory (task 1, atlas-instruments): a layer-independent readout of
-  // every register at a glance, opened from the same chrono-panel action
-  // row as Spotter and Sources above. Every number it shows must trace back
-  // to the same shipped datasets, computed here from a fresh fetch rather
-  // than pinned, so this gate stays valid as GEIPAN and the ancient sweep
-  // grow. The plate's sky and ancient sections render asynchronously (each
-  // fetch resolves and paints independently - see src/app/observatory.js's
-  // refresh()), so the count elements are awaited before being read.
+  // every register at a glance, opened from its own standalone toggle (fix
+  // round: relocated off the sky chronometer's action row, which
+  // disappears whenever that one register is disabled - see
+  // src/ui/layerBindings.js's `_createObservatoryToggle`). Every number it
+  // shows must trace back to the same shipped datasets, computed here from
+  // a fresh fetch rather than pinned, so this gate stays valid as GEIPAN
+  // and the ancient sweep grow. The plate's sky and ancient sections render
+  // asynchronously (each fetch resolves and paints independently - see
+  // src/app/observatory.js's refresh()), so the count elements are awaited
+  // before being read.
   const [obsSkyStats, obsAncientJson] = await Promise.all([
     page.evaluate(async () => (await fetch('/anomalies/stats.json')).json()),
     page.evaluate(async () =>
@@ -1125,10 +1103,7 @@ try {
     ),
   ]);
   await page.evaluate(() => {
-    const btn = [...document.querySelectorAll('.uap-chrono-panel button')].find(
-      (b) => b.textContent === 'Observatory',
-    );
-    btn?.click();
+    document.querySelector('.uap-observatory-toggle')?.click();
   });
   const observatoryOpened = await page.evaluate(() => {
     const plate = document.querySelector('.uap-observatory');
@@ -1170,7 +1145,7 @@ try {
     };
   });
   check(
-    'Observatory plate opens from the chronometer panel',
+    'Observatory plate opens from its standalone toggle',
     observatoryOpened === true,
     JSON.stringify({ observatoryOpened }),
   );
@@ -1209,6 +1184,100 @@ try {
     observatoryEscape.closed === true,
     JSON.stringify(observatoryEscape),
   );
+
+  // Reachability regression (fix round, atlas-instruments task 1): the
+  // blocking finding on the first pass was that the Observatory toggle
+  // lived on the sky chronometer's own action row, which
+  // chronometer.js's setVisible(false) removes from the DOM whenever that
+  // one register is disabled - stranding the plate with no reachable
+  // control, even though it reads every register's own shipped stats, not
+  // just the sky's. Disable the layer and prove the standalone toggle
+  // (built once, directly by LayerBindings, never a child of the
+  // chronometer) still exists and still opens the plate with correct
+  // data; then re-enable and prove none of that regresses.
+  const observatoryWhileDisabled = await page.evaluate(async () => {
+    const m = window.__godsEyeView.dataManager;
+    await m.setEnabled('anomalies', false, { origin: 'user' });
+    const btn = document.querySelector('.uap-observatory-toggle');
+    const btnExists = !!btn;
+    btn?.click();
+    const plate = document.querySelector('.uap-observatory');
+    return { btnExists, opened: !!plate && !plate.hidden };
+  });
+  check(
+    'the Observatory toggle still exists after the anomalies layer is disabled',
+    observatoryWhileDisabled.btnExists === true,
+    JSON.stringify(observatoryWhileDisabled),
+  );
+  check(
+    'the Observatory toggle still opens the plate while the anomalies layer is disabled',
+    observatoryWhileDisabled.opened === true,
+    JSON.stringify(observatoryWhileDisabled),
+  );
+  await page
+    .waitForFunction(
+      () =>
+        document.querySelector(
+          '.uap-observatory-section[data-register="sky"] .uap-observatory-count[data-count]',
+        ) &&
+        document.querySelector(
+          '.uap-observatory-section[data-register="ancient"] .uap-observatory-count[data-count]',
+        ),
+      { timeout: 20000 },
+    )
+    .catch(() => {});
+  const observatoryDataWhileDisabled = await page.evaluate(() => {
+    const plate = document.querySelector('.uap-observatory');
+    const skyCountEl = plate?.querySelector(
+      '.uap-observatory-section[data-register="sky"] .uap-observatory-count',
+    );
+    const ancientCountEl = plate?.querySelector(
+      '.uap-observatory-section[data-register="ancient"] .uap-observatory-count',
+    );
+    return {
+      skyCount: skyCountEl ? Number(skyCountEl.dataset.count) : null,
+      ancientCount: ancientCountEl
+        ? Number(ancientCountEl.dataset.count)
+        : null,
+    };
+  });
+  check(
+    'the Observatory plate still shows the correct sky count while the anomalies layer is disabled',
+    observatoryDataWhileDisabled.skyCount === obsSkyStats.count,
+    `plate=${observatoryDataWhileDisabled.skyCount} stats.json=${obsSkyStats.count}`,
+  );
+  check(
+    'the Observatory plate still shows the correct ancient count while the anomalies layer is disabled',
+    observatoryDataWhileDisabled.ancientCount === obsAncientJson.count,
+    `plate=${observatoryDataWhileDisabled.ancientCount} sites.v2.json=${obsAncientJson.count}`,
+  );
+  const observatoryAfterReEnable = await page.evaluate(async () => {
+    const m = window.__godsEyeView.dataManager;
+    await m.setEnabled('anomalies', true, { origin: 'user' });
+    const btn = document.querySelector('.uap-observatory-toggle');
+    const plate = document.querySelector('.uap-observatory');
+    // Re-enabling the sky layer never touched the Observatory toggle or
+    // plate before this fix round either; this just proves that stays
+    // true now that the two are fully decoupled (no attachShellServices
+    // channel between them at all - see src/layers/anomalies/index.js).
+    return {
+      btnExists: !!btn,
+      stillOpen: !!plate && !plate.hidden,
+    };
+  });
+  check(
+    'the Observatory toggle still exists after the anomalies layer is re-enabled',
+    observatoryAfterReEnable.btnExists === true,
+    JSON.stringify(observatoryAfterReEnable),
+  );
+  check(
+    'the Observatory plate was not force-closed by re-enabling the anomalies layer',
+    observatoryAfterReEnable.stillOpen === true,
+    JSON.stringify(observatoryAfterReEnable),
+  );
+  await page.evaluate(() => {
+    document.querySelector('.uap-observatory-toggle')?.click();
+  });
 
   check(
     'no page errors during the interactive pass',

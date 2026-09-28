@@ -1026,6 +1026,68 @@
   font-size: 11px;
 }
 
+/* Observatory toggle (fix round, atlas-instruments task 1): the plate's
+   only open control, built directly by LayerBindings
+   (src/ui/layerBindings.js's `_createObservatoryToggle`) as a standalone
+   button, not a chronometer action - the previous placement on the sky
+   dial's own action row disappeared the instant that one register was
+   disabled (chronometer.js's `setVisible(false)` removes the whole panel
+   from the DOM), stranding the plate with no reachable control even
+   though it summarises every register, not just the sky's.
+
+   Sits in the shell's own persistent top chrome instead of the atlas
+   overlay: the gap between the top-centre globe actions nav
+   (#top-center-actions, status.css - five 36px circular buttons centred
+   on the viewport, right edge at 50vw+106px) and the style indicator
+   (#style-indicator, foundation.css - fixed 36px from the right edge),
+   both anchored at the same 32px top offset this button matches. At
+   1440px wide that gap runs from roughly x=826 to x=1274, comfortably
+   clear of this button's own ~110px width even with a generous margin
+   either side; neither neighbour is layer-specific, so the gap between
+   them stays open regardless of which register is on. Below 720px both
+   neighbours themselves move (responsive.css hides #style-indicator and
+   right-aligns #top-center-actions), so this button relocates below them
+   in the same breakpoint rather than assume the gap still exists. */
+.anomaly-atlas .uap-observatory-toggle {
+  position: fixed;
+  top: 32px;
+  right: 260px;
+  z-index: 100;
+  background: var(--glass-bg);
+  border: 1px solid var(--uap-hair, rgba(217, 220, 230, 0.16));
+  padding: 8px 14px;
+  color: var(--uap-dim);
+  font: 400 12px var(--uap-mono);
+  cursor: pointer;
+}
+.anomaly-atlas .uap-observatory-toggle:hover,
+.anomaly-atlas .uap-observatory-toggle[aria-pressed='true'] {
+  color: var(--uap-ink);
+  border-color: var(--uap-hair-strong, rgba(217, 220, 230, 0.32));
+}
+.anomaly-atlas .uap-observatory-toggle:focus-visible {
+  outline: 2px solid var(--uap-ink);
+  outline-offset: 3px;
+}
+@media (max-width: 720px) {
+  /* #style-indicator disappears below this width and #top-center-actions
+     right-aligns instead of centring (responsive.css), so the 1440 gap
+     this button normally sits in closes up entirely. The title bar also
+     collapses to just its 36px logo mark at this width (title-bar h1's
+     text either wraps out of the way or shrinks well clear of it), so the
+     gap between that icon (ends ~52px) and the now right-aligned
+     #top-center-actions (starts ~162px at 390 wide) becomes the free
+     slot instead - same top offset as that nav so the two read as one
+     row, with a smaller footprint to fit comfortably inside it. */
+  .anomaly-atlas .uap-observatory-toggle {
+    top: 12px;
+    left: 58px;
+    right: auto;
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+}
+
 /* Observatory: "the atlas at a glance", a layer-independent plate
    summarising every register at once (sky reports, ancient sites, live
    claims) plus a decade histogram. Every other interactive plate already

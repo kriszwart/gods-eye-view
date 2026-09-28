@@ -262,6 +262,85 @@
   color: var(--uap-ink);
   opacity: 0.9;
 }
+
+/* Animated craft preview plate (task 3, luminous-pins:
+   src/ui/craftPreview.js). Shared by the anomalies and live-claims
+   dossiers (see each register's own call site); the ancient-sites dossier
+   is untouched and keeps its plain .uap-glyph above. A small hairline
+   plate, void-dark, with the row's own hue as its accent border (passed
+   in via the --uap-preview-accent custom property, one instance per
+   dossier open - never a class per hue, which would grow unbounded with
+   the anomalies register's own continuous status set). */
+.anomaly-atlas .uap-dossier .uap-craft-preview {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  margin: 6px 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--uap-void);
+  border: 1px solid var(--uap-preview-accent, var(--uap-hair-strong));
+  overflow: hidden;
+}
+.anomaly-atlas .uap-dossier .uap-craft-preview-glyph {
+  width: 46px;
+  height: 46px;
+  /* Slow vertical hover drift, the specimens page's own motion language in
+     miniature - the glyph reads as resting in place rather than static
+     artwork. */
+  animation: uap-craft-preview-drift 6s ease-in-out infinite alternate;
+}
+@keyframes uap-craft-preview-drift {
+  from {
+    transform: translateY(-3px);
+  }
+  to {
+    transform: translateY(3px);
+  }
+}
+/* Thin-film sheen sweep: a soft diagonal highlight crossing the whole
+   plate, a pure CSS pseudo-element rather than a second image layer - no
+   extra markup, nothing for the dossier's teardown to leak. A wide
+   background (300% of the plate) sliding via background-position, rather
+   than a transform, so the band's own diagonal angle stays constant as it
+   travels corner to corner instead of shearing against the plate's fixed
+   edges. */
+.anomaly-atlas .uap-dossier .uap-craft-preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(
+    115deg,
+    transparent 40%,
+    rgba(217, 220, 230, 0.4) 50%,
+    transparent 60%
+  );
+  background-size: 300% 300%;
+  background-position: 100% 100%;
+  animation: uap-craft-preview-sheen 8s linear infinite;
+  pointer-events: none;
+}
+@keyframes uap-craft-preview-sheen {
+  from {
+    background-position: 100% 100%;
+  }
+  to {
+    background-position: -100% -100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* A static glyph, no sheen: both animations stop outright rather than
+     slowing down, matching this file's other reduced-motion guards. */
+  .anomaly-atlas .uap-dossier .uap-craft-preview-glyph {
+    animation: none;
+  }
+  .anomaly-atlas .uap-dossier .uap-craft-preview::after {
+    animation: none;
+    opacity: 0;
+  }
+}
+
 .anomaly-atlas .uap-dossier dl {
   display: grid;
   grid-template-columns: 92px 1fr;

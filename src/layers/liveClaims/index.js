@@ -3,11 +3,13 @@ import {
   LIVE_CLAIMS_LAYER_ID,
   HONESTY_LINE,
   KEYLESS_MESSAGE,
+  PALETTE,
   mapAnalystRecord,
 } from './model.js';
 import { createLiveClaimsRenderer } from './rendering.js';
 import { findNearbyCases, NEARBY_RADIUS_KM } from './nearby.js';
 import { safeSourceUrl } from '../../sources/safeUrl.js';
+import { buildCraftPreview } from '../../ui/craftPreview.js';
 export * from './model.js';
 export { normalizeClaimsSnapshot, normalizeClaimRow } from './records.js';
 export { createLiveClaimsSource } from './source.js';
@@ -227,6 +229,7 @@ export function createLiveClaimsLayer({
       <button type="button" class="uap-close" aria-label="Close claim">Close</button>
       <p class="uap-code">${escapeHtml(formatSource(row.source))}</p>
       <h2>${escapeHtml(row.place)}</h2>
+      ${buildCraftPreview({ shape: row.shape, hue: PALETTE.ionDark })}
       <dl>
         <dt>Place</dt><dd>${escapeHtml(row.place)}</dd>
         <dt>Shape</dt><dd>${escapeHtml(formatShape(row.shape))}</dd>

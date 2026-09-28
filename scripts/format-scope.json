@@ -897,5 +897,7 @@
   "src/app/layers/liveClaims.js",
   "scripts/qa-claims.mjs",
   "src/ui/glowSprite.js",
-  "src/ui/glowSprite.test.mjs"
+  "src/ui/glowSprite.test.mjs",
+  "src/ui/craftPreview.js",
+  "src/ui/craftPreview.test.mjs"
 ]

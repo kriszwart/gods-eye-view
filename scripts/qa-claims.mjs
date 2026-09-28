@@ -43,6 +43,8 @@ import {
   NEARBY_RADIUS_KM,
 } from '../src/layers/liveClaims/nearby.js';
 import { normalizeAnomalySnapshot } from '../src/layers/anomalies/records.js';
+import { SHAPE_GLYPH_URLS } from '../src/layers/anomalies/shapeGlyphs.js';
+import { PALETTE } from '../src/layers/liveClaims/model.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
@@ -289,6 +291,20 @@ try {
             (row) => row.textContent,
           )
         : [];
+      // Task 3, luminous-pins: this fixture claim (New York) always carries
+      // shape 'triangle' (server/providers/claims.js's buildFixtureClaims),
+      // so its dossier's animated craft preview (src/ui/craftPreview.js)
+      // must be present here, read before the Escape dispatch below closes
+      // the dossier.
+      const preview = d?.querySelector('.uap-craft-preview') ?? null;
+      const previewImg = preview?.querySelector('.uap-craft-preview-glyph');
+      const previewSrc = previewImg ? previewImg.getAttribute('src') : null;
+      const previewLoading = previewImg
+        ? previewImg.getAttribute('loading')
+        : null;
+      const previewAccent = preview
+        ? preview.style.getPropertyValue('--uap-preview-accent').trim()
+        : null;
       d?.dispatchEvent(
         new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
       );
@@ -301,6 +317,10 @@ try {
         nearbyCountText,
         nearbyEmptyText,
         nearbyRowsText,
+        previewFound: !!preview,
+        previewSrc,
+        previewLoading,
+        previewAccent,
       };
     }, strings.honesty);
   }
@@ -324,6 +344,172 @@ try {
     String(dossier.href),
   );
   check('Escape closes the dossier', dossier.closed === true);
+
+  // Task 3, luminous-pins: the New York fixture claim always carries shape
+  // 'triangle' (server/providers/claims.js's buildFixtureClaims), so its
+  // dossier's animated craft preview (src/ui/craftPreview.js) must be
+  // present, pointing at that shape's own shipped glyph
+  // (shapeGlyphs.js's SHAPE_GLYPH_URLS - the same table the layer itself
+  // imports, fetched here rather than hardcoded), with the register's own
+  // fixed ion accent (PALETTE.ionDark).
+  check(
+    "a shaped fixture claim's dossier shows the animated craft preview with the matching glyph, loaded lazily",
+    target?.shape === 'triangle' &&
+      dossier.previewFound === true &&
+      dossier.previewSrc === SHAPE_GLYPH_URLS[target.shape] &&
+      dossier.previewLoading === 'lazy',
+    JSON.stringify({ shape: target?.shape, dossier }),
+  );
+  check(
+    "the craft preview's accent border is the register's own fixed ion hue",
+    dossier.previewAccent?.toLowerCase() === PALETTE.ionDark.toLowerCase(),
+    JSON.stringify(dossier),
+  );
+
+  // A shapeless fixture claim (shape: null - "the classifier could not
+  // place it in one of the pinned categories", see buildFixtureClaims's own
+  // doc comment) must show NO preview at all: no orb fallback here (see
+  // buildCraftPreview's own doc comment in src/ui/craftPreview.js) - a
+  // dossier should not show a shape the claim never carried.
+  const shapelessTarget = await page.evaluate(() =>
+    window.__godsEyeView.dataManager.layers
+      .get('live-claims')
+      .module.getAnalystRecords(20)
+      .find((r) => r.id === 'bluesky:fixture-pacific-south'),
+  );
+  let shapelessDossier = { found: false };
+  const shapelessPoint = shapelessTarget
+    ? await page.evaluate(projectAt, shapelessTarget)
+    : null;
+  if (shapelessPoint) {
+    await page.mouse.click(shapelessPoint.x, shapelessPoint.y);
+    await page
+      .waitForFunction(
+        () => {
+          const d = document.querySelector('.uap-dossier.claims');
+          return d && !d.hidden;
+        },
+        { timeout: 8000 },
+      )
+      .catch(() => {});
+    shapelessDossier = await page.evaluate(() => {
+      const d = document.querySelector('.uap-dossier.claims');
+      const found = !!d && !d.hidden;
+      const preview = d?.querySelector('.uap-craft-preview') ?? null;
+      const shapeText = d?.querySelector('dl')?.textContent || '';
+      d?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      );
+      return { found, previewFound: !!preview, shapeText };
+    });
+  }
+  check(
+    'a shapeless fixture claim (shape: null) opens its dossier with no craft preview at all',
+    !!shapelessTarget &&
+      shapelessTarget.shape == null &&
+      shapelessDossier.found === true &&
+      shapelessDossier.previewFound === false &&
+      /Not stated/.test(shapelessDossier.shapeText),
+    JSON.stringify({ shapelessTarget, shapelessDossier }),
+  );
+
+  // Reduced motion: the preview's drift and sheen are pure CSS keyframes
+  // (anomaly-atlas.css's .uap-craft-preview rules), read directly via
+  // computed style rather than a diagnostics function, mirroring
+  // qa-anomalies.mjs's own equivalent check. Drives the same fixture
+  // dossier-open path already proven above (projectAt/click), once per
+  // motion preference, on two fresh pages.
+  async function claimsPreviewAnimationOnFreshPage(reduceMotion) {
+    const ctx = await browser.createBrowserContext();
+    const p = await ctx.newPage();
+    await p.setViewport({ width: 1440, height: 900 });
+    if (reduceMotion) {
+      await p.emulateMediaFeatures([
+        { name: 'prefers-reduced-motion', value: 'reduce' },
+      ]);
+    }
+    await p.goto(`${fixtureBase}/?welcome=0`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await p.waitForFunction(() => window.__godsEyeView?.dataManager, {
+      timeout: 60000,
+    });
+    await p.evaluate(() =>
+      window.__godsEyeView.dataManager.setEnabled('live-claims', true, {
+        origin: 'user',
+      }),
+    );
+    await p.waitForFunction(
+      () =>
+        (window.__godsEyeView.dataManager.layers
+          .get('live-claims')
+          ?.module?.getStats?.().count ?? 0) > 0,
+      { timeout: 30000 },
+    );
+    const nyTarget = await p.evaluate(() =>
+      window.__godsEyeView.dataManager.layers
+        .get('live-claims')
+        .module.getAnalystRecords(20)
+        .find((r) => r.id === 'reddit:fixture-newyork'),
+    );
+    // Mirrors the main page's own two-step settle (camera fly, wait, THEN
+    // read the settled pixel coordinates) - a single immediate projection
+    // right after the camera move reads stale coordinates before the
+    // renderer's point billboards have actually settled into place. A
+    // freshly created browser context's first click can still land before
+    // the renderer's very first paint on a slow run, so this retries the
+    // click (re-projecting each time, in case the settled pixel coordinate
+    // itself drifts) rather than failing on one missed frame.
+    let dossierOpen = false;
+    for (let attempt = 0; attempt < 3 && !dossierOpen; attempt++) {
+      await p.evaluate(projectAt, nyTarget);
+      await new Promise((r) => setTimeout(r, 700));
+      const point = await p.evaluate(projectAt, nyTarget);
+      if (!point) continue;
+      await p.mouse.click(point.x, point.y);
+      dossierOpen = await p
+        .waitForFunction(
+          () => {
+            const d = document.querySelector('.uap-dossier.claims');
+            return d && !d.hidden;
+          },
+          { timeout: 8000 },
+        )
+        .then(() => true)
+        .catch(() => false);
+    }
+    const result = await p.evaluate(() => {
+      const d = document.querySelector('.uap-dossier.claims');
+      const preview = d?.querySelector('.uap-craft-preview');
+      const glyph = preview?.querySelector('.uap-craft-preview-glyph');
+      return {
+        found: !!preview,
+        glyphAnimation: glyph ? getComputedStyle(glyph).animationName : null,
+        sheenAnimation: preview
+          ? getComputedStyle(preview, '::after').animationName
+          : null,
+      };
+    });
+    await ctx.close();
+    return result;
+  }
+  const reducedClaimsPreview = await claimsPreviewAnimationOnFreshPage(true);
+  check(
+    'the claims craft preview drift and sheen never run under prefers-reduced-motion',
+    reducedClaimsPreview.found &&
+      reducedClaimsPreview.glyphAnimation === 'none' &&
+      reducedClaimsPreview.sheenAnimation === 'none',
+    JSON.stringify(reducedClaimsPreview),
+  );
+  const fullMotionClaimsPreview =
+    await claimsPreviewAnimationOnFreshPage(false);
+  check(
+    'the claims craft preview drift and sheen do run without prefers-reduced-motion (the reduced-motion guard above is a real bypass)',
+    fullMotionClaimsPreview.found &&
+      fullMotionClaimsPreview.glyphAnimation === 'uap-craft-preview-drift' &&
+      fullMotionClaimsPreview.sheenAnimation === 'uap-craft-preview-sheen',
+    JSON.stringify(fullMotionClaimsPreview),
+  );
 
   // Nearby historical cases: the truth is computed here, independently,
   // from the same bundled dataset the dossier itself lazily fetches, so

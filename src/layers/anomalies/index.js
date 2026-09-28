@@ -7,6 +7,7 @@ import {
   mapAnalystRecord,
   describeYear,
   createAnomalyOverlayEntry,
+  statusHue,
 } from './model.js';
 import { yearHistogram } from './records.js';
 import { createAnomalyRenderer } from './rendering.js';
@@ -14,6 +15,7 @@ import { createChronometer } from './chronometer.js';
 import { applyAtlasAtmosphere } from './atmosphere.js';
 import { safeSourceUrl } from '../../sources/safeUrl.js';
 import { resolveImageryHost } from '../../maps/imageryHost.js';
+import { buildCraftPreview } from '../../ui/craftPreview.js';
 export * from './model.js';
 export { normalizeAnomalySnapshot, yearHistogram } from './records.js';
 export { createAnomalySource } from './source.js';
@@ -241,7 +243,7 @@ export function createAnomaliesLayer({
       <button type="button" class="uap-close" aria-label="Close case">Close</button>
       <p class="uap-code">${escapeHtml(row.source)} / ${escapeHtml(row.status)}</p>
       <h2>${escapeHtml(detail?.title || row.title || 'Report')}</h2>
-      <img class="uap-glyph" alt="" src="${assetBase}glyphs/${escapeHtml(row.craft)}.svg">
+      ${buildCraftPreview({ shape: row.craft, hue: statusHue(row.status) })}
       <dl>
         <dt>When</dt><dd>${escapeHtml(when)}</dd>
         <dt>Where</dt><dd>${escapeHtml(detail?.location?.place || `${row.lat.toFixed(2)}, ${row.lon.toFixed(2)}`)}${row.precisionKm ? ` (within ${row.precisionKm} km)` : ''}</dd>

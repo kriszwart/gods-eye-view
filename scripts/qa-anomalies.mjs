@@ -7,6 +7,8 @@
  * overrides).
  */
 import puppeteer from 'puppeteer';
+import { SHAPE_GLYPH_URLS } from '../src/layers/anomalies/shapeGlyphs.js';
+import { statusHue } from '../src/layers/anomalies/model.js';
 const base = process.env.QA_BASE_URL || 'http://localhost:4173';
 const browser = await puppeteer.launch({
   headless: true,
@@ -308,6 +310,124 @@ try {
   });
   check('focusCase opens the dossier', dossier.open === true);
   check('Escape closes the dossier', dossier.closed === true);
+
+  // Task 3, luminous-pins: the dossier header carries an animated craft
+  // preview (src/ui/craftPreview.js) for any case whose shape resolves to a
+  // shipped glyph - which every anomaly row does, since records.js already
+  // defaults a missing craft to 'orb' at decode time. The expected glyph
+  // URL and accent hue are pulled from the SAME source modules the layer
+  // itself imports (shapeGlyphs.js's SHAPE_GLYPH_URLS, model.js's
+  // statusHue), fetched here in Node, rather than hardcoded, so this check
+  // stays honest against either table changing shape.
+  const previewCase = await page.evaluate(async () => {
+    const m = window.__godsEyeView.dataManager;
+    const mod = m.layers.get('anomalies').module;
+    const records = mod.getAnalystRecords(5);
+    const record = records.find((r) => r.craft && r.status) || records[0];
+    await mod.focusCase(record.id);
+    await new Promise((r) => setTimeout(r, 400));
+    const d = document.querySelector('.uap-dossier');
+    const preview = d?.querySelector('.uap-craft-preview');
+    const img = preview?.querySelector('.uap-craft-preview-glyph');
+    const result = {
+      craft: record.craft,
+      status: record.status,
+      found: !!preview,
+      src: img ? img.getAttribute('src') : null,
+      alt: img ? img.getAttribute('alt') : null,
+      loading: img ? img.getAttribute('loading') : null,
+      accent: preview
+        ? preview.style.getPropertyValue('--uap-preview-accent').trim()
+        : null,
+    };
+    d?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    return result;
+  });
+  check(
+    "a shaped case's dossier shows the animated craft preview with the matching glyph, loaded lazily",
+    previewCase.found &&
+      previewCase.src === SHAPE_GLYPH_URLS[previewCase.craft] &&
+      previewCase.loading === 'lazy' &&
+      !!previewCase.alt,
+    JSON.stringify(previewCase),
+  );
+  check(
+    "the craft preview's accent border matches the case's own status hue",
+    previewCase.accent.toLowerCase() ===
+      statusHue(previewCase.status).toLowerCase(),
+    JSON.stringify(previewCase),
+  );
+
+  // Reduced motion: the preview's drift and sheen are pure CSS keyframes
+  // (anomaly-atlas.css's .uap-craft-preview rules), so a computed-style
+  // read proves the guard directly - no diagnostics function needed, unlike
+  // live claims' JS-driven pulse (qa-claims.mjs). A fresh, isolated page
+  // per branch, since prefers-reduced-motion is set once at page creation.
+  async function craftPreviewAnimationNames(reduceMotion) {
+    const ctx = await browser.createBrowserContext();
+    const p = await ctx.newPage();
+    if (reduceMotion) {
+      await p.emulateMediaFeatures([
+        { name: 'prefers-reduced-motion', value: 'reduce' },
+      ]);
+    }
+    await p.goto(`${base}/?welcome=0`, { waitUntil: 'domcontentloaded' });
+    await p.waitForFunction(() => window.__godsEyeView?.dataManager, {
+      timeout: 60000,
+    });
+    // A fresh page starts with the layer registered but off (see "anomalies
+    // layer registered and initially off" above): enable it and wait for
+    // real rows before asking for a record to focus.
+    await p.evaluate(() =>
+      window.__godsEyeView.dataManager.setEnabled('anomalies', true, {
+        origin: 'user',
+      }),
+    );
+    await p.waitForFunction(
+      () =>
+        (window.__godsEyeView.dataManager.layers
+          .get('anomalies')
+          ?.module?.getStats?.().count ?? 0) > 0,
+      { timeout: 30000 },
+    );
+    const names = await p.evaluate(async () => {
+      const m = window.__godsEyeView.dataManager;
+      const mod = m.layers.get('anomalies').module;
+      const records = mod.getAnalystRecords(5);
+      const record = records.find((r) => r.craft && r.status) || records[0];
+      await mod.focusCase(record.id);
+      await new Promise((r) => setTimeout(r, 400));
+      const preview = document.querySelector('.uap-dossier .uap-craft-preview');
+      const glyph = preview?.querySelector('.uap-craft-preview-glyph');
+      return {
+        found: !!preview,
+        glyphAnimation: glyph ? getComputedStyle(glyph).animationName : null,
+        sheenAnimation: preview
+          ? getComputedStyle(preview, '::after').animationName
+          : null,
+      };
+    });
+    await ctx.close();
+    return names;
+  }
+  const reducedNames = await craftPreviewAnimationNames(true);
+  check(
+    'the craft preview drift and sheen never run under prefers-reduced-motion',
+    reducedNames.found &&
+      reducedNames.glyphAnimation === 'none' &&
+      reducedNames.sheenAnimation === 'none',
+    JSON.stringify(reducedNames),
+  );
+  const fullMotionNames = await craftPreviewAnimationNames(false);
+  check(
+    'the craft preview drift and sheen do run without prefers-reduced-motion (the reduced-motion guard above is a real bypass)',
+    fullMotionNames.found &&
+      fullMotionNames.glyphAnimation === 'uap-craft-preview-drift' &&
+      fullMotionNames.sheenAnimation === 'uap-craft-preview-sheen',
+    JSON.stringify(fullMotionNames),
+  );
 
   // Cross-click dossier switch (feat/atlas: the Void style and spectrum
   // accents, piece 6): with one dossier open, a real click on a different

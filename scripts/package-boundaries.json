@@ -900,7 +900,8 @@
       "src/layers/anomalies/chronometer.js",
       "src/sources/safeUrl.js",
       "src/maps/imageryHost.js",
-      "src/ui/glowSprite.js"
+      "src/ui/glowSprite.js",
+      "src/ui/craftPreview.js"
     ],
     "external": ["cesium"]
   },
@@ -932,7 +933,9 @@
       "src/layers/liveClaims/rendering.js",
       "src/layers/liveClaims/nearby.js",
       "src/sources/safeUrl.js",
-      "src/ui/glowSprite.js"
+      "src/ui/glowSprite.js",
+      "src/ui/craftPreview.js",
+      "src/layers/anomalies/shapeGlyphs.js"
     ],
     "external": ["cesium"]
   },
@@ -1389,6 +1392,7 @@
       "src/layers/liveClaims/rendering.js",
       "src/layers/liveClaims/nearby.js",
       "src/ui/glowSprite.js",
+      "src/ui/craftPreview.js",
       "src/app/layers/firms.js",
       "src/app/layers/flights.js",
       "src/app/layers/militaryAwareness.js",
@@ -2136,6 +2140,7 @@
       "src/layers/liveClaims/rendering.js",
       "src/layers/liveClaims/nearby.js",
       "src/ui/glowSprite.js",
+      "src/ui/craftPreview.js",
       "src/app/layers/firms.js",
       "src/app/layers/flights.js",
       "src/app/layers/militaryAwareness.js",

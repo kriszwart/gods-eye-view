@@ -758,6 +758,151 @@ try {
     `maxSaturation=${afterVoid.maxSaturation.toFixed(2)}`,
   );
 
+  // Close-range shape glyphs (task 2, luminous-pins): below the shared
+  // close-zoom threshold (matching ancient sites' own closest-band cutoff,
+  // 500,000m - see rendering.js's SHAPE_GLYPH_HEIGHT_THRESHOLD_M) anomaly
+  // points swap from the neutral glow sprite to a status-hued shape-glyph
+  // billboard (the row's own reported craft/shape, see shapeGlyphs.js),
+  // bounded to the current camera view rectangle so a dense cluster like
+  // GEIPAN's own France concentration never rebuilds thousands of
+  // billboards in one frame. Proven over that same France cluster: glyph
+  // billboards present and bounded, one real case's glyph matching its own
+  // shape field (fetched from the dataset, never hardcoded), and zooming
+  // back out restoring the neutral glow sprite - read directly off the
+  // picked billboard's own imageId (glow:... vs shape:...) via a real
+  // scene.pick(), so this proves what actually rendered and is still
+  // pickable, not just what the renderer intended.
+  //
+  // The dial is forced to a known year first (module.setYear) so this check
+  // does not depend on wherever earlier steps in this script (arrow keys,
+  // Play) left it: every candidate below is chosen well before that year,
+  // so it stays inWindow regardless.
+  await page.evaluate(() => {
+    window.__godsEyeView.dataManager.layers
+      .get('anomalies')
+      ?.module?.setYear?.(2026);
+  });
+  const shapeGlyphTarget = await page.evaluate(async () => {
+    const r = await fetch('/anomalies/anomalies.v1.json');
+    const json = await r.json();
+    const cols = json.columns;
+    const crafts = json.crafts;
+    for (let i = 0; i < cols.id.length; i++) {
+      const lat = cols.lat[i];
+      const lon = cols.lon[i];
+      const year = new Date(cols.t[i] * 86400000).getUTCFullYear();
+      if (
+        typeof lat === 'number' &&
+        typeof lon === 'number' &&
+        lat > 48.3 &&
+        lat < 49.3 &&
+        lon > 1.7 &&
+        lon < 2.9 &&
+        year < 2010 &&
+        cols.hero?.[i] !== 1
+      ) {
+        return { lat, lon, craft: crafts[cols.craft[i]] || 'orb' };
+      }
+    }
+    return null;
+  });
+  check(
+    'a France-area, pre-2010, non-hero case exists in the dataset for the shape-glyph check',
+    !!shapeGlyphTarget,
+    JSON.stringify(shapeGlyphTarget),
+  );
+
+  const projectSite = (site) => {
+    const viewer = window.__godsEyeView.viewer;
+    const ellipsoid = viewer.scene.globe.ellipsoid;
+    viewer.camera.cancelFlight();
+    viewer.camera.setView({
+      destination: ellipsoid.cartographicToCartesian({
+        longitude: (site.lon * Math.PI) / 180,
+        latitude: (site.lat * Math.PI) / 180,
+        height: site.height,
+      }),
+      orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 },
+    });
+    const target = ellipsoid.cartographicToCartesian({
+      longitude: (site.lon * Math.PI) / 180,
+      latitude: (site.lat * Math.PI) / 180,
+      height: 0,
+    });
+    const p = viewer.scene.cartesianToCanvasCoordinates(target);
+    return p ? { x: p.x, y: p.y } : null;
+  };
+  const pickImageIdAt = async (point) =>
+    point
+      ? page.evaluate((pt) => {
+          const scene = window.__godsEyeView.viewer.scene;
+          const picked = scene.pick({ x: pt.x, y: pt.y }, 12, 12);
+          const primitive = picked?.primitive;
+          const anomalyId =
+            picked?.id?.anomalyId ?? primitive?.id?.anomalyId ?? null;
+          const imageId =
+            typeof primitive?.image === 'string' ? primitive.image : null;
+          const diag = window.__godsEyeView.dataManager.layers
+            .get('anomalies')
+            ?.module?.getRenderDiagnostics?.();
+          return { anomalyId, imageId, diag };
+        }, point)
+      : null;
+
+  let closeGlyph = null;
+  let farGlyph = null;
+  if (shapeGlyphTarget) {
+    const closePoint = await page.evaluate(projectSite, {
+      lat: shapeGlyphTarget.lat,
+      lon: shapeGlyphTarget.lon,
+      height: 200000,
+    });
+    await new Promise((r) => setTimeout(r, 900));
+    await page.evaluate(() =>
+      window.__godsEyeView.viewer.scene.requestRender(),
+    );
+    await new Promise((r) => setTimeout(r, 100));
+    closeGlyph = await pickImageIdAt(closePoint);
+
+    const farPoint = await page.evaluate(projectSite, {
+      lat: shapeGlyphTarget.lat,
+      lon: shapeGlyphTarget.lon,
+      height: 900000,
+    });
+    await new Promise((r) => setTimeout(r, 900));
+    await page.evaluate(() =>
+      window.__godsEyeView.viewer.scene.requestRender(),
+    );
+    await new Promise((r) => setTimeout(r, 100));
+    farGlyph = await pickImageIdAt(farPoint);
+  }
+  check(
+    'close zoom over a dense area (France) renders shape-glyph billboards, present and bounded',
+    closeGlyph?.diag?.glyphBillboardCount > 0 &&
+      closeGlyph.diag.glyphBillboardCount <
+        closeGlyph.diag.maxShapeGlyphBillboards,
+    JSON.stringify(closeGlyph?.diag),
+  );
+  check(
+    'the picked close-zoom billboard is a shape glyph (imageId starts "shape:") matching the case\'s own reported shape',
+    typeof closeGlyph?.imageId === 'string' &&
+      closeGlyph.imageId.startsWith('shape:') &&
+      closeGlyph.imageId.includes(`:${shapeGlyphTarget?.craft}:`) &&
+      closeGlyph.anomalyId != null,
+    JSON.stringify({
+      imageId: closeGlyph?.imageId,
+      craft: shapeGlyphTarget?.craft,
+    }),
+  );
+  check(
+    'zooming back out restores the neutral glow sprite (imageId prefix flips to "glow:") and clears the glyph tier',
+    typeof farGlyph?.imageId === 'string' &&
+      farGlyph.imageId.startsWith('glow:') &&
+      farGlyph.anomalyId != null &&
+      farGlyph.diag?.glyphBillboardCount === 0,
+    JSON.stringify({ imageId: farGlyph?.imageId, diag: farGlyph?.diag }),
+  );
+
   // The Spotter plate is a sibling of the viewer container, not a child of
   // the anomalies layer's own DOM (task 5 fix round 1): disabling the
   // layer must still close it, since the Spotter button that opened it

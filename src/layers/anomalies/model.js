@@ -56,6 +56,40 @@ export function pointColor(row) {
     : mix(rgb(PALETTE.violet), rgb(PALETTE.magenta), (u - 0.6) / 0.4);
 }
 
+/**
+ * One fixed hue per status (task 2, luminous-pins: the close-range
+ * shape-glyph billboards in rendering.js). `pointColor` above takes a
+ * continuous `unexplained` value for anything short of contested/explained,
+ * so it can produce any of millions of distinct RGB values along the
+ * dim/violet/magenta ramp - fine for the glow-sprite tier, which applies
+ * colour per billboard via Cesium's own colour multiply, but wrong for a
+ * composed glyph raster, where a distinct hue means a distinct cached
+ * canvas. Bounding that cache to a small, fixed set of hues means
+ * quantising to the same four status buckets the chronometer's own status
+ * filters, readout tint (`chronometer.js`'s `setReadoutTint`,
+ * `anomaly-atlas.css`'s `.uap-readout-<status>` rules) and legend
+ * (`index.js`) already use: explained -> dim, insufficient ("too little
+ * data") -> violet, unresolved -> magenta, contested -> amber. A status
+ * outside this set (defensive only - `records.js` already defaults a
+ * missing status to `'unresolved'` at decode time) falls back to magenta,
+ * the same systemic default.
+ */
+export const STATUS_HUE = Object.freeze({
+  explained: PALETTE.dim,
+  insufficient: PALETTE.violet,
+  unresolved: PALETTE.magenta,
+  contested: PALETTE.amber,
+});
+
+/**
+ * The fixed hue for a row's status (see `STATUS_HUE` above).
+ * @param {string} status
+ * @returns {string} A `#rrggbb` colour.
+ */
+export function statusHue(status) {
+  return STATUS_HUE[status] || PALETTE.magenta;
+}
+
 /** Pixel size: the current year reads loud, the past recedes. */
 export function pointSize(row, { current = true } = {}) {
   const u = row.unexplained ?? 0.5;

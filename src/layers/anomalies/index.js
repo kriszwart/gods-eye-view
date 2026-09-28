@@ -680,6 +680,13 @@ export function createAnomaliesLayer({
       return { count: rows.length, lastUpdate, error: lastError };
     },
 
+    /** Render diagnostics for the qa gate (task 2, luminous-pins): camera
+     * height, whether the close-range shape-glyph tier is currently active,
+     * its billboard count and the composed-glyph cache size. */
+    getRenderDiagnostics() {
+      return renderer?.getDiagnostics() ?? null;
+    },
+
     /** Voice and UI hooks. */
     setYear(y) {
       chrono?.setYear(y);

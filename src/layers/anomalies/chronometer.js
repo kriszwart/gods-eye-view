@@ -117,6 +117,7 @@ export function createChronometer({
     landmarksLayer.className = 'uap-landmarks';
     root.appendChild(landmarksLayer);
     landmarkPlate.className = 'uap-landmark-plate';
+    landmarkPlate.id = 'uap-landmark-plate';
     landmarkPlate.hidden = true;
     landmarkPlate.innerHTML = `
       <p class="uap-landmark-label"></p>
@@ -156,15 +157,42 @@ export function createChronometer({
    * can carry an open plate's position along with its mark rather than
    * leaving it stale. */
   let openWave = null;
+  /** The mark that owns the currently open plate, or null: a focusout on
+   * that mark whose relatedTarget lands inside the plate (or vice versa)
+   * must not count as leaving the pair. */
+  let openMark = null;
+  /** Pending close, or null: mouseleave on either the mark or the plate
+   * defers the close by one tick instead of closing immediately, so a
+   * pointer crossing the visual gap between mark and plate (mouseleave on
+   * one fires before mouseenter on the other) never finds the plate gone.
+   * Re-entering either element, or refocusing, cancels it. */
+  let closeTimer = null;
+
+  function cancelScheduledClose() {
+    if (closeTimer !== null) {
+      clearTimeout(closeTimer);
+      closeTimer = null;
+    }
+  }
+
+  function scheduleClose() {
+    cancelScheduledClose();
+    closeTimer = setTimeout(() => {
+      closeTimer = null;
+      closeLandmark();
+    }, 200);
+  }
 
   /** Fill and show the landmark note plate at a mark's own screen point (CSS
    * pixels within `root`, which both the svg and `landmarksLayer` fill
    * edge-to-edge, so the mark's own left/top double as the plate's anchor
    * with no extra conversion). No-op on the deep-time dial, where
    * `landmarkPlate` was never created. */
-  function openLandmark(wave, point) {
+  function openLandmark(wave, point, mark) {
     if (!landmarkPlate) return;
+    cancelScheduledClose();
     openWave = wave;
+    openMark = mark;
     landmarkPlate.querySelector('.uap-landmark-label').textContent = wave.label;
     landmarkPlate.querySelector('.uap-landmark-note').textContent = wave.note;
     const link = landmarkPlate.querySelector('.uap-landmark-link');
@@ -182,15 +210,30 @@ export function createChronometer({
   }
 
   function closeLandmark() {
+    cancelScheduledClose();
     openWave = null;
+    openMark = null;
     if (landmarkPlate) landmarkPlate.hidden = true;
   }
 
+  /** True when `target` (a focusout or focusin's relatedTarget) is still
+   * inside the mark/plate pair - the currently open mark, or the plate
+   * itself (which is where the source link lives). */
+  const staysWithinPair = (mark, target) =>
+    !!target &&
+    ((mark?.contains(target) ?? false) ||
+      (landmarkPlate?.contains(target) ?? false));
+
   /** One keyboard-reachable landmark mark per waves.js entry, built once (not
    * per draw()): a real `<button>`, natively focusable, so it needs no
-   * explicit tabindex or role. Hover or focus opens the note plate, Escape
-   * or blur closes it. Built once rather than replaced every draw() so an
-   * open plate's own focus survives a relayout - replacing a focused
+   * explicit tabindex or role. Hover or focus opens the note plate; it stays
+   * open while the pointer or focus is anywhere inside the mark or the
+   * plate (mouseenter on the plate cancels a pending close, so the Source
+   * link inside the plate is reachable by pointer or by Tab), and closes on
+   * Escape or once both have been left for a moment. `aria-describedby`
+   * ties the mark to the plate so assistive tech announces the note when
+   * the mark receives focus. Built once rather than replaced every draw()
+   * so an open plate's own focus survives a relayout - replacing a focused
    * element fires blur, which would otherwise close the plate on every
    * redraw while the globe (and so the projected disc) is still moving. */
   const landmarkEntries = landmarksLayer
@@ -201,10 +244,16 @@ export function createChronometer({
         mark.className = 'uap-landmark';
         mark.dataset.year = String(wave.year);
         mark.setAttribute('aria-label', `${wave.year}: ${wave.label}`);
-        mark.addEventListener('mouseenter', () => openLandmark(wave, point));
-        mark.addEventListener('mouseleave', closeLandmark);
-        mark.addEventListener('focus', () => openLandmark(wave, point));
-        mark.addEventListener('blur', closeLandmark);
+        mark.setAttribute('aria-describedby', landmarkPlate.id);
+        mark.addEventListener('mouseenter', () =>
+          openLandmark(wave, point, mark),
+        );
+        mark.addEventListener('mouseleave', scheduleClose);
+        mark.addEventListener('focus', () => openLandmark(wave, point, mark));
+        mark.addEventListener('focusout', (e) => {
+          if (staysWithinPair(mark, e.relatedTarget)) return;
+          closeLandmark();
+        });
         mark.addEventListener('keydown', (e) => {
           if (e.key === 'Escape') closeLandmark();
         });
@@ -212,6 +261,18 @@ export function createChronometer({
         return { wave, mark, point };
       })
     : [];
+
+  if (landmarkPlate) {
+    landmarkPlate.addEventListener('mouseenter', cancelScheduledClose);
+    landmarkPlate.addEventListener('mouseleave', scheduleClose);
+    landmarkPlate.addEventListener('focusout', (e) => {
+      if (staysWithinPair(openMark, e.relatedTarget)) return;
+      closeLandmark();
+    });
+    landmarkPlate.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeLandmark();
+    });
+  }
 
   /** Reposition every landmark mark from `pointFor(wave)` (CSS pixels within
    * `root`); if the note plate is currently open, carries it to the same
@@ -226,7 +287,7 @@ export function createChronometer({
     }
     if (openWave) {
       const entry = landmarkEntries.find((e) => e.wave === openWave);
-      if (entry) openLandmark(openWave, entry.point);
+      if (entry) openLandmark(openWave, entry.point, entry.mark);
     }
   }
 

@@ -149,6 +149,7 @@ function buildHistogramSvg(buckets) {
  *     countries: Array<string>}|null>,
  *   getLiveClaimsStats: () => ({count: number, status: string}|null),
  *   container: HTMLElement,
+ *   onClose: () => void,
  * }} deps
  * @returns {{toggle: () => boolean, close: () => void, isOpen: () => boolean, destroy: () => void}}
  */
@@ -158,6 +159,7 @@ export function createObservatory({
   fetchAncientStats,
   getLiveClaimsStats,
   container,
+  onClose,
 } = {}) {
   const root = document.createElement('section');
   root.className = 'uap-observatory';
@@ -288,15 +290,14 @@ export function createObservatory({
         const url = glyphUrlForType(type);
         icon.style.setProperty('-webkit-mask-image', `url('${url}')`);
         icon.style.setProperty('mask-image', `url('${url}')`);
+        // Minor 9a (fix wave, atlas-instruments): the type row used to
+        // print the shipped glyph's own filename (an internal asset name,
+        // for example "trilith") alongside its label - a visitor reads the
+        // type name, not our file layout, so only the label appears now.
         const label = document.createElement('span');
         label.textContent =
           String(type).charAt(0).toUpperCase() + String(type).slice(1);
-        const glyphName = document.createElement('code');
-        glyphName.textContent = url
-          .split('/')
-          .pop()
-          .replace(/\.svg$/, '');
-        li.append(icon, label, glyphName);
+        li.append(icon, label);
         typeList.appendChild(li);
       }
       ancientSection.appendChild(typeList);
@@ -373,8 +374,21 @@ export function createObservatory({
       .catch(() => renderDecades([]));
   }
 
+  /** Hide the plate and tell the caller a close actually happened, from
+   * every path that can close it: the Escape key, the Close button, and
+   * the standalone toggle button's own `toggle()`/`close()` calls below.
+   * Guarded on the plate already being open, so calling this on an
+   * already-closed plate (its documented idempotent case, still relied on
+   * by a shell rewire that closes it unconditionally on every connect,
+   * whether or not it was open) stays a true no-op and never re-fires
+   * `onClose` - fix 3, atlas-instruments: without a shared close path, the
+   * Escape and Close-button routes never told the shell the plate had
+   * shut, so its persistent toggle button was left reading
+   * aria-pressed="true" after either one. */
   function close() {
+    if (root.hidden) return;
     root.hidden = true;
+    onClose?.();
   }
   function open() {
     root.hidden = false;

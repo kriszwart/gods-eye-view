@@ -187,13 +187,15 @@ test('_connectLiveClaimsShell detaching to no manager detaches the outgoing modu
 
 /** A fake search source that throws on every `getSnapshot()` call while
  * `state.failing` is true, and returns `makeValue()` once flipped to false.
- * `_getSkySearchRecords` is called twice within a single
+ * `_getSkySearchRecords` is awaited twice within a single
  * `_buildCaseSearchRecords()` round (directly, and again inside
- * `_getGeipanSearchRecords`, since neither call has resolved and cached yet
- * when the other starts) - scripting by a shared failing/succeeding state
- * rather than a fixed per-call sequence keeps both of that round's calls
- * consistent with each other, the way a real network outage would, rather
- * than one arbitrarily drawing a later "already recovered" step. */
+ * `_getGeipanSearchRecords`) but, since fix 2 (atlas-instruments), the
+ * second caller shares the first's in-flight promise rather than starting
+ * its own `getSnapshot()` call - scripting by a shared failing/succeeding
+ * state rather than a fixed per-call sequence still keeps both of that
+ * round's callers consistent with each other, the way a real network
+ * outage would, rather than one arbitrarily drawing a later "already
+ * recovered" step. */
 function makeSwitchableSearchSource(makeValue) {
   const state = { failing: true };
   return {
@@ -201,6 +203,23 @@ function makeSwitchableSearchSource(makeValue) {
     async getSnapshot() {
       if (state.failing) throw new Error('network hiccup');
       return makeValue();
+    },
+  };
+}
+
+/** A fake search source counting its own `getSnapshot()` calls and resolving
+ * every one with `rows` after a queued microtask (so two callers that start
+ * in the same synchronous tick are both still pending when the second one
+ * checks the in-flight cache, the way two tiers awaited from the same
+ * `Promise.all` round genuinely overlap). */
+function makeCountingSearchSource(rows) {
+  const calls = { count: 0 };
+  return {
+    calls,
+    async getSnapshot() {
+      calls.count++;
+      await Promise.resolve();
+      return rows;
     },
   };
 }
@@ -265,6 +284,39 @@ test('_buildCaseSearchRecords does not cache a corpus degraded by a transient ti
     bindings._caseSearchRecords,
     secondPass,
     'a fully-succeeded corpus is now cached',
+  );
+});
+
+test('_buildCaseSearchRecords fetches each dataset exactly once on a cold first search, despite each tier being awaited twice in the same round (fix 2, atlas-instruments)', async () => {
+  const bindings = makeBindings();
+  const skySource = makeCountingSearchSource([
+    { id: 'sky-1', title: 'Roswell debris', year: 1947, craft: 'disc' },
+  ]);
+  bindings._anomalySearchSource = skySource;
+  const ancientSource = makeCountingSearchSource(
+    makeAncientSnapshot([
+      {
+        id: 'ancient-1',
+        name: 'Stonehenge',
+        type: 'circle',
+        period: 'c. 2500 BCE',
+        country: 'United Kingdom',
+      },
+    ]),
+  );
+  bindings._ancientSearchSource = ancientSource;
+
+  await bindings._buildCaseSearchRecords();
+
+  assert.equal(
+    skySource.calls.count,
+    1,
+    'the sky dataset is fetched once, not once directly and once more inside _getGeipanSearchRecords',
+  );
+  assert.equal(
+    ancientSource.calls.count,
+    1,
+    'the ancient-sites dataset is fetched once, not once for the hero tier and once more for the sweep tier',
   );
 });
 

@@ -181,6 +181,37 @@ try {
     const note = plate?.querySelector('.uap-landmark-note')?.textContent;
     const link = plate?.querySelector('.uap-landmark-link');
     const href = link && !link.hidden ? link.getAttribute('href') : null;
+    // Fix 1 (atlas-instruments): aria-describedby ties the mark to its own
+    // plate, so assistive tech announces the note on focus.
+    const describesPlate =
+      !!plate?.id && mark?.getAttribute('aria-describedby') === plate.id;
+
+    // Fix 1's core repro: the pointer crosses the visual gap between the
+    // mark and the plate (mouseleave on the mark, then mouseenter on the
+    // plate - the plate never receives a mouseenter without a leave first
+    // in a real drag, but the two overlapping here is exactly what proves
+    // the plate stays open through the gap rather than vanishing on the
+    // mark's own mouseleave). Dispatched synchronously, well inside the
+    // close-scheduling delay chronometer.js now uses.
+    mark?.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+    plate?.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+    const survivesPointerGap = plate ? !plate.hidden : null;
+
+    // The source link must be a real, reachable click target: intercept its
+    // default navigation (this check must never actually leave the page)
+    // and confirm the click itself lands and the plate is still open
+    // immediately afterwards, proving the plate never closed underneath
+    // the pointer on the way to the link.
+    let linkClicked = false;
+    const onClick = (e) => {
+      linkClicked = true;
+      e.preventDefault();
+    };
+    link?.addEventListener('click', onClick, { capture: true });
+    link?.click();
+    link?.removeEventListener('click', onClick, { capture: true });
+    const openAfterLinkClick = plate ? !plate.hidden : null;
+
     mark?.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
     );
@@ -191,6 +222,10 @@ try {
       label,
       note,
       href,
+      describesPlate,
+      survivesPointerGap,
+      linkClicked,
+      openAfterLinkClick,
       closedAfterEscape,
     };
   });
@@ -207,6 +242,25 @@ try {
     typeof landmark1952.href === 'string' &&
       landmark1952.href.startsWith('https://'),
     JSON.stringify({ href: landmark1952.href }),
+  );
+  check(
+    "the mark's aria-describedby names its own plate",
+    landmark1952.describesPlate === true,
+    JSON.stringify({ describesPlate: landmark1952.describesPlate }),
+  );
+  check(
+    'the note plate survives the pointer crossing the gap from the mark to the plate',
+    landmark1952.survivesPointerGap === true,
+    JSON.stringify({ survivesPointerGap: landmark1952.survivesPointerGap }),
+  );
+  check(
+    'a real click lands on the source link, and the plate is still open right after',
+    landmark1952.linkClicked === true &&
+      landmark1952.openAfterLinkClick === true,
+    JSON.stringify({
+      linkClicked: landmark1952.linkClicked,
+      openAfterLinkClick: landmark1952.openAfterLinkClick,
+    }),
   );
   check(
     'Escape closes the landmark note plate',
@@ -1373,16 +1427,33 @@ try {
     ),
     observatory.footerText,
   );
+  // Fix 3 (atlas-instruments): Escape closes the plate through
+  // observatory.js's own close(), which must now also tell the shell via
+  // its onClose callback, so the persistent toggle button (built and owned
+  // by LayerBindings, not this plate) drops back to aria-pressed="false"
+  // and receives focus back, rather than being left stuck reading "true"
+  // for a plate that is no longer on screen.
   const observatoryEscape = await page.evaluate(() => {
     const plate = document.querySelector('.uap-observatory');
+    const btn = document.querySelector('.uap-observatory-toggle');
     plate?.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
     );
-    return { closed: plate ? plate.hidden : null };
+    return {
+      closed: plate ? plate.hidden : null,
+      toggleAriaPressed: btn?.getAttribute('aria-pressed'),
+      toggleHasFocus: !!btn && document.activeElement === btn,
+    };
   });
   check(
     'Escape closes the Observatory plate',
     observatoryEscape.closed === true,
+    JSON.stringify(observatoryEscape),
+  );
+  check(
+    "Escape-closing the Observatory resets the toggle's aria-pressed and returns focus to it",
+    observatoryEscape.toggleAriaPressed === 'false' &&
+      observatoryEscape.toggleHasFocus === true,
     JSON.stringify(observatoryEscape),
   );
 

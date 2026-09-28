@@ -67,6 +67,18 @@ export class LayerBindings {
     this._anomalySearchSource = null;
     this._ancientSearchSource = null;
     this._skySearchRecords = null;
+    // The in-flight fetch-and-decode promise for the field above (or for
+    // `_ancientSnapshot` below), while one is running: a fix-wave finding
+    // (fix 2, atlas-instruments) - `_getSkySearchRecords` is awaited both
+    // directly and, in the same `Promise.all` round, from inside
+    // `_getGeipanSearchRecords`, and likewise `_getAncientSnapshot` from
+    // both `_getAncientSearchRecords` and `_getAncientSweepSearchRecords`;
+    // with no cache set yet on the first call of a cold search, the second
+    // call used to start its own redundant fetch. Caching the pending
+    // promise itself (cleared once the fetch settles, success or failure)
+    // means every caller in the same round shares the one fetch, while a
+    // failed round still leaves nothing cached, so the next call retries.
+    this._skySearchRecordsInFlight = null;
     this._ancientSearchRecords = null;
     // Search's cross-register corpus (task 3, atlas-instruments): the
     // GEIPAN and ancient-sweep tiers derive from the same two fetches as
@@ -76,6 +88,7 @@ export class LayerBindings {
     // and its prefix-bucket index (src/app/caseSearch.js) are each cached
     // once here, never rebuilt per keystroke.
     this._ancientSnapshot = null;
+    this._ancientSnapshotInFlight = null;
     this._ancientSweepSearchRecords = null;
     this._geipanSearchRecords = null;
     this._caseSearchRecords = null;
@@ -471,7 +484,21 @@ export class LayerBindings {
       fetchSkyYears: () => this._fetchObservatorySkyYears(),
       fetchAncientStats: () => this._fetchObservatoryAncientStats(),
       getLiveClaimsStats: () => this._observatoryLiveClaimsStats(),
-      container: this.viewer.container,
+      container: this.viewer?.container,
+      // Fix 3 (atlas-instruments): the plate's own Escape and Close-button
+      // paths close it without going through this class at all, so the
+      // standalone toggle button below was left stuck at
+      // aria-pressed="true". `onClose` fires from every path that actually
+      // closes the plate (observatory.js's own `close()`), including this
+      // method's own `toggle()` call just below, so resetting the button
+      // here and in `_closeObservatory` is redundant but harmless, never
+      // wrong. Also returns focus to the toggle (minor 7): the dialog that
+      // held it just disappeared, so the toggle is where focus should land
+      // next, same as a standard dialog-close pattern.
+      onClose: () => {
+        this._observatoryToggleBtn?.setAttribute('aria-pressed', 'false');
+        this._observatoryToggleBtn?.focus?.();
+      },
     });
     return this._observatory.toggle();
   }
@@ -555,8 +582,15 @@ export class LayerBindings {
       this._observatoryAncientStats = {
         count: json.count,
         types: Array.isArray(json.types) ? json.types : [],
+        // The literal string "preserved" turns up in this header alongside
+        // real country names (an upstream data-quality artefact in the
+        // sweep's own countries[] field, not a place), so it is filtered
+        // out here next to the existing empty-string guard rather than
+        // counted as a country.
         countries: Array.isArray(json.countries)
-          ? json.countries.filter((c) => typeof c === 'string' && c)
+          ? json.countries.filter(
+              (c) => typeof c === 'string' && c && c !== 'preserved',
+            )
           : [],
       };
     } catch (error) {
@@ -710,27 +744,38 @@ export class LayerBindings {
    * through its `getAnalystRecords()` (which returns `[]` while the layer
    * is disabled, defeating a search meant to find a case whose layer the
    * user never turned on). Fetched once and cached on this instance; a
-   * failed fetch is not cached, so the next query tries again.
+   * failed fetch is not cached, so the next query tries again. While a
+   * fetch is in flight, every concurrent caller (this method is awaited
+   * both directly and from inside `_getGeipanSearchRecords` in the same
+   * `_buildCaseSearchRecords` round) shares that one promise rather than
+   * starting a fetch of its own - see `_skySearchRecordsInFlight`'s own
+   * doc comment in the constructor.
    */
   async _getSkySearchRecords() {
     if (this._skySearchRecords) return this._skySearchRecords;
+    if (this._skySearchRecordsInFlight) return this._skySearchRecordsInFlight;
     this._anomalySearchSource ||= createAnomalySource({
       baseUrl: this._caseSearchBaseUrl('anomalies/'),
     });
-    try {
-      const rows = await this._anomalySearchSource.getSnapshot();
-      this._skySearchRecords = rows.map((r) => ({
-        id: r.id,
-        register: 'sky',
-        title: r.title,
-        year: r.year,
-        craft: r.craft,
-      }));
-    } catch (error) {
-      console.warn('[UI:CaseSearch] Sky dataset unavailable', error);
-      return [];
-    }
-    return this._skySearchRecords;
+    this._skySearchRecordsInFlight = (async () => {
+      try {
+        const rows = await this._anomalySearchSource.getSnapshot();
+        this._skySearchRecords = rows.map((r) => ({
+          id: r.id,
+          register: 'sky',
+          title: r.title,
+          year: r.year,
+          craft: r.craft,
+        }));
+        return this._skySearchRecords;
+      } catch (error) {
+        console.warn('[UI:CaseSearch] Sky dataset unavailable', error);
+        return [];
+      } finally {
+        this._skySearchRecordsInFlight = null;
+      }
+    })();
+    return this._skySearchRecordsInFlight;
   }
 
   /**
@@ -745,20 +790,34 @@ export class LayerBindings {
    * away, so it cannot supply the per-site names this search needs - the
    * sanctioned reader for those is `createAncientSource`'s own decode, used
    * here exactly as `_getAncientSearchRecords` already used it. A failed
-   * fetch is not cached, so the next call tries again.
+   * fetch is not cached, so the next call tries again. While a fetch is in
+   * flight, every concurrent caller (this method is awaited from both
+   * `_getAncientSearchRecords` and `_getAncientSweepSearchRecords` in the
+   * same `_buildCaseSearchRecords` round) shares that one promise rather
+   * than starting a fetch of its own - see `_ancientSnapshotInFlight`'s own
+   * doc comment in the constructor.
    */
   async _getAncientSnapshot() {
     if (this._ancientSnapshot) return this._ancientSnapshot;
+    if (this._ancientSnapshotInFlight) return this._ancientSnapshotInFlight;
     this._ancientSearchSource ||= createAncientSource({
       baseUrl: this._caseSearchBaseUrl('ancient-sites/'),
     });
-    try {
-      this._ancientSnapshot = await this._ancientSearchSource.getSnapshot();
-    } catch (error) {
-      console.warn('[UI:CaseSearch] Ancient sites dataset unavailable', error);
-      return null;
-    }
-    return this._ancientSnapshot;
+    this._ancientSnapshotInFlight = (async () => {
+      try {
+        this._ancientSnapshot = await this._ancientSearchSource.getSnapshot();
+        return this._ancientSnapshot;
+      } catch (error) {
+        console.warn(
+          '[UI:CaseSearch] Ancient sites dataset unavailable',
+          error,
+        );
+        return null;
+      } finally {
+        this._ancientSnapshotInFlight = null;
+      }
+    })();
+    return this._ancientSnapshotInFlight;
   }
 
   /**

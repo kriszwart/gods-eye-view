@@ -36,7 +36,7 @@ export const WAVES = [
   },
   {
     year: 1977,
-    label: '1977 Colares wave (Brazil)',
+    label: '1977 Colares wave',
     note: 'A wave of reports of unexplained lights over Colares, Brazil prompted a Brazilian Air Force investigation in 1977.',
     source_url: 'https://en.wikipedia.org/wiki/Opera%C3%A7%C3%A3o_Prato',
   },
@@ -49,7 +49,7 @@ export const WAVES = [
   {
     year: 2017,
     label: '2017 Nimitz disclosure reporting',
-    note: 'In December 2017 the New York Times reported on Navy pilot encounters, bringing the 2004 USS Nimitz case to public attention.',
+    note: "In December 2017 the New York Times reported on Navy pilots' accounts of encounters, bringing the 2004 USS Nimitz case to public attention.",
     source_url: 'https://en.wikipedia.org/wiki/Pentagon_UFO_videos',
   },
 ];

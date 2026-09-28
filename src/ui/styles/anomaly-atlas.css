@@ -1222,7 +1222,6 @@
   margin: 0 0 8px;
   font: 400 12px var(--uap-mono);
   letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--uap-dim);
 }
 .anomaly-atlas .uap-observatory-count {
@@ -1314,11 +1313,6 @@
   mask-position: center;
   -webkit-mask-size: contain;
   mask-size: contain;
-}
-.anomaly-atlas .uap-observatory-types code {
-  margin-left: auto;
-  color: var(--uap-dim);
-  font: 400 11px var(--uap-mono);
 }
 .anomaly-atlas .uap-observatory-decades svg {
   width: 100%;

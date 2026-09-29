@@ -251,6 +251,10 @@ export function createAnomaliesLayer({
     // gate is row.hero.
     despawnCraft();
     if (!row.hero && craftSummon?.summon) {
+      // Fix round, fold 3 (customShader parity): the same shader a hero
+      // model would currently wear (spectral, or infrared while the atlas
+      // is in infrared style), so a summoned craft never spawns bare and an
+      // infrared-only archetype is not invisible under spectral.
       craftHandle = craftSummon.summon({
         viewer,
         shape: row.craft,
@@ -258,6 +262,7 @@ export function createAnomaliesLayer({
         lon: row.lon,
         render,
         assetBase,
+        customShader: renderer?.getCraftShader?.(),
       });
     }
     let detail = null;
@@ -772,6 +777,8 @@ export function createAnomaliesLayer({
           shape: null,
           holding: false,
           animating: false,
+          discardedLoads: 0,
+          lastDiscardDestroyed: null,
         }
       );
     },
@@ -785,6 +792,12 @@ export function createAnomaliesLayer({
     },
     setInfrared(on) {
       renderer?.apply({ infrared: !!on });
+      // Fix round, fold 3 (customShader parity): a summoned craft's shader
+      // used to be stuck at whatever it spawned with, so a style switch
+      // while a dossier was already open never carried over. Re-applying
+      // here keeps it in step with heroes, which `apply()` above already
+      // re-shades on every call.
+      craftSummon?.setCraftShader?.(renderer?.getCraftShader?.());
     },
     playTour,
     stopTour,

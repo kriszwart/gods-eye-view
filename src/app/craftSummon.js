@@ -34,6 +34,33 @@ import * as Cesium from 'cesium';
  * loading and its `readyEvent` to fire in the first place - waiting for
  * readiness before taking the hold would risk the loop staying idle and
  * the model never becoming ready at all.
+ *
+ * FIX ROUND (task: presence pass, finding 1 - GPU leak on despawn-during-
+ * load): a despawn arriving before the GLB resolves used to discard the
+ * resolved Model by merely dropping the reference - the Model itself had
+ * already allocated real GPU buffers and textures on arrival, so every
+ * rapid dossier-switch-before-load race leaked one Model's GPU allocation
+ * for the session. The `.then()` handler below now destroys a discarded
+ * Model explicitly before returning, and counts the discard in
+ * `discardedLoads` (see `getSummonDiagnostics` below) so the fix itself is
+ * provable from outside the module.
+ *
+ * FIX ROUND (fold 3 - customShader parity): the hero loader always applies
+ * the current style's shader to a hero model (spectral thin-film sheen, or
+ * the infrared shader when the atlas is in infrared style - see
+ * `anomalies/rendering.js`'s own `setHeroes`/`apply`). A summoned craft
+ * used to get no shader at all: no sheen, and an infrared-only archetype
+ * (baked fully transparent outside the infrared shader) would have been
+ * invisible if ever summoned. `summon()` now accepts an optional
+ * `customShader`, applied at spawn; a caller with no shader of its own
+ * (live claims, which has no infrared toggle - PHENOMENA_DESIGN.md: "the
+ * claims register uses the same spectral default") gets this module's own
+ * `DEFAULT_SHADER` instead, a spectral shader mirroring
+ * `anomalies/rendering.js`'s own SPECTRAL_FS exactly. `setCraftShader()`
+ * lets a caller whose current style changes while a dossier is already
+ * open (`anomalies/index.js`'s own `setInfrared`) re-apply the shader to
+ * whatever is currently summoned, so a mid-summon style switch is not
+ * stuck with the spawn-time shader either.
  */
 
 /** Render governor owner id for a summoned craft's continuous-render hold
@@ -54,6 +81,40 @@ const MAX_SCALE = 40000;
  * proceed at all (no viewer/scene, no shape, or non-finite coordinates), so
  * a caller never needs to null-check before calling despawn(). */
 const NO_OP_HANDLE = Object.freeze({ despawn() {} });
+
+/** Thin-film sheen, mirroring `anomalies/rendering.js`'s own SPECTRAL_FS
+ * fragment shader exactly (fold 3, customShader parity - see this module's
+ * own doc comment above). Duplicated rather than imported: this module
+ * already mirrors several of that file's own constants the same way
+ * (`SUMMON_HEIGHT_M`, `MIN_PIXEL_SIZE`, `MAX_SCALE`, `hashDeg`), and a
+ * static import the other way would tie a generic, register-agnostic
+ * summoner to one register's own rendering internals. */
+const SPECTRAL_FS = /* glsl */ `
+  void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+    vec3 n = normalize(fsInput.attributes.normalEC);
+    vec3 v = normalize(-fsInput.attributes.positionEC);
+    float f = pow(1.0 - abs(dot(n, v)), 3.0);
+    float phase = f * 1.6 + u_time * 0.04;
+    vec3 film = 0.5 + 0.5 * cos(6.2831853 * (phase + vec3(0.0, 0.33, 0.67)));
+    vec3 spectrum = mix(vec3(1.0, 0.18, 0.6), vec3(0.25, 0.88, 1.0), film.y) * mix(0.7, 1.0, film.x);
+    material.emissive += spectrum * f * u_strength * (1.0 - clamp(material.emissive.r, 0.0, 1.0));
+  }`;
+
+/** Default shader applied when a caller doesn't supply its own current-style
+ * `customShader` (fold 3) - always spectral, matching the hero loader's own
+ * default. A private, un-ticked instance (`u_time` stays at its initial
+ * value): this module has no per-frame tick loop of its own, unlike
+ * `anomalies/rendering.js`, so the view-angle-driven grazing sheen still
+ * shows but its colour-cycling drift does not animate. Acceptable scope for
+ * the one caller that ever falls back to it (live claims, which has no
+ * infrared toggle to switch shaders over in the first place). */
+const DEFAULT_SHADER = new Cesium.CustomShader({
+  uniforms: {
+    u_time: { type: Cesium.UniformType.FLOAT, value: 0 },
+    u_strength: { type: Cesium.UniformType.FLOAT, value: 0.85 },
+  },
+  fragmentShaderText: SPECTRAL_FS,
+});
 
 /** True when the visitor has asked for reduced motion. Read once per
  * summon, not watched live (unlike the hero renderer's own live-watched
@@ -81,6 +142,19 @@ const hashDeg = (s) =>
  * one craft is summoned globally, regardless of which register asked (see
  * this module's own doc comment above). */
 let currentSummon = null;
+
+/** Count of GLB loads discarded because their dossier closed (or was
+ * replaced by a later summon) before the model arrived (fix round, finding
+ * 1). Exposed through `getSummonDiagnostics` purely as qa/throwaway proof
+ * that the discard branch actually runs and destroys its Model - not read
+ * by any rendering logic. */
+let discardedLoads = 0;
+
+/** Whether the most recently discarded load's Model reported itself
+ * destroyed (`model.isDestroyed()`) immediately after `.destroy()` was
+ * called on it - the real proof, not just that the discard branch ran.
+ * `null` until at least one load has been discarded. */
+let lastDiscardDestroyed = null;
 
 /** Release the render governor hold for a summon state, if it is holding.
  * Idempotent. */
@@ -121,13 +195,17 @@ function despawnState(state) {
  * @param {{viewer: import('cesium').Viewer, shape: string, lat: number,
  *   lon: number, render?: {holdContinuousRender: Function,
  *   releaseContinuousRender: Function, governorRequestRender: Function},
- *   assetBase?: string}} options `render` mirrors the object every
- *   register's own renderer already receives (`src/renderGovernor.js`'s
- *   three exports); omitted, the summon falls back to a direct
- *   `scene.requestRender()` and never takes a continuous hold. `assetBase`
- *   mirrors the calling register's own configured base (`'/anomalies/'` by
- *   default - the only craft library the app ships; `src/layers/liveClaims`
- *   has none of its own and passes the anomalies one through).
+ *   assetBase?: string, customShader?: import('cesium').CustomShader}}
+ *   options `render` mirrors the object every register's own renderer
+ *   already receives (`src/renderGovernor.js`'s three exports); omitted,
+ *   the summon falls back to a direct `scene.requestRender()` and never
+ *   takes a continuous hold. `assetBase` mirrors the calling register's own
+ *   configured base (`'/anomalies/'` by default - the only craft library
+ *   the app ships; `src/layers/liveClaims` has none of its own and passes
+ *   the anomalies one through). `customShader` is the caller's own current-
+ *   style shader (fold 3, customShader parity - see this module's own doc
+ *   comment above); omitted, the summon falls back to this module's own
+ *   `DEFAULT_SHADER`.
  * @returns {{despawn: () => void}}
  */
 export function summon({
@@ -137,6 +215,7 @@ export function summon({
   lon,
   render,
   assetBase = '/anomalies/',
+  customShader,
 } = {}) {
   if (
     !viewer?.scene ||
@@ -177,12 +256,22 @@ export function summon({
     scene,
     minimumPixelSize: MIN_PIXEL_SIZE,
     maximumScale: MAX_SCALE,
+    customShader: customShader ?? DEFAULT_SHADER,
   })
     .then((model) => {
       // Despawned while loading (a rapid second summon, or the dossier
       // closed before the GLB arrived): discard without ever touching the
-      // scene or taking a hold.
-      if (state.despawned) return;
+      // scene or taking a hold. The Model itself already allocated real GPU
+      // buffers and textures on arrival, though, so it must be destroyed
+      // explicitly here or every such race leaks one Model's GPU allocation
+      // for the session (fix round, finding 1) - dropping the reference
+      // alone is not enough.
+      if (state.despawned) {
+        discardedLoads += 1;
+        if (!model.isDestroyed()) model.destroy();
+        lastDiscardDestroyed = model.isDestroyed();
+        return;
+      }
       state.model = model;
       scene.primitives.add(model);
       if (!reducedMotion) {
@@ -213,22 +302,54 @@ export function summon({
 }
 
 /**
+ * Re-apply a shader to the currently summoned craft's own model, if one is
+ * up and its model has already arrived (fold 3, customShader parity - see
+ * this module's own doc comment above). Lets a caller whose current style
+ * changes while a dossier is already open (`anomalies/index.js`'s own
+ * `setInfrared`) keep a summoned craft's shader in step with the newly
+ * active style, rather than stuck with whatever `summon()` chose at spawn
+ * time. A no-op when nothing is summoned, the summon has already
+ * despawned, or the model hasn't arrived yet - the next `summon()` call
+ * already carries the right shader as its own `customShader` argument, so
+ * there is nothing here to re-apply to in that window.
+ * @param {import('cesium').CustomShader} [shader] Falls back to this
+ *   module's own `DEFAULT_SHADER` when omitted, matching `summon()`'s own
+ *   fallback.
+ */
+export function setCraftShader(shader) {
+  if (!currentSummon || currentSummon.despawned || !currentSummon.model) return;
+  currentSummon.model.customShader = shader ?? DEFAULT_SHADER;
+}
+
+/**
  * Diagnostics for the qa gates (task: presence pass). `active` is true only
  * once the model has actually been added to the scene (not merely
  * requested); `holding` and `animating` track the render governor hold and
  * whether `activeAnimations` has actually started, independently - the two
  * can briefly disagree in the window between the model arriving and its
- * own `readyEvent` firing.
+ * own `readyEvent` firing. `discardedLoads` and `lastDiscardDestroyed` are
+ * fix-round evidence (finding 1) for the despawn-during-load GPU leak fix,
+ * independent of whatever is currently summoned.
  * @returns {{active: boolean, shape: string|null, holding: boolean,
- *   animating: boolean}}
+ *   animating: boolean, discardedLoads: number,
+ *   lastDiscardDestroyed: boolean|null}}
  */
 export function getSummonDiagnostics() {
   if (!currentSummon || currentSummon.despawned)
-    return { active: false, shape: null, holding: false, animating: false };
+    return {
+      active: false,
+      shape: null,
+      holding: false,
+      animating: false,
+      discardedLoads,
+      lastDiscardDestroyed,
+    };
   return {
     active: Boolean(currentSummon.model),
     shape: currentSummon.shape,
     holding: currentSummon.holding,
     animating: currentSummon.animating,
+    discardedLoads,
+    lastDiscardDestroyed,
   };
 }

@@ -994,6 +994,96 @@ try {
     JSON.stringify(heroSummon),
   );
 
+  // Task 3 fix round, finding 1 (src/app/craftSummon.js): a despawn arriving
+  // before a summoned craft's GLB has resolved used to discard the resolved
+  // Model by merely dropping the reference - the Model had already
+  // allocated real GPU buffers and textures on arrival, so every rapid
+  // dossier-switch-before-load race leaked one Model's GPU allocation for
+  // the session. Reproduced for real (not stubbed) against this live dev
+  // server: two focusCase calls fired back to back, with the second's own
+  // openDossier -> despawnCraft() call landing synchronously (before either
+  // call's first await) while the first case's GLB fetch is still in
+  // flight - exactly the "close before load settles, then open another"
+  // race the finding describes. discardedLoads and lastDiscardDestroyed
+  // (both new diagnostics fields, exposed only for this proof) confirm the
+  // discarded Model was actually destroyed, not merely dropped.
+  const raceIds = await page.evaluate(async () => {
+    const r = await fetch('/anomalies/anomalies.v1.json');
+    const json = await r.json();
+    const cols = json.columns;
+    const ids = [];
+    for (let i = 0; i < cols.id.length && ids.length < 2; i++) {
+      if (!cols.hero[i]) ids.push(cols.id[i]);
+    }
+    return ids;
+  });
+  let discardRaceProof = null;
+  if (raceIds.length === 2) {
+    const errorsBefore = pageErrors.length;
+    const before = await page.evaluate(() =>
+      window.__godsEyeView.dataManager.layers
+        .get('anomalies')
+        ?.module?.getCraftSummonDiagnostics?.(),
+    );
+    await page.evaluate((ids) => {
+      const mod =
+        window.__godsEyeView.dataManager.layers.get('anomalies').module;
+      // Neither call is awaited before the next runs: focusCase's own
+      // openDossier calls craftSummon.summon() synchronously, before its
+      // first await, so the second call's synchronous despawnCraft() races
+      // the first case's still-in-flight GLB fetch by construction, not by
+      // timing luck.
+      window.__gevRaceA = mod.focusCase(ids[0]);
+      window.__gevRaceB = mod.focusCase(ids[1]);
+    }, raceIds);
+    await page.evaluate(() =>
+      Promise.all([window.__gevRaceA, window.__gevRaceB]),
+    );
+    // The discarded GLB fetch itself is fire-and-forget from openDossier's
+    // own perspective, so it can easily still be in flight after both
+    // focusCase calls above have otherwise settled - poll rather than
+    // guess a fixed delay.
+    await page
+      .waitForFunction(
+        (baseline) =>
+          (window.__godsEyeView.dataManager.layers
+            .get('anomalies')
+            ?.module?.getCraftSummonDiagnostics?.()?.discardedLoads ?? 0) >
+          baseline,
+        { timeout: 8000 },
+        before?.discardedLoads ?? 0,
+      )
+      .catch(() => {});
+    const after = await page.evaluate(() =>
+      window.__godsEyeView.dataManager.layers
+        .get('anomalies')
+        ?.module?.getCraftSummonDiagnostics?.(),
+    );
+    await page.evaluate(() => {
+      document
+        .querySelector('.uap-dossier')
+        ?.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+        );
+      delete window.__gevRaceA;
+      delete window.__gevRaceB;
+    });
+    discardRaceProof = {
+      before,
+      after,
+      newPageErrors: pageErrors.slice(errorsBefore),
+    };
+  }
+  check(
+    'despawn-during-load race: the discarded GLB load is counted and its Model reports itself destroyed, with no page errors',
+    discardRaceProof != null &&
+      discardRaceProof.after.discardedLoads >
+        (discardRaceProof.before?.discardedLoads ?? 0) &&
+      discardRaceProof.after.lastDiscardDestroyed === true &&
+      discardRaceProof.newPageErrors.length === 0,
+    JSON.stringify(discardRaceProof),
+  );
+
   // Rebuild-race check (presence-pass fix round, finding 1: stale
   // billboard references across tier rebuilds): renderShapeGlyphBillboards
   // rebuilds its billboard collection from scratch on a camera-bounds

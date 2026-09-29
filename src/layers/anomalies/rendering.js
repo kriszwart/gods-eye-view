@@ -1630,6 +1630,20 @@ export function createAnomalyRenderer(
      * nowhere to drape it; null otherwise. */
     getHeatStatus: () => heatStatus,
     getDiagnostics,
+    /** The currently active craft shader instance - `infrared` when the
+     * atlas is in infrared style, `spectral` otherwise (fix round, fold 3:
+     * customShader parity). The SAME instances every hero model already
+     * shares. `tick()` (above) only advances their own `u_time` while at
+     * least one hero is visible, so a summoned craft opened alongside a
+     * visible hero shares its exact live-ticked sheen; with no hero visible
+     * (the common case for a summon) `u_time` simply stays wherever it last
+     * settled - the view-angle-driven grazing sheen still responds to
+     * camera movement, only its own colour-cycling drift does not, the same
+     * limited scope `src/app/craftSummon.js`'s own DEFAULT_SHADER fallback
+     * accepts for live claims. Read by `anomalies/index.js`'s own
+     * `openDossier` (spawn-time) and `setInfrared` (live re-apply on a
+     * mid-summon style change). */
+    getCraftShader: () => (state.infrared ? infrared : spectral),
     destroy,
   };
 }

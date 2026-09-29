@@ -15,7 +15,11 @@ import {
   releaseContinuousRender,
   governorRequestRender,
 } from '../../renderGovernor.js';
-import { summon, getSummonDiagnostics } from '../craftSummon.js';
+import {
+  summon,
+  getSummonDiagnostics,
+  setCraftShader,
+} from '../craftSummon.js';
 
 /** Wire the bundled anomaly dataset to the application overlay host. */
 export function createApplicationAnomalies(options = {}) {
@@ -31,7 +35,7 @@ export function createApplicationAnomalies(options = {}) {
       releaseContinuousRender,
       governorRequestRender,
     },
-    craftSummon: { summon, getSummonDiagnostics },
+    craftSummon: { summon, getSummonDiagnostics, setCraftShader },
     assetBase: base,
     ...options,
   });

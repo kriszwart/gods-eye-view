@@ -17,6 +17,15 @@
  *      screenshot once the style crossfade settles,
  * into the gitignored qa-shots/presence-pass/ directory.
  *
+ * Fix round, fold 4: the original oblique reframe (heading 20 deg, pitch
+ * -26 deg) still put the craft mostly behind the top HUD toolbar - the
+ * camera's own boresight always targets the case's bare GROUND point, and
+ * the craft (650m above it) sits at a near-fixed angular offset above that,
+ * regardless of pitch. The camera now aims partway up towards the craft's
+ * own height instead (`lookHeightM`, below) rather than at the ground, so
+ * both the craft and its ground marker land clear of the toolbar and the
+ * bottom control bar.
+ *
  * Usage: node scripts/qa-presence-pass-summon-shot.mjs [--url http://localhost:4173]
  */
 import puppeteer from 'puppeteer';
@@ -129,8 +138,11 @@ try {
     // guided tour's own hero framing already uses this same oblique
     // offset for exactly this reason). Reframe onto a manually-computed
     // oblique offset (heading 20 deg, pitch -26 deg, matching playTour's
-    // own hero framing angles, this same file) so the craft reads as a
-    // distinct shape floating above its marker.
+    // own hero framing angles, this same file), which separates the craft
+    // from its marker on screen but is not by itself enough to read
+    // clearly - see the fold 4 comment right below, on `lookHeightM`, for
+    // the further vertical offset that keeps the craft clear of the top
+    // HUD toolbar too.
     //
     // flyToBoundingSphere was tried first and dropped: it auto-expands the
     // offset's own range to whatever distance fits the WHOLE bounding
@@ -150,9 +162,22 @@ try {
       const headingDeg = 20;
       const pitchDeg = -26;
       const rangeM = 3000;
+      // Fold 4 (screenshot reframe): the camera boresight, by construction
+      // below, always points exactly at the case's own GROUND point - so
+      // the summoned craft, floating SUMMON_HEIGHT_M (650m) above it, lands
+      // at a near-fixed angular offset ABOVE the frame's own centre no
+      // matter what pitch is chosen (confirmed by trying pitch -14 and -45
+      // in turn: the craft stayed pinned near the top of frame, behind the
+      // HUD toolbar, either way). Aiming the boresight instead at a point
+      // partway up towards the craft's own height - rather than at the bare
+      // ground - splits the difference: the craft moves down towards centre
+      // and the ground marker moves down from centre, both landing
+      // comfortably inside the frame (clear of the top toolbar and the
+      // bottom control bar).
+      const lookHeightM = 400;
       const depression = (Math.abs(pitchDeg) * Math.PI) / 180;
       const horizontalM = rangeM * Math.cos(depression);
-      const verticalM = rangeM * Math.sin(depression);
+      const verticalM = rangeM * Math.sin(depression) + lookHeightM;
       const headingRad = (headingDeg * Math.PI) / 180;
       const eastM = horizontalM * Math.sin(headingRad);
       const northM = horizontalM * Math.cos(headingRad);

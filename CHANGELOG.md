@@ -53,11 +53,14 @@
   Gates: `npm run format:check` (1,154 files clean), `npm test` (5,269
   tests, 5,268 passing, 1 pre-existing skip, 0 failed), `npm run
   check:boundaries` and `npm run build` all clean. `node
-  scripts/qa-anomalies.mjs` ran 3 consecutive clean runs; `node
-  scripts/qa-claims.mjs`, `node scripts/qa-ancient-sites.mjs` (shared
-  paths, unaffected - the ancient register never summons) and `node
-  scripts/qa-perf.mjs` (24 of 24 - the summon's own render-governor hold
-  releases cleanly) each ran 1 clean run, all against the
+  scripts/qa-anomalies.mjs` ran 3 consecutive clean runs, including the
+  hold-then-release assertions around a summoned craft's own dossier open
+  and close - the actual proof that the summon's render-governor hold
+  releases cleanly; `node scripts/qa-claims.mjs` carries the same
+  assertions for a shaped claim and ran 1 clean run. `node
+  scripts/qa-ancient-sites.mjs` (shared paths, unaffected - the ancient
+  register never summons) and `node scripts/qa-perf.mjs` (24 of 24, the
+  general render-governor gate) each ran 1 clean run too, all against the
   controller-managed dev server. `npm run test:track` hit the same
   pre-existing stale Vite dependency-optimisation cache recorded against
   the live claims register's own entry below (`egm96-universal.js`

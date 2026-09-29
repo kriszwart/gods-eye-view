@@ -253,6 +253,10 @@ export function createLiveClaimsLayer({
     // "Not stated" fallback above), and an unshaped claim never summons.
     despawnCraft();
     if (row.shape && craftSummon?.summon) {
+      // Fix round, fold 3 (customShader parity): no `customShader` passed -
+      // this register has no infrared toggle of its own, so it always gets
+      // craftSummon.js's own spectral default (PHENOMENA_DESIGN.md: "the
+      // claims register uses the same spectral default").
       craftHandle = craftSummon.summon({
         viewer,
         shape: row.shape,
@@ -706,6 +710,8 @@ export function createLiveClaimsLayer({
           shape: null,
           holding: false,
           animating: false,
+          discardedLoads: 0,
+          lastDiscardDestroyed: null,
         }
       );
     },

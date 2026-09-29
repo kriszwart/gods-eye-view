@@ -604,6 +604,15 @@ export function createAncientRenderer(
   }
 
   function setHeroes(rows) {
+    // Fix wave (presence pass): setHeroes rebuilds heroPoints from scratch,
+    // which a live hover may hold stale `{billboard, color}` references
+    // into (hoveredOriginals - see setHovered/applyHoverBrighten below).
+    // User-reachable mid-hover, since syncEraState calls this on every
+    // deep-time dial change while the pointer can sit still on the dial.
+    // Restore-and-clear FIRST, while the old billboards are still valid,
+    // then re-apply by selector once the new ones exist, mirroring
+    // recomputeSweep's own rebuild bracket above.
+    if (hoveredSelector) restoreHoveredAncient();
     heroPoints.removeAll();
     // Retained for setSelected's own lon/lat lookup (task: presence pass) -
     // see the module doc comment beside `currentHeroRows`'s declaration.
@@ -623,6 +632,7 @@ export function createAncientRenderer(
         scaleByDistance: new Cesium.NearFarScalar(2.0e5, 1.5, 2.0e7, 0.8),
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       });
+    if (hoveredSelector) applyHoverBrighten(hoveredSelector);
     requestFrame('ancient-heroes');
   }
 
@@ -953,6 +963,10 @@ export function createAncientRenderer(
    */
   function setTma(rows) {
     if (!LOCAL_TMA_ENABLED || !tmaBillboards) return;
+    // Fix wave (presence pass): same stale-billboard-reference risk as
+    // setHeroes's own rebuild above - restore before removeAll destroys the
+    // old billboards, then re-apply by selector once the new ones exist.
+    if (hoveredSelector) restoreHoveredAncient();
     tmaBillboards.removeAll();
     // Retained for setSelected's own lon/lat lookup (task: presence pass).
     currentTmaRows = rows;
@@ -978,6 +992,7 @@ export function createAncientRenderer(
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       });
     }
+    if (hoveredSelector) applyHoverBrighten(hoveredSelector);
     requestFrame('ancient-tma');
   }
 

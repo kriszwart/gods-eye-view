@@ -1246,6 +1246,14 @@ export function createAnomalyRenderer(
 
   function setRows(rows) {
     heatRows = rows;
+    // Fix wave (presence pass): setRows rebuilds the bright/faded billboard
+    // collections from scratch (clearPoints), which a live hover may hold
+    // stale `{billboard, color}` references into (hoveredOriginals - see
+    // setHovered/forEachAnomalyBillboard below). Restore-and-clear FIRST,
+    // while the old billboards are still valid, then re-apply by id once
+    // the new ones exist, mirroring renderShapeGlyphBillboards's own
+    // rebuild bracket above.
+    if (hoveredAnomalyId != null) restoreHovered();
     clearPoints();
     // Read once for this whole build pass (task: presence pass, retina-sharp
     // composition): every billboard added below shares the same DPR bucket.
@@ -1300,6 +1308,12 @@ export function createAnomalyRenderer(
         }
       }
     }
+    // Re-apply the hover brighten by id now the new billboards exist (see
+    // this function's own restore above) - a no-op scan when the hovered id
+    // is not currently shown in any tier. apply() below issues its own
+    // requestFrame, after this, so the reapplied brighten is never dropped
+    // from the frame it lands in.
+    if (hoveredAnomalyId != null) applyHoverBrighten(hoveredAnomalyId);
     apply();
   }
 

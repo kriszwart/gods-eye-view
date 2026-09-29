@@ -1000,13 +1000,25 @@ try {
   // allocated real GPU buffers and textures on arrival, so every rapid
   // dossier-switch-before-load race leaked one Model's GPU allocation for
   // the session. Reproduced for real (not stubbed) against this live dev
-  // server: two focusCase calls fired back to back, with the second's own
-  // openDossier -> despawnCraft() call landing synchronously (before either
-  // call's first await) while the first case's GLB fetch is still in
-  // flight - exactly the "close before load settles, then open another"
-  // race the finding describes. discardedLoads and lastDiscardDestroyed
-  // (both new diagnostics fields, exposed only for this proof) confirm the
-  // discarded Model was actually destroyed, not merely dropped.
+  // server. discardedLoads and lastDiscardDestroyed (both new diagnostics
+  // fields, exposed only for this proof) confirm the discarded Model was
+  // actually destroyed, not merely dropped.
+  //
+  // Fix wave (presence pass, finding 3): openDossier's own summon call now
+  // runs AFTER its `await source.getCases?.()`, guarded on an open token so
+  // an already-superseded open can never re-summon (src/layers/anomalies
+  // /index.js's own openToken). Two focusCase calls fired back to back with
+  // no await between them - this proof's old shape - no longer reaches
+  // case A's summon at all: case B's token bump lands before case A's own
+  // await even resolves, so case A is skipped outright and there is no
+  // craft A left to race against. Awaiting case A's own focusCase call
+  // first instead reproduces the same underlying race one level later:
+  // its openDossier body (the guarded summon included) runs to completion
+  // once getCases resolves, well before its own GLB fetch can possibly
+  // settle in a later network task, so case B starts while case A's craft
+  // is still mid-load - case B's own despawnCraft() call, unconditional on
+  // whichever craft craftSummon.js currently considers current, discards
+  // it exactly as before.
   const raceIds = await page.evaluate(async () => {
     const r = await fetch('/anomalies/anomalies.v1.json');
     const json = await r.json();
@@ -1025,20 +1037,14 @@ try {
         .get('anomalies')
         ?.module?.getCraftSummonDiagnostics?.(),
     );
-    await page.evaluate((ids) => {
+    await page.evaluate(async (ids) => {
       const mod =
         window.__godsEyeView.dataManager.layers.get('anomalies').module;
-      // Neither call is awaited before the next runs: focusCase's own
-      // openDossier calls craftSummon.summon() synchronously, before its
-      // first await, so the second call's synchronous despawnCraft() races
-      // the first case's still-in-flight GLB fetch by construction, not by
-      // timing luck.
       window.__gevRaceA = mod.focusCase(ids[0]);
+      await window.__gevRaceA;
       window.__gevRaceB = mod.focusCase(ids[1]);
     }, raceIds);
-    await page.evaluate(() =>
-      Promise.all([window.__gevRaceA, window.__gevRaceB]),
-    );
+    await page.evaluate(() => window.__gevRaceB);
     // The discarded GLB fetch itself is fire-and-forget from openDossier's
     // own perspective, so it can easily still be in flight after both
     // focusCase calls above have otherwise settled - poll rather than

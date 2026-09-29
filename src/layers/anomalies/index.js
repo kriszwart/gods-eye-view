@@ -137,6 +137,13 @@ export function createAnomaliesLayer({
   // from another register - despawn() is idempotent on an already-gone
   // state.
   let craftHandle = null;
+  // Fix wave (presence pass): stamped fresh at the top of every openDossier
+  // call and bumped again by closeDossier, so a still-in-flight
+  // `await source.getCases?.()` can tell, once it resolves, whether this
+  // open is still the current one or has since been superseded (a later
+  // openDossier call on this same register, or the register closing its
+  // dossier outright) - see openDossier's own guarded summon below.
+  let openToken = 0;
   let rows = [];
   let enabled = false;
   let loaded = false;
@@ -242,29 +249,10 @@ export function createAnomaliesLayer({
   async function openDossier(id) {
     const row = rows.find((r) => r.id === id);
     if (!row || !dossier) return;
-    // Presence pass: every dossier open first drops whatever craft THIS
-    // register last summoned (a same-register switch between two open
-    // dossiers never goes through closeDossier), then summons afresh for a
-    // non-hero row - a hero already carries its own permanent animated
-    // craft, so summoning here would double it. Every row carries a craft
-    // archetype (records.js defaults a missing one to 'orb'), so the only
-    // gate is row.hero.
-    despawnCraft();
-    if (!row.hero && craftSummon?.summon) {
-      // Fix round, fold 3 (customShader parity): the same shader a hero
-      // model would currently wear (spectral, or infrared while the atlas
-      // is in infrared style), so a summoned craft never spawns bare and an
-      // infrared-only archetype is not invisible under spectral.
-      craftHandle = craftSummon.summon({
-        viewer,
-        shape: row.craft,
-        lat: row.lat,
-        lon: row.lon,
-        render,
-        assetBase,
-        customShader: renderer?.getCraftShader?.(),
-      });
-    }
+    // Fix wave (presence pass): stamp this open's own token before the
+    // await below, so it can tell afterwards whether it is still current -
+    // see openToken's own declaration above.
+    const token = ++openToken;
     let detail = null;
     try {
       detail = (await source.getCases?.())?.get(id) || null;
@@ -310,6 +298,40 @@ export function createAnomaliesLayer({
       }),
     );
     dossier.hidden = false;
+    // Fix wave (presence pass): the summon used to fire before the await
+    // above, so a cross-register click landing during that await (which
+    // replaces craftSummon.js's own single global craft) left this dossier
+    // showing its ring with no craft once the await finally resolved. Moved
+    // here, beside setSelected, and guarded on `token` still being current -
+    // openToken may have moved on if a later openDossier or a closeDossier
+    // call (see its own bump below) landed on this register while the await
+    // was in flight, in which case craftHandle now belongs to THAT later
+    // call and must not be touched here.
+    if (token === openToken) {
+      // Every dossier open first drops whatever craft THIS register last
+      // summoned (a same-register switch between two open dossiers never
+      // goes through closeDossier), then summons afresh for a non-hero row -
+      // a hero already carries its own permanent animated craft, so
+      // summoning here would double it. Every row carries a craft archetype
+      // (records.js defaults a missing one to 'orb'), so the only gate is
+      // row.hero.
+      despawnCraft();
+      if (!row.hero && craftSummon?.summon) {
+        // Fix round, fold 3 (customShader parity): the same shader a hero
+        // model would currently wear (spectral, or infrared while the atlas
+        // is in infrared style), so a summoned craft never spawns bare and
+        // an infrared-only archetype is not invisible under spectral.
+        craftHandle = craftSummon.summon({
+          viewer,
+          shape: row.craft,
+          lat: row.lat,
+          lon: row.lon,
+          render,
+          assetBase,
+          customShader: renderer?.getCraftShader?.(),
+        });
+      }
+    }
     // Selection ring (task: presence pass): the id shape setSelected takes
     // mirrors renderer.pick()'s own return value exactly - a plain
     // anomalyId string here.
@@ -325,6 +347,11 @@ export function createAnomaliesLayer({
     if (dossier) dossier.hidden = true;
     renderer?.setSelected(null);
     despawnCraft();
+    // Fix wave (presence pass): invalidate any in-flight openDossier call's
+    // own token (see its declaration above), so a late-resolving await from
+    // before this close cannot re-summon a craft for a dossier that has
+    // since been closed.
+    openToken++;
   }
 
   /** Open the Sources and credits plate, syncing its toggle button. */

@@ -71,6 +71,7 @@ export const HOVER_THROTTLE_MS = 80;
 let _canvas = null;
 let _scene = null;
 let _listener = null;
+let _leaveListener = null;
 /** layerId -> { resolveHover?(picked): id|null, onHover(id|null): void } */
 const _clients = new Map();
 /** The layerId whose `onHover` last received a non-null id, or null. */
@@ -178,6 +179,16 @@ function handleMove(event) {
   applyHover(null, null);
 }
 
+/** The pointer leaving the canvas entirely (onto a dossier plate, the
+ * chronometer, or out of the window) is not a `mousemove` to anywhere else
+ * on the canvas, so `handleMove` never fires for it: without this, the last
+ * hover stays brightened and `_hoveredOwner` stays set indefinitely (fix
+ * wave, presence pass). Clears through the exact same path a resolved
+ * miss uses, so cursor and per-register `onHover(null)` stay in sync. */
+function handleLeave() {
+  applyHover(null, null);
+}
+
 /**
  * Install the shared throttled `mousemove` listener on `viewer`'s canvas.
  * Idempotent for the same canvas (every register's `init()` calls this with
@@ -193,10 +204,14 @@ export function installHoverPick(viewer) {
   if (!canvas || typeof canvas.addEventListener !== 'function') return;
   if (_canvas === canvas) return;
   if (_canvas && _listener) _canvas.removeEventListener('mousemove', _listener);
+  if (_canvas && _leaveListener)
+    _canvas.removeEventListener('mouseleave', _leaveListener);
   _scene = scene;
   _canvas = canvas;
   _listener = (event) => handleMove(event);
+  _leaveListener = () => handleLeave();
   _canvas.addEventListener('mousemove', _listener);
+  _canvas.addEventListener('mouseleave', _leaveListener);
 }
 
 /**
@@ -233,9 +248,12 @@ export function unregisterHoverClient(layerId) {
  * the listener, clears every client and all hover/cursor state. */
 export function uninstallHoverPick() {
   if (_canvas && _listener) _canvas.removeEventListener('mousemove', _listener);
+  if (_canvas && _leaveListener)
+    _canvas.removeEventListener('mouseleave', _leaveListener);
   _canvas = null;
   _scene = null;
   _listener = null;
+  _leaveListener = null;
   _clients.clear();
   _hoveredOwner = null;
   _lastPickAt = 0;

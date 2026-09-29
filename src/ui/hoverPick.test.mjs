@@ -112,13 +112,15 @@ test('installHoverPick: attaches one mousemove listener, idempotent for the same
   try {
     installHoverPick({ scene });
     assert.equal(canvas.hasListener('mousemove'), true);
-    assert.equal(canvas.addCallCount(), 1);
+    assert.equal(canvas.hasListener('mouseleave'), true);
+    // One addEventListener call each for mousemove and mouseleave.
+    assert.equal(canvas.addCallCount(), 2);
     installHoverPick({ scene }); // second call, same canvas: no-op
     installHoverPick({ scene }); // and a third, for good measure
     assert.equal(
       canvas.addCallCount(),
-      1,
-      'a repeat install for the same canvas must not attach a second listener',
+      2,
+      'a repeat install for the same canvas must not attach a second pair of listeners',
     );
   } finally {
     uninstallHoverPick();
@@ -197,6 +199,36 @@ test('moving off an owned pick clears that client\'s hover and the cursor', asyn
       picked = null; // pointer now over empty space
       setNow(1080);
       canvas.dispatch('mousemove', MOVE);
+      assert.deepEqual(hovers, ['1', null]);
+      assert.equal(canvas.style.cursor, '');
+    } finally {
+      uninstallHoverPick();
+      unregisterPickOwner('anomalies');
+    }
+  });
+});
+
+test('mouseleave clears the current hover and cursor, mirroring moving off an owned pick', async () => {
+  await withFakeNow(async (setNow) => {
+    const canvas = fakeCanvas();
+    const picked = { id: { id: 'anomaly:1', anomalyId: '1' } };
+    const scene = { canvas, pick: () => picked };
+    registerPickOwner('anomalies', (id) => id.startsWith('anomaly:'));
+    const hovers = [];
+    try {
+      installHoverPick({ scene });
+      registerHoverClient('anomalies', {
+        resolveHover: (p) => p?.id?.anomalyId ?? null,
+        onHover: (id) => hovers.push(id),
+      });
+      setNow(1000);
+      canvas.dispatch('mousemove', MOVE);
+      assert.deepEqual(hovers, ['1']);
+      assert.equal(canvas.style.cursor, 'pointer');
+      // The pointer leaves the canvas (onto a dossier plate, the dial, or
+      // out of the window entirely) rather than moving to another spot on
+      // the canvas - no further mousemove ever fires for this.
+      canvas.dispatch('mouseleave', {});
       assert.deepEqual(hovers, ['1', null]);
       assert.equal(canvas.style.cursor, '');
     } finally {
@@ -333,9 +365,11 @@ test('uninstallHoverPick removes the listener and clears every client', () => {
   registerHoverClient('anomalies', { onHover: () => {} });
   uninstallHoverPick();
   assert.equal(canvas.hasListener('mousemove'), false);
+  assert.equal(canvas.hasListener('mouseleave'), false);
   // A fresh install on the same canvas re-attaches (proves state was really
   // cleared, not just the listener skipped as "already installed").
   installHoverPick({ scene });
   assert.equal(canvas.hasListener('mousemove'), true);
+  assert.equal(canvas.hasListener('mouseleave'), true);
   uninstallHoverPick();
 });

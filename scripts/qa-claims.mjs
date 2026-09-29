@@ -53,6 +53,10 @@ const FIXTURE_PORT = 4581;
 const KEYLESS_PORT = 4582;
 const SHOT_DIR = resolve(REPO_ROOT, 'qa-shots/live-claims');
 mkdirSync(SHOT_DIR, { recursive: true });
+// Shared with qa-anomalies.mjs and qa-ancient-sites.mjs (task: presence
+// pass): each writes its own distinctly-named files into this one directory.
+const PRESENCE_SHOT_DIR = resolve(REPO_ROOT, 'qa-shots/presence-pass');
+mkdirSync(PRESENCE_SHOT_DIR, { recursive: true });
 
 let failures = 0;
 const check = (name, passed, detail = '') => {
@@ -391,6 +395,175 @@ try {
     "the craft preview's accent border is the register's own fixed ion hue",
     dossier.previewAccent?.toLowerCase() === PALETTE.ionDark.toLowerCase(),
     JSON.stringify(dossier),
+  );
+
+  // Hover and selection feedback (task: presence pass): a real mousemove
+  // over the same New York fixture claim sets getRenderDiagnostics()
+  // .hoveredId and the canvas cursor to 'pointer' once the shared hover
+  // helper's ~80ms throttle (src/ui/hoverPick.js) has had time to fire;
+  // moving to a pick-empty point clears both. Opening the claim's dossier
+  // then sets selectedId and adds an ion selection-ring billboard
+  // (getDiagnostics().selectionRingCount); Escape clears both again.
+  // Reuses target/projectAt from the dossier check above.
+
+  // Pick-cost measurement: one `scene.pick` call, timed with
+  // `performance.now`, at world zoom (the default boot view) and again at
+  // the close zoom the checks below actually use.
+  const worldZoomPickCost = await page.evaluate(() => {
+    const viewer = window.__godsEyeView.viewer;
+    const scene = viewer.scene;
+    const ellipsoid = scene.globe.ellipsoid;
+    viewer.camera.cancelFlight?.();
+    viewer.camera.setView({
+      destination: ellipsoid.cartographicToCartesian({
+        longitude: 0,
+        latitude: 0,
+        height: 2.0e7,
+      }),
+      orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 },
+    });
+    const canvas = scene.canvas;
+    const t0 = performance.now();
+    scene.pick(
+      { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 },
+      12,
+      12,
+    );
+    return performance.now() - t0;
+  });
+  // world-zoom measurement moved the camera away - re-point it at the
+  // fixture claim before the close-zoom measurement and the hover checks.
+  const hoverPoint = await page.evaluate(projectAt, target);
+  const closeZoomPickCost = hoverPoint
+    ? await page.evaluate((pt) => {
+        const scene = window.__godsEyeView.viewer.scene;
+        const t0 = performance.now();
+        scene.pick({ x: pt.x, y: pt.y }, 12, 12);
+        return performance.now() - t0;
+      }, hoverPoint)
+    : null;
+  check(
+    'hover pick cost (one scene.pick, world zoom and close zoom) stays comfortably inside the 80ms throttle window',
+    worldZoomPickCost < 50 &&
+      (closeZoomPickCost == null || closeZoomPickCost < 50),
+    `world=${worldZoomPickCost.toFixed(3)}ms close=${closeZoomPickCost == null ? 'n/a' : closeZoomPickCost.toFixed(3) + 'ms'}`,
+  );
+
+  let hoverProbe = null;
+  if (hoverPoint) {
+    await page.mouse.move(hoverPoint.x, hoverPoint.y);
+    // Past the shared hover helper's ~80ms throttle, with margin.
+    await new Promise((r) => setTimeout(r, 300));
+    const hovering = await page.evaluate(() => ({
+      diagnostics: window.__godsEyeView.dataManager.layers
+        .get('live-claims')
+        ?.module?.getDiagnostics?.(),
+      cursor: window.__godsEyeView.viewer.scene.canvas.style.cursor,
+    }));
+    await page.screenshot({
+      path: resolve(PRESENCE_SHOT_DIR, 'live-claims-hover-1440.png'),
+    });
+    // A pixel that is (a) still the canvas element there (not HUD chrome on
+    // top of it) and (b) genuinely pick-empty right now - probed rather
+    // than assumed from screen distance alone.
+    const awayPoint = await page.evaluate((around) => {
+      const viewer = window.__godsEyeView.viewer;
+      const scene = viewer.scene;
+      const canvas = scene.canvas;
+      const candidates = [
+        { x: around.x + 350, y: around.y },
+        { x: around.x - 350, y: around.y },
+        { x: around.x, y: around.y + 250 },
+        { x: around.x, y: around.y - 250 },
+        { x: 30, y: canvas.clientHeight - 30 },
+        { x: canvas.clientWidth - 30, y: canvas.clientHeight - 30 },
+        { x: canvas.clientWidth - 30, y: 30 },
+      ];
+      for (const p of candidates) {
+        if (
+          p.x < 0 ||
+          p.y < 0 ||
+          p.x >= canvas.clientWidth ||
+          p.y >= canvas.clientHeight
+        )
+          continue;
+        if (document.elementFromPoint(p.x, p.y) !== canvas) continue;
+        if (!scene.pick({ x: p.x, y: p.y }, 12, 12)) return p;
+      }
+      return null;
+    }, hoverPoint);
+    let away = null;
+    if (awayPoint) {
+      await page.mouse.move(awayPoint.x, awayPoint.y);
+      await new Promise((r) => setTimeout(r, 300));
+      away = await page.evaluate(() => ({
+        diagnostics: window.__godsEyeView.dataManager.layers
+          .get('live-claims')
+          ?.module?.getDiagnostics?.(),
+        cursor: window.__godsEyeView.viewer.scene.canvas.style.cursor,
+      }));
+    }
+    hoverProbe = { hovering, away, awayPoint };
+  }
+  check(
+    "hovering the New York fixture claim sets hoveredId and the canvas cursor to pointer, past the shared hover helper's throttle",
+    hoverProbe?.hovering.diagnostics?.hoveredId != null &&
+      hoverProbe?.hovering.cursor === 'pointer',
+    JSON.stringify(hoverProbe?.hovering),
+  );
+  check(
+    'moving to a pick-empty point clears hoveredId and the pointer cursor',
+    hoverProbe?.away != null &&
+      hoverProbe.away.diagnostics?.hoveredId == null &&
+      hoverProbe.away.cursor !== 'pointer',
+    JSON.stringify(hoverProbe?.away),
+  );
+
+  let selectionProbe = null;
+  if (hoverPoint) {
+    await page.mouse.click(hoverPoint.x, hoverPoint.y);
+    await page
+      .waitForFunction(
+        () => {
+          const d = document.querySelector('.uap-dossier.claims');
+          return d && !d.hidden;
+        },
+        { timeout: 8000 },
+      )
+      .catch(() => {});
+    const opened = await page.evaluate(() =>
+      window.__godsEyeView.dataManager.layers
+        .get('live-claims')
+        ?.module?.getDiagnostics?.(),
+    );
+    await page.screenshot({
+      path: resolve(PRESENCE_SHOT_DIR, 'live-claims-selection-1440.png'),
+    });
+    await page.evaluate(() => {
+      document
+        .querySelector('.uap-dossier.claims')
+        ?.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+        );
+    });
+    const closedState = await page.evaluate(() =>
+      window.__godsEyeView.dataManager.layers
+        .get('live-claims')
+        ?.module?.getDiagnostics?.(),
+    );
+    selectionProbe = { opened, closedState };
+  }
+  check(
+    "opening the New York claim's dossier sets selectedId and adds a selection-ring billboard",
+    selectionProbe?.opened.selectedId != null &&
+      selectionProbe?.opened.selectionRingCount === 1,
+    JSON.stringify(selectionProbe?.opened),
+  );
+  check(
+    'Escape closes the dossier and clears selectedId and the selection ring',
+    selectionProbe?.closedState.selectedId == null &&
+      selectionProbe?.closedState.selectionRingCount === 0,
+    JSON.stringify(selectionProbe?.closedState),
   );
 
   // A shapeless fixture claim (shape: null - "the classifier could not

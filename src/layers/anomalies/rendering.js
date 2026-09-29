@@ -32,6 +32,36 @@ import {
 // against the sprite's white core - reproducing pointColor()/pointAlpha()'s
 // output exactly, with no quantisation.
 const GLOW_NEUTRAL_HUE = '#ffffff';
+
+// Hover brighten (task: presence pass, hover and selection feedback): a
+// fixed multiplicative factor applied to a hovered billboard's own colour
+// (RGB and alpha alike, each independently clamped to 1) rather than a
+// recomputed value - see `brightenColor` and `setHovered` below. Every
+// billboard this renderer draws (bright/faded glow sprites, shape glyphs,
+// the hero ring) is set once at build time and never repainted per tick
+// (only its `show` flag toggles - see `apply`/`syncPointVisibility`), so
+// "store the original, restore exactly on leave" is exact here: nothing
+// else ever touches a billboard's `color` between the hover starting and
+// ending, unlike the live-claims register (rendering.js there recomputes
+// colour every tick from a continuously advancing age curve, so it takes a
+// different approach - see that module's own doc comment).
+const HOVER_BRIGHTEN_FACTOR = 1.4;
+
+/** Scale a Cesium.Color's RGB and alpha channels by `factor`, each
+ * independently clamped to 1 - a visible "step up" on saturated status
+ * hues (contested amber, unresolved magenta) and a plain alpha boost on
+ * already-white channels (the hero ring, or a glow sprite's white core
+ * before the register's own colour multiply - see the module doc comment
+ * on GLOW_NEUTRAL_HUE above for why glow sprites carry colour via the
+ * billboard's own `color` rather than the baked sprite). */
+function brightenColor(color, factor) {
+  return new Cesium.Color(
+    Math.min(1, color.red * factor),
+    Math.min(1, color.green * factor),
+    Math.min(1, color.blue * factor),
+    Math.min(1, color.alpha * factor),
+  );
+}
 // `dpr` here must be the same bucket `composeGlowSprite` resolved for
 // `glowImage`'s own call (task: presence pass, retina-sharp composition):
 // both read fresh via `currentDprBucket` in the same synchronous build pass
@@ -785,6 +815,22 @@ export function createAnomalyRenderer(
    * underneath, so the two tiers never double-render the same row. */
   let glyphedIds = new Set();
 
+  // Selection ring (task: presence pass, hover and selection feedback):
+  // while the dossier is open for a row, its point carries a ring - the
+  // same hero ion-ring idiom (`heroRingImage`) reused verbatim, never a
+  // second composed sprite. A dedicated collection, at most one billboard
+  // at a time, rebuilt wholesale on every `setSelected` call (a rare user
+  // action - opening or closing a dossier - never a tick or camera-move
+  // path, so a removeAll()+add() here costs nothing worth measuring).
+  const selectionRingBillboards = scene.primitives.add(
+    new Cesium.BillboardCollection({
+      scene,
+      blendOption: Cesium.BlendOption.TRANSLUCENT,
+    }),
+  );
+  selectionRingBillboards.show = false;
+  let selectedAnomalyId = null;
+
   /** Camera height (metres) above the ellipsoid; +Infinity off-globe. */
   function cameraHeight() {
     return (
@@ -1018,7 +1064,13 @@ export function createAnomalyRenderer(
         });
         if (r.hero) {
           shapeGlyphBillboards.add({
-            id,
+            // A distinct `id` object (`ring: true`), not the shared `id`
+            // above: hover's own billboard scan (`forEachAnomalyBillboard`
+            // below) must brighten only the primary point, never double up
+            // on this permanent hero ring - both carry the same
+            // `anomalyId` (so a pick landing on either still resolves the
+            // right row), but only an untagged one is a brighten target.
+            id: { ...id, ring: true },
             position: Cesium.Cartesian3.fromDegrees(r.lon, r.lat, 0),
             image: heroRingImage(dpr),
             imageId: heroRingImageId(dpr),
@@ -1200,8 +1252,15 @@ export function createAnomalyRenderer(
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         });
         if (r.hero) {
+          // `ring: true` - see the matching comment on
+          // renderShapeGlyphBillboards's own hero-ring add above.
           coll.add({
-            id: { id: `anomaly:${r.id}`, anomalyId: r.id, status: r.status },
+            id: {
+              id: `anomaly:${r.id}`,
+              anomalyId: r.id,
+              status: r.status,
+              ring: true,
+            },
             position,
             image: heroRingImage(dpr),
             imageId: heroRingImageId(dpr),
@@ -1314,6 +1373,11 @@ export function createAnomalyRenderer(
       // must still rebuild rather than see a stale match and stay empty.
       lastGlyphRenderBand = undefined;
     }
+    // Selection ring (task: presence pass): a defensive sync alongside the
+    // dossier-close paths in index.js, which already call `setSelected(null)`
+    // on layer disable - belt and braces, so a visible flag flip can never
+    // leave a stale ring showing regardless of call order.
+    selectionRingBillboards.show = visible && selectedAnomalyId != null;
     syncHold();
     requestFrame('anomalies-apply');
   }
@@ -1323,18 +1387,129 @@ export function createAnomalyRenderer(
   // per-frame cost) can afford the looser tolerance.
   const CLICK_PICK_BOX_PX = 12;
 
+  /** Pure extraction of an already-picked `scene.pick()` result's own
+   * anomaly id (or null) - the click path (`pick` below) and the shared
+   * hover helper's `resolveHover` (src/ui/hoverPick.js, task: presence
+   * pass) both resolve through this ONE function, so a picked result is
+   * only ever interpreted one way. The hover helper calls this against a
+   * result from ITS OWN throttled `scene.pick`, never triggering a second
+   * one here. */
+  function idFromPicked(picked) {
+    return picked?.id?.anomalyId ?? picked?.primitive?.id?.anomalyId ?? null;
+  }
+
   function pick(windowPosition) {
     const picked = scene.pick(
       windowPosition,
       CLICK_PICK_BOX_PX,
       CLICK_PICK_BOX_PX,
     );
-    return picked?.id?.anomalyId ?? picked?.primitive?.id?.anomalyId ?? null;
+    return idFromPicked(picked);
   }
 
   function heroPosition(id) {
     const h = heroes.find((x) => x.row.id === id);
     return h ? Cesium.Cartesian3.fromDegrees(h.row.lon, h.row.lat, 4000) : null;
+  }
+
+  /** Every currently-rendered billboard for `anomalyId` that is a brighten
+   * TARGET - i.e. not the hero ring (tagged `ring: true` at construction,
+   * see setRows/renderShapeGlyphBillboards) and currently `show === true`
+   * (the one tier actually on screen for this row: exactly one of
+   * bright/faded/shapeGlyphBillboards is showing it at a time, per
+   * syncPointVisibility). Scans only on an actual hover transition (see
+   * setHovered's own idempotency guard below), never every throttled tick. */
+  function forEachAnomalyBillboard(anomalyId, fn) {
+    const visit = (collection) => {
+      for (let i = 0; i < collection.length; i++) {
+        const bb = collection.get(i);
+        if (bb.id?.anomalyId === anomalyId && !bb.id?.ring && bb.show) fn(bb);
+      }
+    };
+    for (const map of [bright, faded]) for (const [, c] of map) visit(c);
+    visit(shapeGlyphBillboards);
+  }
+
+  let hoveredAnomalyId = null;
+  /** `[{billboard, color}]` for the currently hovered id's own brighten
+   * target(s) - the EXACT `Cesium.Color` each carried right before this
+   * hover started, restored by direct assignment (never recomputed) on
+   * leave. Usually one entry; safe if a rebuild ever left more than one
+   * visible match. */
+  let hoveredOriginals = [];
+
+  function restoreHovered() {
+    for (const { billboard, color } of hoveredOriginals)
+      billboard.color = color;
+    hoveredOriginals = [];
+  }
+
+  /**
+   * Hover feedback (task: presence pass, controller ruling): brighten the
+   * hovered row's own point billboard by a fixed factor, restoring the
+   * EXACT stored original on leave or on switching to a different id.
+   * Idempotent on a repeated call with the same id (the shared hover
+   * helper calls this on every throttled tick while the pointer sits still
+   * over the same point, not just on a change) - re-storing and
+   * re-brightening an already-brightened colour on every one of those
+   * ticks would compound the factor instead of holding it steady, so a
+   * same-id call is a deliberate no-op.
+   * @param {string|null} id
+   */
+  function setHovered(id) {
+    if (id === hoveredAnomalyId) return;
+    restoreHovered();
+    hoveredAnomalyId = id;
+    if (id != null) {
+      forEachAnomalyBillboard(id, (billboard) => {
+        const original = billboard.color.clone();
+        hoveredOriginals.push({ billboard, color: original });
+        billboard.color = brightenColor(original, HOVER_BRIGHTEN_FACTOR);
+      });
+    }
+    requestFrame('anomalies-hover');
+  }
+
+  /**
+   * Selection ring (task: presence pass, controller ruling): while the
+   * dossier is open for `id`, its point carries an ion ring (the hero-ring
+   * idiom, `heroRingImage`) - ion for sky-register consistency with heroes,
+   * per the controller ruling. A hero row is skipped outright rather than
+   * doubling a second ring on top of its own PERMANENT one (see the
+   * `ring: true` billboards in setRows/renderShapeGlyphBillboards):
+   * `selectedId` still reports the hovered id in getDiagnostics below even
+   * though no extra billboard was added for it. Idempotent on a repeated
+   * call with the same id, same reasoning as setHovered above (index.js
+   * calls this once per dossier open/close, not per tick, but guarding
+   * costs nothing and keeps the two functions symmetric).
+   * @param {string|null} id
+   */
+  function setSelected(id) {
+    if (id === selectedAnomalyId) return;
+    selectedAnomalyId = id;
+    selectionRingBillboards.removeAll();
+    if (id != null) {
+      const row = heatRows.find((r) => r.id === id);
+      if (row && !row.hero) {
+        const dpr = currentDprBucket();
+        const size = pointSize(row, { current: true });
+        selectionRingBillboards.add({
+          position: Cesium.Cartesian3.fromDegrees(row.lon, row.lat, 0),
+          image: heroRingImage(dpr),
+          imageId: heroRingImageId(dpr),
+          width: size * HERO_RING_DISPLAY_SCALE,
+          height: size * HERO_RING_DISPLAY_SCALE,
+          color: Cesium.Color.WHITE.withAlpha(0.9),
+          verticalOrigin: Cesium.VerticalOrigin.CENTER,
+          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+          scaleByDistance: GLOW_SCALE_BY_DISTANCE,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        });
+      }
+    }
+    selectionRingBillboards.show =
+      state.visible && selectionRingBillboards.length > 0;
+    requestFrame('anomalies-selection');
   }
 
   /**
@@ -1359,6 +1534,10 @@ export function createAnomalyRenderer(
       // parked below threshold and heroes visible to confirm idle churn is
       // gone: it should not move.
       shapeGlyphRebuildCount,
+      // Task: presence pass, hover and selection feedback.
+      hoveredId: hoveredAnomalyId,
+      selectedId: selectedAnomalyId,
+      selectionRingCount: selectionRingBillboards.length,
     };
   }
 
@@ -1382,6 +1561,10 @@ export function createAnomalyRenderer(
       heatLayer = null;
       heatHostCollection = null;
     }
+    scene.primitives.remove(selectionRingBillboards);
+    selectedAnomalyId = null;
+    hoveredAnomalyId = null;
+    hoveredOriginals = [];
     syncHold();
   }
 
@@ -1390,6 +1573,9 @@ export function createAnomalyRenderer(
     setHeroes,
     apply,
     pick,
+    resolveHover: idFromPicked,
+    setHovered,
+    setSelected,
     heroPosition,
     pulse,
     setHeat,

@@ -62,6 +62,28 @@ const CLOSE_BAND_VIEW_PADDING = 0.3;
 
 const gold = () => Cesium.Color.fromCssColorString(GOLD);
 
+// Hover brighten (task: presence pass, hover and selection feedback): same
+// fixed factor and "store the exact original, restore on leave" approach
+// as the anomalies register (rendering.js there carries the fuller
+// rationale) - every billboard this module draws is set once at build time
+// and only its `show` flag toggles afterward, never a per-tick colour
+// recompute, so restoring the stored `Cesium.Color` is exact.
+const HOVER_BRIGHTEN_FACTOR = 1.4;
+
+/** Scale a Cesium.Color's RGB and alpha channels by `factor`, each
+ * independently clamped to 1 (mirrors anomalies/rendering.js's own
+ * `brightenColor`, duplicated rather than shared per this codebase's own
+ * stated preference for keeping each register's rendering module
+ * self-contained - see that file's "extract vs duplicate" note). */
+function brightenColor(color, factor) {
+  return new Cesium.Color(
+    Math.min(1, color.red * factor),
+    Math.min(1, color.green * factor),
+    Math.min(1, color.blue * factor),
+    Math.min(1, color.alpha * factor),
+  );
+}
+
 /** `count >= 1000` compacts to e.g. "1.2k" so the badge stays narrow. */
 function formatClusterCount(count) {
   return count >= 1000 ? `${Math.round(count / 100) / 10}k` : String(count);
@@ -450,6 +472,57 @@ export function createAncientRenderer(
     tmaBillboards.show = false;
   }
 
+  // Selection ring (task: presence pass, hover and selection feedback):
+  // while the dossier is open for a hero or sweep site, its point carries a
+  // gold ring - controller ruling: gold for this register (unlike
+  // anomalies/live-claims, which both keep the ion hue). At most one
+  // billboard at a time, rebuilt wholesale on every `setSelected` call (a
+  // rare user action, never a tick or camera-move path).
+  const selectionRingBillboards = scene.primitives.add(
+    new Cesium.BillboardCollection({
+      scene,
+      blendOption: Cesium.BlendOption.TRANSLUCENT,
+    }),
+  );
+  selectionRingBillboards.show = false;
+  const SELECTION_RING_DISPLAY_SCALE = 1.4;
+  const SELECTION_RING_IMAGE_ID = 'ancient-selection-ring';
+  const SELECTION_RING_CANVAS_DIM = 48;
+  const selectionRingImageId = (dpr) => `${SELECTION_RING_IMAGE_ID}@${dpr}`;
+  /** Composed once per DPR bucket, mirroring anomalies/rendering.js's own
+   * `heroRingImage` exactly, gold-hued instead of ion. */
+  const selectionRingCanvasByDpr = new Map();
+  function selectionRingImage(dpr) {
+    const cached = selectionRingCanvasByDpr.get(dpr);
+    if (cached) return cached;
+    const dim = SELECTION_RING_CANVAS_DIM;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(dim * dpr);
+    canvas.height = Math.round(dim * dpr);
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.scale(dpr, dpr);
+      const centre = dim / 2;
+      ctx.beginPath();
+      ctx.arc(centre, centre, centre * 0.72, 0, Math.PI * 2);
+      ctx.lineWidth = dim * 0.09;
+      ctx.strokeStyle = GOLD;
+      ctx.stroke();
+    }
+    selectionRingCanvasByDpr.set(dpr, canvas);
+    return canvas;
+  }
+  let selectedSelector = null;
+  let selectedKey = null;
+  // Hero and local-TMA rows are retained here purely so `setSelected` can
+  // resolve a selector's own lon/lat without index.js threading them
+  // through separately - `setHeroes`/`setTma` already receive the full row
+  // set; the sweep's own position lookup instead reuses the `sweep`
+  // accessor already retained below (`setSweep`), by index - never a
+  // second copy of ~81k rows.
+  let currentHeroRows = [];
+  let currentTmaRows = [];
+
   let sweep = null;
   let visible = false;
   let currentClusters = [];
@@ -532,6 +605,9 @@ export function createAncientRenderer(
 
   function setHeroes(rows) {
     heroPoints.removeAll();
+    // Retained for setSelected's own lon/lat lookup (task: presence pass) -
+    // see the module doc comment beside `currentHeroRows`'s declaration.
+    currentHeroRows = rows;
     const dpr = currentDprBucket();
     for (const r of rows)
       heroPoints.add({
@@ -865,6 +941,8 @@ export function createAncientRenderer(
   function setTma(rows) {
     if (!LOCAL_TMA_ENABLED || !tmaBillboards) return;
     tmaBillboards.removeAll();
+    // Retained for setSelected's own lon/lat lookup (task: presence pass).
+    currentTmaRows = rows;
     const dpr = currentDprBucket();
     for (const r of rows) {
       const url = glyphUrlForTmaCategory(r.category);
@@ -952,6 +1030,10 @@ export function createAncientRenderer(
     } else {
       removeBandWatcher();
     }
+    // Selection ring (task: presence pass): a defensive sync alongside the
+    // dossier-close paths in index.js, which already call `setSelected(null)`
+    // on layer disable.
+    selectionRingBillboards.show = next && selectionRingBillboards.length > 0;
     requestFrame('ancient-visibility');
   }
 
@@ -960,12 +1042,13 @@ export function createAncientRenderer(
   // hover, so no extra per-frame cost) can afford the looser tolerance.
   const CLICK_PICK_BOX_PX = 12;
 
-  function pick(windowPosition) {
-    const picked = scene.pick(
-      windowPosition,
-      CLICK_PICK_BOX_PX,
-      CLICK_PICK_BOX_PX,
-    );
+  /** Pure extraction of an already-picked `scene.pick()` result's own
+   * selector shape (mirroring click's `{kind, id|index}` return exactly) -
+   * the click path (`pick` below) and the shared hover helper's
+   * `resolveHover` (src/ui/hoverPick.js, task: presence pass) both resolve
+   * through this ONE function, given a result from ONE `scene.pick` call
+   * (the hover helper's own throttled one, never a second pick here). */
+  function idFromPicked(picked) {
     const id = picked?.id ?? picked?.primitive?.id;
     if (!id || typeof id !== 'object') return null;
     if (id.ancientKind === 'hero') return { kind: 'hero', id: id.ancientId };
@@ -978,9 +1061,174 @@ export function createAncientRenderer(
     return null;
   }
 
+  function pick(windowPosition) {
+    const picked = scene.pick(
+      windowPosition,
+      CLICK_PICK_BOX_PX,
+      CLICK_PICK_BOX_PX,
+    );
+    return idFromPicked(picked);
+  }
+
   /** Cluster centroid for a "fly one band closer" click; null once stale. */
   function getCluster(index) {
     return currentClusters[index] ?? null;
+  }
+
+  /** Stable string key for a selector (or its absence) - hover and
+   * selection idempotency both key off this rather than comparing the
+   * selector objects by reference, since `resolveHover`/`pick` return a
+   * FRESH object every call. */
+  function selectorKeyOf(sel) {
+    if (!sel) return null;
+    if (sel.kind === 'hero' || sel.kind === 'tma')
+      return `${sel.kind}:${sel.id}`;
+    return `${sel.kind}:${sel.index}`;
+  }
+
+  /** The billboard collection(s) a selector's own kind lives in. A sweep
+   * selector may be showing as either tier depending on the current camera
+   * band (see renderSweepSingles) - both are scanned so a match is found
+   * regardless of which one is actually on screen. */
+  function collectionsForSelector(sel) {
+    if (sel.kind === 'hero') return [heroPoints];
+    if (sel.kind === 'sweep') return [sweepPoints, sweepBillboards];
+    if (sel.kind === 'cluster') return [clusterPoints];
+    if (sel.kind === 'tma') return tmaBillboards ? [tmaBillboards] : [];
+    return [];
+  }
+
+  /** True when a billboard's own `id` matches a selector. */
+  function billboardMatchesSelector(bbId, sel) {
+    if (!bbId || typeof bbId !== 'object') return false;
+    if (sel.kind === 'hero')
+      return bbId.ancientKind === 'hero' && bbId.ancientId === sel.id;
+    if (sel.kind === 'sweep')
+      return bbId.ancientKind === 'sweep' && bbId.ancientIndex === sel.index;
+    if (sel.kind === 'cluster')
+      return bbId.ancientKind === 'cluster' && bbId.clusterIndex === sel.index;
+    if (sel.kind === 'tma')
+      return bbId.ancientKind === 'tma' && bbId.tmaId === sel.id;
+    return false;
+  }
+
+  /** Every currently-shown billboard matching `sel` (see the module doc
+   * comment on HOVER_BRIGHTEN_FACTOR: nothing here is repainted per tick,
+   * so this only ever runs on an actual hover/selection transition). */
+  function forEachAncientBillboard(sel, fn) {
+    if (!sel) return;
+    for (const collection of collectionsForSelector(sel)) {
+      for (let i = 0; i < collection.length; i++) {
+        const bb = collection.get(i);
+        if (bb.show && billboardMatchesSelector(bb.id, sel)) fn(bb);
+      }
+    }
+  }
+
+  let hoveredSelector = null;
+  let hoveredKey = null;
+  /** `[{billboard, color}]` - the exact original `Cesium.Color` each of the
+   * currently-hovered selector's own matching billboards carried right
+   * before this hover started, restored by direct assignment on leave. */
+  let hoveredOriginals = [];
+
+  function restoreHoveredAncient() {
+    for (const { billboard, color } of hoveredOriginals)
+      billboard.color = color;
+    hoveredOriginals = [];
+  }
+
+  /**
+   * Hover feedback (task: presence pass, controller ruling): brighten every
+   * currently-shown billboard matching `sel` (hero, sweep single or cluster
+   * badge) by a fixed factor, restoring the exact stored original on leave
+   * or on switching to a different selector. Idempotent on a repeated call
+   * with an unchanged selector (see `selectorKeyOf`) - the shared hover
+   * helper calls this on every throttled tick while the pointer sits still,
+   * not just on a change.
+   * @param {{kind: string, id?: string, index?: number}|null} sel
+   */
+  function setHovered(sel) {
+    const key = selectorKeyOf(sel);
+    if (key === hoveredKey) return;
+    restoreHoveredAncient();
+    hoveredKey = key;
+    hoveredSelector = sel ?? null;
+    if (sel) {
+      forEachAncientBillboard(sel, (billboard) => {
+        const original = billboard.color.clone();
+        hoveredOriginals.push({ billboard, color: original });
+        billboard.color = brightenColor(original, HOVER_BRIGHTEN_FACTOR);
+      });
+    }
+    requestFrame('ancient-hover');
+  }
+
+  /** The on-screen size (px) a selector's own point currently renders at,
+   * for sizing the selection ring proportionally - mirrors whichever tier
+   * `forEachAncientBillboard` would find it in. */
+  function selectionRingBaseSize(sel) {
+    if (sel.kind === 'hero') return HERO_POINT_SIZE_PX;
+    if (sel.kind === 'tma') return BILLBOARD_DISPLAY_PX;
+    if (sel.kind === 'sweep')
+      return currentCellDeg === 0
+        ? BILLBOARD_DISPLAY_PX
+        : midBandSingleStyle(currentCellDeg).size;
+    return HERO_POINT_SIZE_PX;
+  }
+
+  /**
+   * Selection ring (task: presence pass, controller ruling): while the
+   * dossier is open for `sel`, its point carries a gold ring - never for a
+   * 'cluster' selector (a cluster click flies the camera rather than
+   * opening a dossier, so index.js never actually calls this with one, but
+   * `selectionRingBaseSize`/`collectionsForSelector` both handle it
+   * harmlessly all the same). Idempotent on a repeated call with an
+   * unchanged selector, mirroring setHovered above.
+   * @param {{kind: string, id?: string, index?: number}|null} sel
+   */
+  function setSelected(sel) {
+    const key = selectorKeyOf(sel);
+    if (key === selectedKey) return;
+    selectedKey = key;
+    selectedSelector = sel ?? null;
+    selectionRingBillboards.removeAll();
+    if (sel) {
+      let position = null;
+      if (sel.kind === 'hero') {
+        const row = currentHeroRows.find((r) => r.id === sel.id);
+        if (row) position = Cesium.Cartesian3.fromDegrees(row.lon, row.lat, 0);
+      } else if (sel.kind === 'sweep') {
+        if (sweep && sel.index >= 0 && sel.index < sweep.length)
+          position = Cesium.Cartesian3.fromDegrees(
+            sweep.lon(sel.index),
+            sweep.lat(sel.index),
+            0,
+          );
+      } else if (sel.kind === 'tma' && LOCAL_TMA_ENABLED) {
+        const row = currentTmaRows.find((r) => r.id === sel.id);
+        if (row) position = Cesium.Cartesian3.fromDegrees(row.lon, row.lat, 0);
+      }
+      if (position) {
+        const dpr = currentDprBucket();
+        const size = selectionRingBaseSize(sel);
+        selectionRingBillboards.add({
+          position,
+          image: selectionRingImage(dpr),
+          imageId: selectionRingImageId(dpr),
+          width: size * SELECTION_RING_DISPLAY_SCALE,
+          height: size * SELECTION_RING_DISPLAY_SCALE,
+          color: Cesium.Color.WHITE.withAlpha(0.9),
+          verticalOrigin: Cesium.VerticalOrigin.CENTER,
+          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+          scaleByDistance: new Cesium.NearFarScalar(2.0e5, 1.5, 2.0e7, 0.8),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        });
+      }
+    }
+    selectionRingBillboards.show =
+      visible && selectionRingBillboards.length > 0;
+    requestFrame('ancient-selection');
   }
 
   function getDiagnostics() {
@@ -1015,6 +1263,10 @@ export function createAncientRenderer(
       topCluster: topCluster
         ? { lat: topCluster.lat, lon: topCluster.lon, count: topCluster.count }
         : null,
+      // Task: presence pass, hover and selection feedback.
+      hoveredId: hoveredSelector,
+      selectedId: selectedSelector,
+      selectionRingCount: selectionRingBillboards.length,
     };
   }
 
@@ -1027,6 +1279,12 @@ export function createAncientRenderer(
     scene.primitives.remove(clusterPoints);
     scene.primitives.remove(clusterLabels);
     if (tmaBillboards) scene.primitives.remove(tmaBillboards);
+    scene.primitives.remove(selectionRingBillboards);
+    hoveredSelector = null;
+    hoveredKey = null;
+    hoveredOriginals = [];
+    selectedSelector = null;
+    selectedKey = null;
   }
 
   const api = {
@@ -1036,6 +1294,9 @@ export function createAncientRenderer(
     setTypeFilter,
     apply,
     pick,
+    resolveHover: idFromPicked,
+    setHovered,
+    setSelected,
     getCluster,
     getDiagnostics,
     /** Camera height to fly toward for a "one band closer" cluster click. */

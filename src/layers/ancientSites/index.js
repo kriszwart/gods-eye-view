@@ -138,6 +138,7 @@ export function createAncientSitesLayer({
   source,
   overlayHost,
   picking,
+  hoverPick,
   render,
   assetBase = '/ancient-sites/',
   container,
@@ -191,15 +192,29 @@ export function createAncientSitesLayer({
    * button, shared by openHeroDossier, openSweepDossier and openTmaDossier.
    * Both registers' dossiers share one on-screen slot: this also tells the
    * anomalies layer to close its own, if it has one open.
+   * @param {{kind: string, id?: string, index?: number}} selection - the
+   *   same shape `renderer.pick()`/`resolveHover` return, for
+   *   `renderer.setSelected` (task: presence pass) - so the selection ring
+   *   tracks whichever site's dossier is actually open.
    */
-  function showDossier() {
+  function showDossier(selection) {
     window.dispatchEvent(
       new CustomEvent(DOSSIER_OPEN_EVENT, {
         detail: { register: ANCIENT_LAYER_ID },
       }),
     );
+    renderer?.setSelected(selection);
     dossier.hidden = false;
     dossier.querySelector('.uap-close').focus();
+  }
+
+  /** Every dossier-close path (Close button, Escape, a different register's
+   * dossier opening, layer disable) routes through here, so the selection
+   * ring (task: presence pass) is cleared exactly where the dossier itself
+   * closes. */
+  function closeDossier() {
+    if (dossier) dossier.hidden = true;
+    renderer?.setSelected(null);
   }
 
   function openHeroDossier(id) {
@@ -232,7 +247,7 @@ export function createAncientSitesLayer({
           : ''
       }
       ${row.attribution ? `<p class="uap-attribution">${escapeHtml(row.attribution)}</p>` : ''}`;
-    showDossier();
+    showDossier({ kind: 'hero', id });
   }
 
   /**
@@ -275,7 +290,7 @@ export function createAncientSitesLayer({
           ? `<p class="uap-source">${wikidataUrl ? `<a href="${escapeHtml(wikidataUrl)}" target="_blank" rel="noopener noreferrer">Wikidata</a>` : ''}${wikipediaUrl ? `<a href="${escapeHtml(wikipediaUrl)}" target="_blank" rel="noopener noreferrer">Wikipedia</a>` : ''}${streetViewUrl ? `<a href="${escapeHtml(streetViewUrl)}" target="_blank" rel="noopener noreferrer">Street view</a>` : ''}</p>`
           : ''
       }`;
-    showDossier();
+    showDossier({ kind: 'sweep', index });
   }
 
   /**
@@ -295,7 +310,7 @@ export function createAncientSitesLayer({
       </dl>
       ${sourceUrl ? `<p class="uap-source"><a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open record</a></p>` : ''}
       <p class="uap-attribution">Source: The Modern Antiquarian. Local reference only, not included in the shared dataset.</p>`;
-    showDossier();
+    showDossier({ kind: 'tma', id });
   }
 
   /**
@@ -667,6 +682,10 @@ export function createAncientSitesLayer({
     init(v) {
       if (viewer) throw new Error('Ancient sites layer is already initialized');
       viewer = v;
+      // Shared hover-pick helper (task: presence pass): idempotent across
+      // every register's own init() call - see anomalies/index.js's own
+      // matching comment.
+      hoverPick?.installHoverPick?.(v);
       renderer = createAncientRenderer(viewer, {
         render,
         onSweepSinglesChange: syncSweepLabels,
@@ -678,11 +697,11 @@ export function createAncientSitesLayer({
       dossier.setAttribute('aria-label', 'Site dossier');
       dossier.addEventListener(
         'click',
-        (e) => e.target.closest('.uap-close') && (dossier.hidden = true),
+        (e) => e.target.closest('.uap-close') && closeDossier(),
       );
       dossier.addEventListener(
         'keydown',
-        (e) => e.key === 'Escape' && (dossier.hidden = true),
+        (e) => e.key === 'Escape' && closeDossier(),
       );
       host.appendChild(dossier);
       // Mirror of the dispatch in showDossier: the anomalies dossier opening
@@ -693,7 +712,7 @@ export function createAncientSitesLayer({
           dossier &&
           !dossier.hidden
         )
-          dossier.hidden = true;
+          closeDossier();
       };
       window.addEventListener(DOSSIER_OPEN_EVENT, onOtherDossierOpen);
       // The register's legend: a glyph key row naming all five sweep types
@@ -788,6 +807,13 @@ export function createAncientSitesLayer({
         );
       }
       picking?.registerPickOwner?.(ANCIENT_LAYER_ID, isOwnedPickId);
+      // Shared hover-pick helper (task: presence pass): resolveHover mirrors
+      // renderer.pick()'s own extraction, given the hover helper's own
+      // already-picked result rather than picking the scene again.
+      hoverPick?.registerHoverClient?.(ANCIENT_LAYER_ID, {
+        resolveHover: (picked) => renderer?.resolveHover(picked),
+        onHover: (sel) => renderer?.setHovered(sel),
+      });
       // Refresh heroes, overlay labels and the dial's readout against the
       // renderer's now-current diagnostics. setEraFilter's own recompute
       // here is a no-op (the era band already matches what syncDeepTime()
@@ -801,7 +827,8 @@ export function createAncientSitesLayer({
       request = null;
       enabled = false;
       picking?.unregisterPickOwner?.(ANCIENT_LAYER_ID);
-      if (dossier) dossier.hidden = true;
+      hoverPick?.unregisterHoverClient?.(ANCIENT_LAYER_ID);
+      closeDossier();
       hideClusterBreakdown();
       clickHandler?.destroy();
       clickHandler = null;

@@ -6,6 +6,11 @@ import {
   unregisterPickOwner,
 } from '../../data/pickRegistry.js';
 import {
+  installHoverPick,
+  registerHoverClient,
+  unregisterHoverClient,
+} from '../../ui/hoverPick.js';
+import {
   holdContinuousRender,
   releaseContinuousRender,
   governorRequestRender,
@@ -19,6 +24,7 @@ export function createApplicationAnomalies(options = {}) {
     source: options.source || createAnomalySource({ baseUrl: base }),
     overlayHost,
     picking: { registerPickOwner, unregisterPickOwner },
+    hoverPick: { installHoverPick, registerHoverClient, unregisterHoverClient },
     render: {
       holdContinuousRender,
       releaseContinuousRender,

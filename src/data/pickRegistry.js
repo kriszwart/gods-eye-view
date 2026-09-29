@@ -83,3 +83,31 @@ export function isOwnedByOtherLayer(layerId, pickedId) {
   }
   return false;
 }
+
+/**
+ * The registered layer id that owns a picked id, or `null` when no
+ * registered predicate claims it. Unlike `isOwnedByOtherLayer` (a sibling
+ * -exclusion check for click disambiguation), this scans every registered
+ * owner including the caller's own concerns - it answers "whose pick is
+ * this", not "does someone ELSE own it" - which is what the shared hover
+ * helper (src/ui/hoverPick.js, task: presence pass) needs: one `scene.pick`
+ * per throttled tick, resolved to a single owning register so that
+ * register's own `onHover` callback fires and no other one does. Iteration
+ * order follows `Map` insertion order (registration order), so if two
+ * predicates were ever to overlap on the same id the first-registered layer
+ * wins - the same tie-break `isOwnedByOtherLayer` already carries
+ * implicitly via its own first-match `for` loop.
+ * @param {string} pickedId - Picked primitive/entity id (see `resolvePickId`).
+ * @returns {string|null}
+ */
+export function ownerOf(pickedId) {
+  if (!pickedId) return null;
+  for (const [ownerId, predicate] of _owners) {
+    try {
+      if (predicate(pickedId)) return ownerId;
+    } catch {
+      // a broken predicate must never break pick resolution
+    }
+  }
+  return null;
+}

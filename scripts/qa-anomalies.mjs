@@ -7,10 +7,19 @@
  * overrides).
  */
 import puppeteer from 'puppeteer';
+import { mkdirSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { SHAPE_GLYPH_URLS } from '../src/layers/anomalies/shapeGlyphs.js';
 import { statusHue } from '../src/layers/anomalies/model.js';
 import { WAVES } from '../src/layers/anomalies/waves.js';
 const base = process.env.QA_BASE_URL || 'http://localhost:4173';
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(__dirname, '..');
+// Shared with qa-claims.mjs and qa-ancient-sites.mjs (task: presence pass):
+// each writes its own distinctly-named files into this one directory.
+const PRESENCE_SHOT_DIR = resolve(REPO_ROOT, 'qa-shots/presence-pass');
+mkdirSync(PRESENCE_SHOT_DIR, { recursive: true });
 const browser = await puppeteer.launch({
   headless: true,
   args: [
@@ -648,6 +657,204 @@ try {
         new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
       );
   });
+
+  // Hover and selection feedback (task: presence pass): a real mousemove
+  // over a known, non-hero point sets getRenderDiagnostics().hoveredId and
+  // the canvas cursor to 'pointer' once the shared hover helper's ~80ms
+  // throttle (src/ui/hoverPick.js) has had time to fire; moving to a
+  // pick-empty point on the same canvas clears both. Opening that point's
+  // dossier then sets selectedId and adds a selection-ring billboard
+  // (getDiagnostics().selectionRingCount); Escape clears both again. A
+  // non-hero target is picked deliberately: heroes already carry a
+  // permanent ring (the controller ruling this task follows skips a
+  // second one on top of it), so a hero target would make the ring-count
+  // assertion ambiguous.
+  const hoverSite = await page.evaluate(async () => {
+    const r = await fetch('/anomalies/anomalies.v1.json');
+    const json = await r.json();
+    const cols = json.columns;
+    for (let i = 0; i < cols.id.length; i++) {
+      if (
+        typeof cols.lat[i] === 'number' &&
+        typeof cols.lon[i] === 'number' &&
+        !cols.hero[i]
+      )
+        return { lat: cols.lat[i], lon: cols.lon[i] };
+    }
+    return null;
+  });
+  const hoverPoint = hoverSite
+    ? await page.evaluate(projectAt, hoverSite)
+    : null;
+
+  // Pick-cost measurement (task: presence pass, hover and selection
+  // feedback): one `scene.pick` call, timed with `performance.now`, at
+  // world zoom (the default boot view) and again at the close zoom the
+  // hover/selection checks below actually use. The 80ms throttle in
+  // src/ui/hoverPick.js bounds how often this cost is paid regardless of
+  // pointer speed.
+  const worldZoomPickCost = await page.evaluate(() => {
+    const viewer = window.__godsEyeView.viewer;
+    const scene = viewer.scene;
+    const ellipsoid = scene.globe.ellipsoid;
+    viewer.camera.cancelFlight();
+    viewer.camera.setView({
+      destination: ellipsoid.cartographicToCartesian({
+        longitude: 0,
+        latitude: 0,
+        height: 2.0e7,
+      }),
+      orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 },
+    });
+    const canvas = scene.canvas;
+    const t0 = performance.now();
+    scene.pick(
+      { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 },
+      12,
+      12,
+    );
+    return performance.now() - t0;
+  });
+  const closeZoomPickCost = hoverPoint
+    ? await page.evaluate((pt) => {
+        const scene = window.__godsEyeView.viewer.scene;
+        const t0 = performance.now();
+        scene.pick({ x: pt.x, y: pt.y }, 12, 12);
+        return performance.now() - t0;
+      }, hoverPoint)
+    : null;
+  check(
+    'hover pick cost (one scene.pick, world zoom and close zoom) stays comfortably inside the 80ms throttle window',
+    worldZoomPickCost < 50 &&
+      (closeZoomPickCost == null || closeZoomPickCost < 50),
+    `world=${worldZoomPickCost.toFixed(3)}ms close=${closeZoomPickCost == null ? 'n/a' : closeZoomPickCost.toFixed(3) + 'ms'}`,
+  );
+
+  let hoverProbe = null;
+  if (hoverPoint) {
+    // projectAt (above) already re-pointed the camera at hoverSite's own
+    // nadir view for this call. Settled before hovering (mirrors every
+    // other projectAt call in this file): the close-range shape-glyph
+    // tier only populates once the renderer's own postRender/moveEnd
+    // -driven recompute has actually run, not synchronously with setView.
+    await page.evaluate(projectAt, hoverSite);
+    await new Promise((r) => setTimeout(r, 700));
+    await page.mouse.move(hoverPoint.x, hoverPoint.y);
+    // Past the shared hover helper's ~80ms throttle, with margin.
+    await new Promise((r) => setTimeout(r, 300));
+    const hovering = await page.evaluate(() => ({
+      diagnostics: window.__godsEyeView.dataManager.layers
+        .get('anomalies')
+        ?.module?.getRenderDiagnostics?.(),
+      cursor: window.__godsEyeView.viewer.scene.canvas.style.cursor,
+    }));
+    await page.screenshot({
+      path: resolve(PRESENCE_SHOT_DIR, 'anomalies-hover-1440.png'),
+    });
+    // A pixel that is (a) still the canvas element at that point (not some
+    // HUD chrome sitting on top of it) and (b) genuinely pick-empty right
+    // now, found by probing a handful of candidates around the hovered
+    // point and the canvas corners - never assumed from screen-distance
+    // alone, which a dense cluster could still populate.
+    const awayPoint = await page.evaluate((around) => {
+      const viewer = window.__godsEyeView.viewer;
+      const scene = viewer.scene;
+      const canvas = scene.canvas;
+      const candidates = [
+        { x: around.x + 350, y: around.y },
+        { x: around.x - 350, y: around.y },
+        { x: around.x, y: around.y + 250 },
+        { x: around.x, y: around.y - 250 },
+        { x: 30, y: canvas.clientHeight - 30 },
+        { x: canvas.clientWidth - 30, y: canvas.clientHeight - 30 },
+        { x: canvas.clientWidth - 30, y: 30 },
+      ];
+      for (const p of candidates) {
+        if (
+          p.x < 0 ||
+          p.y < 0 ||
+          p.x >= canvas.clientWidth ||
+          p.y >= canvas.clientHeight
+        )
+          continue;
+        if (document.elementFromPoint(p.x, p.y) !== canvas) continue;
+        if (!scene.pick({ x: p.x, y: p.y }, 12, 12)) return p;
+      }
+      return null;
+    }, hoverPoint);
+    let away = null;
+    if (awayPoint) {
+      await page.mouse.move(awayPoint.x, awayPoint.y);
+      await new Promise((r) => setTimeout(r, 300));
+      away = await page.evaluate(() => ({
+        diagnostics: window.__godsEyeView.dataManager.layers
+          .get('anomalies')
+          ?.module?.getRenderDiagnostics?.(),
+        cursor: window.__godsEyeView.viewer.scene.canvas.style.cursor,
+      }));
+    }
+    hoverProbe = { hovering, away, awayPoint };
+  }
+  check(
+    "hovering a known point sets hoveredId and the canvas cursor to pointer, past the shared hover helper's throttle",
+    hoverProbe?.hovering.diagnostics?.hoveredId != null &&
+      hoverProbe?.hovering.cursor === 'pointer',
+    JSON.stringify(hoverProbe?.hovering),
+  );
+  check(
+    'moving to a pick-empty point clears hoveredId and the pointer cursor',
+    hoverProbe?.away != null &&
+      hoverProbe.away.diagnostics?.hoveredId == null &&
+      hoverProbe.away.cursor !== 'pointer',
+    JSON.stringify(hoverProbe?.away),
+  );
+
+  let selectionProbe = null;
+  if (hoverPoint) {
+    await page.mouse.click(hoverPoint.x, hoverPoint.y);
+    await page
+      .waitForFunction(
+        () => {
+          const d = document.querySelector('.uap-dossier');
+          return d && !d.hidden;
+        },
+        { timeout: 8000 },
+      )
+      .catch(() => {});
+    const opened = await page.evaluate(() =>
+      window.__godsEyeView.dataManager.layers
+        .get('anomalies')
+        ?.module?.getRenderDiagnostics?.(),
+    );
+    await page.screenshot({
+      path: resolve(PRESENCE_SHOT_DIR, 'anomalies-selection-1440.png'),
+    });
+    await page.evaluate(() => {
+      document
+        .querySelector('.uap-dossier')
+        ?.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+        );
+    });
+    const closed = await page.evaluate(() =>
+      window.__godsEyeView.dataManager.layers
+        .get('anomalies')
+        ?.module?.getRenderDiagnostics?.(),
+    );
+    selectionProbe = { opened, closed };
+  }
+  check(
+    "opening a non-hero point's dossier sets selectedId and adds a selection-ring billboard",
+    selectionProbe?.opened.selectedId != null &&
+      selectionProbe?.opened.selectionRingCount === 1,
+    JSON.stringify(selectionProbe?.opened),
+  );
+  check(
+    'Escape closes the dossier and clears selectedId and the selection ring',
+    selectionProbe?.closed.selectedId == null &&
+      selectionProbe?.closed.selectionRingCount === 0,
+    JSON.stringify(selectionProbe?.closed),
+  );
 
   // Escape during the debounce window must cancel the pending query: no
   // stale render should land even after the 150 ms debounce would have

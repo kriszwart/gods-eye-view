@@ -65,6 +65,22 @@ const glowImageId = (dpr) =>
 const glowImage = () =>
   composeGlowSprite({ hue: PALETTE.ionDark, sizePx: MAX_POINT_SIZE_PX });
 
+/**
+ * Hover brighten (task: presence pass, hover and selection feedback): a
+ * fixed multiplicative factor, same value the anomalies and ancient-sites
+ * registers use. THIS register differs from those two in how it gets
+ * applied: every billboard here is repainted every tick from a live
+ * age-brightness curve plus the breathing pulse (see `tick` below) - there
+ * is no static "original colour" to store and restore, and freezing one
+ * would stop the honest age-decay the register's whole design is built on.
+ * So instead of a store/restore pair, `tick`'s own per-frame computation
+ * multiplies the CURRENT frame's honest size/alpha by this factor for
+ * whichever billboard is hovered - deterministic every frame, never a
+ * stale snapshot, and "un-hovering" is simply the next tick no longer
+ * applying it (no explicit restore call needed).
+ */
+const HOVER_BRIGHTEN_FACTOR = 1.4;
+
 // A wider pick box than Cesium's ~3px default (matches the anomalies and
 // ancient-sites renderers): these points render small even at close range,
 // and a click-only path (never hover, so no extra per-frame cost) can
@@ -106,6 +122,59 @@ export function createLiveClaimsRenderer(viewer, { render } = {}) {
   let visible = false;
   let rowCount = 0;
   let holding = false;
+  let hoveredClaimId = null;
+
+  // Selection ring (task: presence pass, hover and selection feedback):
+  // while the dossier is open for a claim, its point carries an ion ring
+  // (the hero-ring idiom other registers already use, reused here with
+  // this register's own fixed ion hue - controller ruling: ion for
+  // claims). At most one billboard at a time, rebuilt wholesale on every
+  // `setSelected` call.
+  const selectionRingBillboards = scene.primitives.add(
+    new Cesium.BillboardCollection({
+      scene,
+      blendOption: Cesium.BlendOption.TRANSLUCENT,
+    }),
+  );
+  selectionRingBillboards.show = false;
+  let selectedClaimId = null;
+  const SELECTION_RING_DISPLAY_SCALE = 1.4;
+  const SELECTION_RING_IMAGE_ID = 'live-claims-selection-ring';
+  const SELECTION_RING_CANVAS_DIM = 48;
+  const selectionRingImageId = (dpr) => `${SELECTION_RING_IMAGE_ID}@${dpr}`;
+  /** Composed once per DPR bucket, mirroring anomalies/rendering.js's own
+   * `heroRingImage`. */
+  const selectionRingCanvasByDpr = new Map();
+  function selectionRingImage(dpr) {
+    const cached = selectionRingCanvasByDpr.get(dpr);
+    if (cached) return cached;
+    const dim = SELECTION_RING_CANVAS_DIM;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(dim * dpr);
+    canvas.height = Math.round(dim * dpr);
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.scale(dpr, dpr);
+      const centre = dim / 2;
+      ctx.beginPath();
+      ctx.arc(centre, centre, centre * 0.72, 0, Math.PI * 2);
+      ctx.lineWidth = dim * 0.09;
+      ctx.strokeStyle = PALETTE.ionDark;
+      ctx.stroke();
+    }
+    selectionRingCanvasByDpr.set(dpr, canvas);
+    return canvas;
+  }
+  /** The live claim billboard for `id`, or null (a plain scan - `points`
+   * holds at most a few hundred entries, and this only runs on a
+   * setSelected call, never per tick). */
+  function findClaimBillboard(id) {
+    for (let i = 0; i < points.length; i++) {
+      const bb = points.get(i);
+      if (bb.id?.claimId === id) return bb;
+    }
+    return null;
+  }
   let reducedMotion = prefersReducedMotion();
   // Live: a visitor can flip the OS/browser reduced-motion setting while
   // the app is already running, so the query is watched rather than read
@@ -160,23 +229,31 @@ export function createLiveClaimsRenderer(viewer, { render } = {}) {
       const meta = billboard.id;
       const ageMs = nowMs - meta.fetchedAtMs;
       const brightness = brightnessForAge(ageMs);
+      let sizePx;
+      let alpha;
       if (reducedMotion) {
         // No sine modulation: the point sits at its plain age-brightness
         // size and alpha, unchanging frame to frame (see
         // docs/superpowers/plans - reduced motion parked follow-up).
-        paint(billboard, pointPixelSize(brightness), pointAlpha(brightness));
+        sizePx = pointPixelSize(brightness);
+        alpha = pointAlpha(brightness);
       } else {
         const phase = ((now - t0) / 1000) * PULSE_HZ * 2 * Math.PI + meta.phase;
         const pulse = 0.5 + 0.5 * Math.sin(phase);
-        paint(
-          billboard,
-          pointPixelSize(brightness) + PULSE_SIZE_AMPLITUDE_PX * pulse,
-          Math.max(
-            0,
-            Math.min(1, pointAlpha(brightness) + PULSE_ALPHA_AMPLITUDE * pulse),
-          ),
+        sizePx = pointPixelSize(brightness) + PULSE_SIZE_AMPLITUDE_PX * pulse;
+        alpha = Math.max(
+          0,
+          Math.min(1, pointAlpha(brightness) + PULSE_ALPHA_AMPLITUDE * pulse),
         );
       }
+      // Hover brighten (task: presence pass): see HOVER_BRIGHTEN_FACTOR's
+      // own doc comment above for why this multiplies the current frame's
+      // honest values rather than storing/restoring a snapshot.
+      if (meta.claimId === hoveredClaimId) {
+        sizePx *= HOVER_BRIGHTEN_FACTOR;
+        alpha = Math.min(1, alpha * HOVER_BRIGHTEN_FACTOR);
+      }
+      paint(billboard, sizePx, alpha);
     }
     if (!render) scene.requestRender();
   }
@@ -219,8 +296,22 @@ export function createLiveClaimsRenderer(viewer, { render } = {}) {
   function apply({ visible: nextVisible } = {}) {
     if (nextVisible !== undefined) visible = nextVisible;
     points.show = visible;
+    // Selection ring (task: presence pass): a defensive sync alongside the
+    // dossier-close paths in index.js, which already call `setSelected(null)`
+    // on layer disable.
+    selectionRingBillboards.show =
+      visible && selectionRingBillboards.length > 0;
     syncHold();
     requestFrame('live-claims-apply');
+  }
+
+  /** Pure extraction of an already-picked `scene.pick()` result's own claim
+   * id (or null) - the click path (`pick` below) and the shared hover
+   * helper's `resolveHover` (src/ui/hoverPick.js, task: presence pass) both
+   * resolve through this ONE function, given a result from ONE `scene.pick`
+   * call. */
+  function idFromPicked(picked) {
+    return picked?.id?.claimId ?? picked?.primitive?.id?.claimId ?? null;
   }
 
   /** Resolve a click to a claim id, or null. @param {Cesium.Cartesian2} windowPosition */
@@ -230,7 +321,60 @@ export function createLiveClaimsRenderer(viewer, { render } = {}) {
       CLICK_PICK_BOX_PX,
       CLICK_PICK_BOX_PX,
     );
-    return picked?.id?.claimId ?? picked?.primitive?.id?.claimId ?? null;
+    return idFromPicked(picked);
+  }
+
+  /**
+   * Hover feedback (task: presence pass, controller ruling): see
+   * HOVER_BRIGHTEN_FACTOR's own doc comment above - this register applies
+   * the brighten inside `tick`'s own per-frame computation rather than a
+   * store/restore pair, so this setter only records which id is hovered.
+   * Idempotent on a repeated call with the same id (the shared hover helper
+   * calls this on every throttled tick while the pointer sits still).
+   * @param {string|null} id
+   */
+  function setHovered(id) {
+    if (id === hoveredClaimId) return;
+    hoveredClaimId = id;
+    requestFrame('live-claims-hover');
+  }
+
+  /**
+   * Selection ring (task: presence pass, controller ruling): while the
+   * dossier is open for `id`, its point carries an ion ring. Idempotent on
+   * a repeated call with the same id.
+   * @param {string|null} id
+   */
+  function setSelected(id) {
+    if (id === selectedClaimId) return;
+    selectedClaimId = id;
+    selectionRingBillboards.removeAll();
+    if (id != null) {
+      const billboard = findClaimBillboard(id);
+      if (billboard) {
+        const dpr = currentDprBucket();
+        // A one-shot snapshot of the billboard's current (continuously
+        // ticking) size, not itself re-synced per tick - "no image/imageId
+        // writes in any tick or hover path" extends to this ring too: it is
+        // sized once, on selection, and holds that size for as long as the
+        // dossier stays open.
+        const size = billboard.width;
+        selectionRingBillboards.add({
+          position: billboard.position,
+          image: selectionRingImage(dpr),
+          imageId: selectionRingImageId(dpr),
+          width: size * SELECTION_RING_DISPLAY_SCALE,
+          height: size * SELECTION_RING_DISPLAY_SCALE,
+          color: Cesium.Color.WHITE.withAlpha(0.9),
+          verticalOrigin: Cesium.VerticalOrigin.CENTER,
+          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        });
+      }
+    }
+    selectionRingBillboards.show =
+      visible && selectionRingBillboards.length > 0;
+    requestFrame('live-claims-selection');
   }
 
   /**
@@ -255,6 +399,10 @@ export function createLiveClaimsRenderer(viewer, { render } = {}) {
       // `pixelSize` used to hold, just on a different property.
       firstPixelSize: first ? first.width : null,
       firstAlpha: first ? first.color.alpha : null,
+      // Task: presence pass, hover and selection feedback.
+      hoveredId: hoveredClaimId,
+      selectedId: selectedClaimId,
+      selectionRingCount: selectionRingBillboards.length,
     };
   }
 
@@ -264,9 +412,21 @@ export function createLiveClaimsRenderer(viewer, { render } = {}) {
     motionQuery = null;
     onMotionChange = null;
     scene.primitives.remove(points);
+    scene.primitives.remove(selectionRingBillboards);
     rowCount = 0;
+    hoveredClaimId = null;
+    selectedClaimId = null;
     syncHold();
   }
 
-  return { setRows, apply, pick, destroy, getDiagnostics };
+  return {
+    setRows,
+    apply,
+    pick,
+    resolveHover: idFromPicked,
+    setHovered,
+    setSelected,
+    destroy,
+    getDiagnostics,
+  };
 }

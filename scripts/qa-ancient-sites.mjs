@@ -51,7 +51,15 @@
  */
 import puppeteer from 'puppeteer';
 import path from 'node:path';
+import { mkdirSync } from 'node:fs';
 const base = process.env.QA_BASE_URL || 'http://localhost:4173';
+// Shared with qa-anomalies.mjs and qa-claims.mjs (task: presence pass):
+// each writes its own distinctly-named files into this one directory.
+const PRESENCE_SHOT_DIR = path.resolve(
+  path.dirname(new URL(import.meta.url).pathname),
+  '../qa-shots/presence-pass',
+);
+mkdirSync(PRESENCE_SHOT_DIR, { recursive: true });
 const browser = await puppeteer.launch({
   headless: true,
   args: [
@@ -832,6 +840,182 @@ try {
       String(sweepDossier.wikipediaHref),
     );
   }
+
+  // Hover and selection feedback (task: presence pass): a real mousemove
+  // over the same known sweep site sets getRenderDiagnostics().hoveredId
+  // and the canvas cursor to 'pointer' once the shared hover helper's
+  // ~80ms throttle (src/ui/hoverPick.js) has had time to fire; moving to a
+  // pick-empty point clears both. Opening the site's dossier then sets
+  // selectedId and adds a gold selection-ring billboard
+  // (getDiagnostics().selectionRingCount); Escape clears both again.
+  // Reuses setViewAndProject/sweepTarget (already proven above) for a
+  // fresh, correctly-projected click point.
+
+  // Pick-cost measurement (task: presence pass): one `scene.pick` call,
+  // timed with `performance.now`, at world zoom (the default boot view)
+  // and again at the close zoom the checks below actually use.
+  const worldZoomPickCost = await page.evaluate(() => {
+    const viewer = window.__godsEyeView.viewer;
+    const scene = viewer.scene;
+    const ellipsoid = scene.globe.ellipsoid;
+    viewer.camera.cancelFlight();
+    viewer.camera.setView({
+      destination: ellipsoid.cartographicToCartesian({
+        longitude: 0,
+        latitude: 0,
+        height: 2.0e7,
+      }),
+      orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 },
+    });
+    const canvas = scene.canvas;
+    const t0 = performance.now();
+    scene.pick(
+      { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 },
+      12,
+      12,
+    );
+    return performance.now() - t0;
+  });
+  // world-zoom measurement moved the camera away - re-point it at the
+  // sweep site before the close-zoom measurement and the hover checks.
+  // Settled (matches every other setViewAndProject call in this file):
+  // the closest-band billboard tier only populates once the renderer's own
+  // postRender/moveEnd-driven recompute has actually run, not synchronously
+  // with setView - picking or hovering before that settle window is real
+  // flake, not a hover-mechanism bug.
+  const closeZoomPoint = await page.evaluate(setViewAndProject, sweepTarget);
+  await new Promise((r) => setTimeout(r, 700));
+  const closeZoomPickCost = closeZoomPoint
+    ? await page.evaluate((pt) => {
+        const scene = window.__godsEyeView.viewer.scene;
+        const t0 = performance.now();
+        scene.pick({ x: pt.x, y: pt.y }, 12, 12);
+        return performance.now() - t0;
+      }, closeZoomPoint)
+    : null;
+  check(
+    'hover pick cost (one scene.pick, world zoom and close zoom) stays comfortably inside the 80ms throttle window',
+    worldZoomPickCost < 50 &&
+      (closeZoomPickCost == null || closeZoomPickCost < 50),
+    `world=${worldZoomPickCost.toFixed(3)}ms close=${closeZoomPickCost == null ? 'n/a' : closeZoomPickCost.toFixed(3) + 'ms'}`,
+  );
+
+  let hoverProbe = null;
+  if (closeZoomPoint) {
+    await page.mouse.move(closeZoomPoint.x, closeZoomPoint.y);
+    // Past the shared hover helper's ~80ms throttle, with margin.
+    await new Promise((r) => setTimeout(r, 300));
+    const hovering = await page.evaluate(() => ({
+      diagnostics: window.__godsEyeView.dataManager.layers
+        .get('ancient-sites')
+        ?.module?.getRenderDiagnostics?.(),
+      cursor: window.__godsEyeView.viewer.scene.canvas.style.cursor,
+    }));
+    await page.screenshot({
+      path: path.resolve(PRESENCE_SHOT_DIR, 'ancient-sites-hover-1440.png'),
+    });
+    // A pixel that is (a) still the canvas element there (not HUD chrome on
+    // top of it) and (b) genuinely pick-empty right now - probed rather
+    // than assumed from screen distance alone.
+    const awayPoint = await page.evaluate((around) => {
+      const viewer = window.__godsEyeView.viewer;
+      const scene = viewer.scene;
+      const canvas = scene.canvas;
+      const candidates = [
+        { x: around.x + 350, y: around.y },
+        { x: around.x - 350, y: around.y },
+        { x: around.x, y: around.y + 250 },
+        { x: around.x, y: around.y - 250 },
+        { x: 30, y: canvas.clientHeight - 30 },
+        { x: canvas.clientWidth - 30, y: canvas.clientHeight - 30 },
+        { x: canvas.clientWidth - 30, y: 30 },
+      ];
+      for (const p of candidates) {
+        if (
+          p.x < 0 ||
+          p.y < 0 ||
+          p.x >= canvas.clientWidth ||
+          p.y >= canvas.clientHeight
+        )
+          continue;
+        if (document.elementFromPoint(p.x, p.y) !== canvas) continue;
+        if (!scene.pick({ x: p.x, y: p.y }, 12, 12)) return p;
+      }
+      return null;
+    }, closeZoomPoint);
+    let away = null;
+    if (awayPoint) {
+      await page.mouse.move(awayPoint.x, awayPoint.y);
+      await new Promise((r) => setTimeout(r, 300));
+      away = await page.evaluate(() => ({
+        diagnostics: window.__godsEyeView.dataManager.layers
+          .get('ancient-sites')
+          ?.module?.getRenderDiagnostics?.(),
+        cursor: window.__godsEyeView.viewer.scene.canvas.style.cursor,
+      }));
+    }
+    hoverProbe = { hovering, away, awayPoint };
+  }
+  check(
+    "hovering a known sweep site sets hoveredId and the canvas cursor to pointer, past the shared hover helper's throttle",
+    hoverProbe?.hovering.diagnostics?.hoveredId != null &&
+      hoverProbe?.hovering.cursor === 'pointer',
+    JSON.stringify(hoverProbe?.hovering),
+  );
+  check(
+    'moving to a pick-empty point clears hoveredId and the pointer cursor',
+    hoverProbe?.away != null &&
+      hoverProbe.away.diagnostics?.hoveredId == null &&
+      hoverProbe.away.cursor !== 'pointer',
+    JSON.stringify(hoverProbe?.away),
+  );
+
+  let selectionProbe = null;
+  if (closeZoomPoint) {
+    await page.mouse.click(closeZoomPoint.x, closeZoomPoint.y);
+    await page
+      .waitForFunction(
+        () => {
+          const d = document.querySelector('.uap-dossier.ancient');
+          return d && !d.hidden;
+        },
+        { timeout: 8000 },
+      )
+      .catch(() => {});
+    const opened = await page.evaluate(() =>
+      window.__godsEyeView.dataManager.layers
+        .get('ancient-sites')
+        ?.module?.getRenderDiagnostics?.(),
+    );
+    await page.screenshot({
+      path: path.resolve(PRESENCE_SHOT_DIR, 'ancient-sites-selection-1440.png'),
+    });
+    await page.evaluate(() => {
+      document
+        .querySelector('.uap-dossier.ancient')
+        ?.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+        );
+    });
+    const closed = await page.evaluate(() =>
+      window.__godsEyeView.dataManager.layers
+        .get('ancient-sites')
+        ?.module?.getRenderDiagnostics?.(),
+    );
+    selectionProbe = { opened, closed };
+  }
+  check(
+    "opening a sweep site's dossier sets selectedId and adds a selection-ring billboard",
+    selectionProbe?.opened.selectedId != null &&
+      selectionProbe?.opened.selectionRingCount === 1,
+    JSON.stringify(selectionProbe?.opened),
+  );
+  check(
+    'Escape closes the dossier and clears selectedId and the selection ring',
+    selectionProbe?.closed.selectedId == null &&
+      selectionProbe?.closed.selectionRingCount === 0,
+    JSON.stringify(selectionProbe?.closed),
+  );
 
   // Zooming out one band from that same sparse spot (past the closest-band
   // threshold, cellDeg no longer 0) must clear the ambient sweep-name

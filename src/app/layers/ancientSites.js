@@ -5,6 +5,11 @@ import {
   registerPickOwner,
   unregisterPickOwner,
 } from '../../data/pickRegistry.js';
+import {
+  installHoverPick,
+  registerHoverClient,
+  unregisterHoverClient,
+} from '../../ui/hoverPick.js';
 import { governorRequestRender } from '../../renderGovernor.js';
 
 /** Wire the bundled ancient sites dataset to the application services. */
@@ -15,6 +20,7 @@ export function createApplicationAncientSites(options = {}) {
     source: options.source || createAncientSource({ baseUrl: base }),
     overlayHost,
     picking: { registerPickOwner, unregisterPickOwner },
+    hoverPick: { installHoverPick, registerHoverClient, unregisterHoverClient },
     render: { governorRequestRender },
     assetBase: base,
     ...options,

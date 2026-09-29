@@ -16,6 +16,7 @@ import {
   unregisterPickOwner,
   isOwnedByOtherLayer,
   resolvePickId,
+  ownerOf,
 } from './pickRegistry.js';
 
 // ---------------------------------------------------------------------------
@@ -96,4 +97,59 @@ test('ownership: unregister removes the predicate', () => {
   assert.equal(isOwnedByOtherLayer('flights', 'station:1'), true);
   unregisterPickOwner('bikeshare');
   assert.equal(isOwnedByOtherLayer('flights', 'station:1'), false);
+});
+
+// ---------------------------------------------------------------------------
+// ownerOf — the shared hover helper's own single-scan owner resolution
+// (task: presence pass): unlike isOwnedByOtherLayer, this includes the
+// caller's own predicates too - it answers "whose pick is this", not
+// "does someone else own it".
+// ---------------------------------------------------------------------------
+
+test('ownerOf: returns the registered layer id whose predicate claims the pick', () => {
+  registerPickOwner('anomalies', (pickedId) => pickedId.startsWith('anomaly:'));
+  registerPickOwner('ancient-sites', (pickedId) => pickedId.startsWith('ancient:'));
+  try {
+    assert.equal(ownerOf('anomaly:geipan-1'), 'anomalies');
+    assert.equal(ownerOf('ancient:stonehenge'), 'ancient-sites');
+  } finally {
+    unregisterPickOwner('anomalies');
+    unregisterPickOwner('ancient-sites');
+  }
+});
+
+test('ownerOf: null for an id no registered predicate claims, and for a falsy id', () => {
+  registerPickOwner('anomalies', (pickedId) => pickedId.startsWith('anomaly:'));
+  try {
+    assert.equal(ownerOf('flight:aaa001'), null);
+    assert.equal(ownerOf(null), null);
+    assert.equal(ownerOf(''), null);
+  } finally {
+    unregisterPickOwner('anomalies');
+  }
+});
+
+test('ownerOf: a throwing predicate never breaks resolution for the next owner', () => {
+  registerPickOwner('broken', () => {
+    throw new Error('boom');
+  });
+  registerPickOwner('claims', (pickedId) => pickedId === 'claim:1');
+  try {
+    assert.equal(ownerOf('claim:1'), 'claims');
+    assert.equal(ownerOf('nothing'), null);
+  } finally {
+    unregisterPickOwner('broken');
+    unregisterPickOwner('claims');
+  }
+});
+
+test('ownerOf: first-registered owner wins on an (artificial) overlap, mirroring isOwnedByOtherLayer\'s own tie-break', () => {
+  registerPickOwner('first', (pickedId) => pickedId === 'shared:1');
+  registerPickOwner('second', (pickedId) => pickedId === 'shared:1');
+  try {
+    assert.equal(ownerOf('shared:1'), 'first');
+  } finally {
+    unregisterPickOwner('first');
+    unregisterPickOwner('second');
+  }
 });

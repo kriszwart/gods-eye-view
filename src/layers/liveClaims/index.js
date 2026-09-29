@@ -98,6 +98,7 @@ export function createLiveClaimsLayer({
   source,
   anomalySource,
   picking,
+  hoverPick,
   render,
   container,
 } = {}) {
@@ -255,8 +256,21 @@ export function createLiveClaimsLayer({
     // the same space.
     closeTicker();
     dossier.hidden = false;
+    // Selection ring (task: presence pass): the id shape setSelected takes
+    // mirrors renderer.pick()'s own return value exactly - a plain claimId
+    // string here.
+    renderer?.setSelected(id);
     dossier.querySelector('.uap-close').focus();
     attachNearbyBlock(row, token);
+  }
+
+  /** Every dossier-close path (Close button, Escape, a different register's
+   * dossier opening, layer disable) routes through here, so the selection
+   * ring (task: presence pass) is cleared exactly where the dossier itself
+   * closes. */
+  function closeDossier() {
+    if (dossier) dossier.hidden = true;
+    renderer?.setSelected(null);
   }
 
   /** Refresh the always-visible status plate: the honesty line, plus either
@@ -386,6 +400,10 @@ export function createLiveClaimsLayer({
     init(v) {
       if (viewer) throw new Error('Live claims layer is already initialized');
       viewer = v;
+      // Shared hover-pick helper (task: presence pass): idempotent across
+      // every register's own init() call - see anomalies/index.js's own
+      // matching comment.
+      hoverPick?.installHoverPick?.(v);
       renderer = createLiveClaimsRenderer(viewer, { render });
       const host = container || viewer.container;
       dossier = document.createElement('aside');
@@ -394,11 +412,11 @@ export function createLiveClaimsLayer({
       dossier.setAttribute('aria-label', 'Claim dossier');
       dossier.addEventListener(
         'click',
-        (e) => e.target.closest('.uap-close') && (dossier.hidden = true),
+        (e) => e.target.closest('.uap-close') && closeDossier(),
       );
       dossier.addEventListener(
         'keydown',
-        (e) => e.key === 'Escape' && (dossier.hidden = true),
+        (e) => e.key === 'Escape' && closeDossier(),
       );
       host.appendChild(dossier);
       // Mirror of the dispatch in openDossier: another register's dossier
@@ -409,7 +427,7 @@ export function createLiveClaimsLayer({
           dossier &&
           !dossier.hidden
         )
-          dossier.hidden = true;
+          closeDossier();
       };
       window.addEventListener(DOSSIER_OPEN_EVENT, onOtherDossierOpen);
       statusPlate = document.createElement('div');
@@ -510,6 +528,13 @@ export function createLiveClaimsLayer({
           typeof pickedId === 'string' &&
           pickedId.startsWith('claim:'),
       );
+      // Shared hover-pick helper (task: presence pass): resolveHover mirrors
+      // renderer.pick()'s own extraction, given the hover helper's own
+      // already-picked result rather than picking the scene again.
+      hoverPick?.registerHoverClient?.(LIVE_CLAIMS_LAYER_ID, {
+        resolveHover: (picked) => renderer?.resolveHover(picked),
+        onHover: (id) => renderer?.setHovered(id),
+      });
     },
 
     disable() {
@@ -517,7 +542,8 @@ export function createLiveClaimsLayer({
       request = null;
       enabled = false;
       picking?.unregisterPickOwner?.(LIVE_CLAIMS_LAYER_ID);
-      if (dossier) dossier.hidden = true;
+      hoverPick?.unregisterHoverClient?.(LIVE_CLAIMS_LAYER_ID);
+      closeDossier();
       if (statusPlate) statusPlate.hidden = true;
       closeTicker();
       clickHandler?.destroy();
@@ -623,6 +649,9 @@ export function createLiveClaimsLayer({
           pointCount: 0,
           firstPixelSize: null,
           firstAlpha: null,
+          hoveredId: null,
+          selectedId: null,
+          selectionRingCount: 0,
         }
       );
     },

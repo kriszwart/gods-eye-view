@@ -114,6 +114,7 @@ export function createAnomaliesLayer({
   source,
   overlayHost,
   picking,
+  hoverPick,
   render,
   assetBase = '/anomalies/',
   container,
@@ -265,7 +266,20 @@ export function createAnomaliesLayer({
       }),
     );
     dossier.hidden = false;
+    // Selection ring (task: presence pass): the id shape setSelected takes
+    // mirrors renderer.pick()'s own return value exactly - a plain
+    // anomalyId string here.
+    renderer?.setSelected(id);
     dossier.querySelector('.uap-close').focus();
+  }
+
+  /** Every dossier-close path (Close button, Escape, a different register's
+   * dossier opening, layer disable) routes through here, so the selection
+   * ring (task: presence pass) is cleared exactly where the dossier itself
+   * closes - never a separate, easy-to-miss second call site. */
+  function closeDossier() {
+    if (dossier) dossier.hidden = true;
+    renderer?.setSelected(null);
   }
 
   /** Open the Sources and credits plate, syncing its toggle button. */
@@ -349,6 +363,11 @@ export function createAnomaliesLayer({
     init(v) {
       if (viewer) throw new Error('Anomaly layer is already initialized');
       viewer = v;
+      // Shared hover-pick helper (task: presence pass): idempotent across
+      // every register's own init() call, since all three share the same
+      // app-wide viewer/canvas - only the first call actually attaches the
+      // listener.
+      hoverPick?.installHoverPick?.(v);
       renderer = createAnomalyRenderer(viewer, {
         assetBase,
         render,
@@ -376,11 +395,11 @@ export function createAnomaliesLayer({
       dossier.setAttribute('aria-label', 'Case dossier');
       dossier.addEventListener(
         'click',
-        (e) => e.target.closest('.uap-close') && (dossier.hidden = true),
+        (e) => e.target.closest('.uap-close') && closeDossier(),
       );
       dossier.addEventListener(
         'keydown',
-        (e) => e.key === 'Escape' && (dossier.hidden = true),
+        (e) => e.key === 'Escape' && closeDossier(),
       );
       host.appendChild(dossier);
       // Mirror of the dispatch in openDossier: the ancient-sites dossier
@@ -391,7 +410,7 @@ export function createAnomaliesLayer({
           dossier &&
           !dossier.hidden
         )
-          dossier.hidden = true;
+          closeDossier();
       };
       window.addEventListener(DOSSIER_OPEN_EVENT, onOtherDossierOpen);
       legend = document.createElement('div');
@@ -568,6 +587,13 @@ export function createAnomaliesLayer({
           typeof pickedId === 'string' &&
           pickedId.startsWith('anomaly:'),
       );
+      // Shared hover-pick helper (task: presence pass): resolveHover mirrors
+      // renderer.pick()'s own extraction, given the hover helper's own
+      // already-picked result rather than picking the scene again.
+      hoverPick?.registerHoverClient?.(ANOMALY_LAYER_ID, {
+        resolveHover: (picked) => renderer?.resolveHover(picked),
+        onHover: (id) => renderer?.setHovered(id),
+      });
       refreshTime();
     },
 
@@ -576,6 +602,7 @@ export function createAnomaliesLayer({
       request = null;
       enabled = false;
       picking?.unregisterPickOwner?.(ANOMALY_LAYER_ID);
+      hoverPick?.unregisterHoverClient?.(ANOMALY_LAYER_ID);
       chrono?.setVisible(false);
       searchControl?.clear();
       stopTour();
@@ -588,7 +615,7 @@ export function createAnomaliesLayer({
       if (legend) legend.hidden = true;
       restoreAtmosphere?.();
       restoreAtmosphere = null;
-      if (dossier) dossier.hidden = true;
+      closeDossier();
       removeCamera?.();
       removeCamera = null;
       clickHandler?.destroy();

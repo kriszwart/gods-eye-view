@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * qa-presence-pass-shot — retina-composition proof for task 1 of the
+ * qa-presence-pass-shot: retina-composition proof for task 1 of the
  * presence pass (src/ui/glowSprite.js, src/layers/anomalies/rendering.js,
  * src/layers/ancientSites/rendering.js all now compose at
  * min(devicePixelRatio, 2) times the CSS size, with the DPR bucket joining

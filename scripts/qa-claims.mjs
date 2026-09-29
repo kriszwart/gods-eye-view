@@ -252,6 +252,33 @@ try {
   await page.screenshot({ path: resolve(SHOT_DIR, 'points-1440.png') });
 
   const clickPoint = await page.evaluate(projectAt, target);
+
+  // Retina-sharp composition (task: presence pass): every composer's cache
+  // key and imageId carry the DPR bucket (glowSprite.js's `dprBucket`), so a
+  // live glow-sprite billboard's own imageId must end with the "@<dpr>"
+  // token this run actually composed at - proving the wiring reaches a real
+  // rendered billboard, not just the composer functions in isolation.
+  // Headless Puppeteer runs at devicePixelRatio 1 unless a page/viewport
+  // requests otherwise (this gate's own setViewport above never sets
+  // deviceScaleFactor), so "@1" is the honest bucket to expect - the retina
+  // path itself (deviceScaleFactor 2) is proven separately by the
+  // presence-pass screenshot script.
+  const claimGlyphImageId = clickPoint
+    ? await page.evaluate((pt) => {
+        const scene = window.__godsEyeView.viewer.scene;
+        const picked = scene.pick({ x: pt.x, y: pt.y }, 12, 12);
+        const primitive = picked?.primitive;
+        return typeof primitive?.image === 'string' ? primitive.image : null;
+      }, clickPoint)
+    : null;
+  check(
+    'the picked live-claims glow-sprite billboard\'s own imageId carries the DPR bucket this run composed at ("@1" under headless Puppeteer, which reports devicePixelRatio 1 unless a page requests otherwise)',
+    typeof claimGlyphImageId === 'string' &&
+      claimGlyphImageId.startsWith('glow:') &&
+      claimGlyphImageId.endsWith('@1'),
+    JSON.stringify({ claimGlyphImageId }),
+  );
+
   let dossier = { open: false };
   if (clickPoint) {
     await page.mouse.click(clickPoint.x, clickPoint.y);

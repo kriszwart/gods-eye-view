@@ -10,6 +10,7 @@ import {
   composeGlowSprite,
   glowCacheKey,
   sizeBucket,
+  currentDprBucket,
 } from '../../ui/glowSprite.js';
 
 /** A stable [0, 2*PI) phase per claim id, so points do not all pulse in
@@ -53,10 +54,14 @@ const PULSE_ALPHA_AMPLITUDE = 0.12;
 // sidesteps the bug entirely while keeping the exact on-screen size
 // pointPixelSize()'s continuous curve always produced.
 const MAX_POINT_SIZE_PX = pointPixelSize(1) + PULSE_SIZE_AMPLITUDE_PX;
-const glowImageId = glowCacheKey(
-  PALETTE.ionDark,
-  sizeBucket(MAX_POINT_SIZE_PX),
-);
+// `glowImageId` is a function of the DPR bucket, not a module-load-time
+// constant (task: presence pass, retina-sharp composition): DPR is read
+// fresh at each composition (setRows below, the register's only write path
+// per the module doc comment above - never the tick), never cached at
+// import time, so a session that starts before a window move to a
+// different-density display still composes correctly on the next rebuild.
+const glowImageId = (dpr) =>
+  glowCacheKey(PALETTE.ionDark, sizeBucket(MAX_POINT_SIZE_PX), dpr);
 const glowImage = () =>
   composeGlowSprite({ hue: PALETTE.ionDark, sizePx: MAX_POINT_SIZE_PX });
 
@@ -181,6 +186,10 @@ export function createLiveClaimsRenderer(viewer, { render } = {}) {
    * `fetchedAt` (see records.js's normalizeClaimRow). */
   function setRows(rows) {
     points.removeAll();
+    // Read once for this whole build pass (task: presence pass, retina-sharp
+    // composition): every billboard added below shares the same DPR bucket,
+    // matching composeGlowSprite's own internal read for `glowImage()`.
+    const dpr = currentDprBucket();
     for (const row of rows) {
       const size = pointPixelSize(1);
       points.add({
@@ -192,7 +201,7 @@ export function createLiveClaimsRenderer(viewer, { render } = {}) {
         },
         position: Cesium.Cartesian3.fromDegrees(row.lon, row.lat, 0),
         image: glowImage(),
-        imageId: glowImageId,
+        imageId: glowImageId(dpr),
         width: size,
         height: size,
         color: Cesium.Color.WHITE.withAlpha(pointAlpha(1)),

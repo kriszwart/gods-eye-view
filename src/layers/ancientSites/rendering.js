@@ -18,6 +18,7 @@ import {
   composeGlowSprite,
   glowCacheKey,
   sizeBucket,
+  currentDprBucket,
 } from '../../ui/glowSprite.js';
 
 // Luminous points (task: luminous pins): every hero, mid-band single and
@@ -29,7 +30,14 @@ import {
 // exactly as they did on the plain points before. The close-range glyph
 // billboards (sweepBillboards/tmaBillboards below) are untouched: they were
 // already billboards before this task and stay exactly as they are.
-const goldGlowImageId = (sizePx) => glowCacheKey(GOLD, sizeBucket(sizePx));
+//
+// `dpr` here must be the same bucket `composeGlowSprite` resolved for
+// `goldGlowImage`'s own call (task: presence pass, retina-sharp
+// composition): both read fresh via `currentDprBucket` in the same
+// synchronous build pass, so they always agree without threading a value
+// between them.
+const goldGlowImageId = (sizePx, dpr) =>
+  glowCacheKey(GOLD, sizeBucket(sizePx), dpr);
 const goldGlowImage = (sizePx) => composeGlowSprite({ hue: GOLD, sizePx });
 
 /**
@@ -95,6 +103,30 @@ const BILLBOARD_HALO_STROKE = 'rgba(216, 179, 106, 0.55)';
  */
 const ANCIENT_GLYPH_PLACEHOLDER_IMAGE_ID = 'ancient-glyph-placeholder';
 
+/** `imageId` for the placeholder canvas at a given DPR bucket (task:
+ * presence pass, retina-sharp composition): a DPR-1 and a DPR-2 placeholder
+ * raster are distinct content, so each gets its own id, kept under the same
+ * `ancient-glyph-placeholder` namespace so it still reads apart from any
+ * real glyph's own `url@dpr` id at a glance. */
+function ancientGlyphPlaceholderImageId(dpr) {
+  return `${ANCIENT_GLYPH_PLACEHOLDER_IMAGE_ID}@${dpr}`;
+}
+
+/**
+ * `imageId` (and cache key) for a real glyph billboard image at a given
+ * (URL, DPR bucket) pair (task: presence pass, retina-sharp composition): a
+ * DPR-1 and a DPR-2 raster of the same glyph URL are distinct content, so
+ * they need distinct ids, never a shared one that would let one silently
+ * pre-empt the other in the texture atlas (the d967cd5 lesson this file's
+ * own ANCIENT_GLYPH_PLACEHOLDER_IMAGE_ID doc comment above already names).
+ * @param {string} url
+ * @param {number} dpr
+ * @returns {string}
+ */
+function billboardGlyphImageId(url, dpr) {
+  return `${url}@${dpr}`;
+}
+
 /**
  * Load an image element from a URL (used for the glyph SVGs under
  * public/ancient-sites/glyphs/). Rejects on load failure rather than
@@ -119,12 +151,26 @@ function loadImageElement(url) {
  * a solid gold fill so only the glyph's own opaque pixels - and their
  * anti-aliased edges - take the gold colour, leaving transparent areas
  * untouched.
+ *
+ * Takes explicit `width`/`height` for the intermediate canvas rather than
+ * deriving them from `image.naturalWidth`/`naturalHeight` (task: presence
+ * pass, retina-sharp composition): the shipped glyphs are `viewBox`-only
+ * SVGs with no explicit intrinsic size, so their natural dimensions are an
+ * implementation-dependent default-object-size guess, not something tied to
+ * how large the glyph will actually render. Asking the browser to rasterise
+ * the source SVG directly at the CALLER'S final on-canvas pixel size - see
+ * `composeGlyphBillboardCanvas`'s own `glyphPx` below - re-renders the
+ * vector artwork fresh at that resolution (crisp at any DPR); drawing it
+ * first into a small natural-size raster and only then scaling THAT bitmap
+ * up would bake in blur before the DPR multiplier ever gets a chance to
+ * help ("scales the source, not stretches a raster of it" - see the task
+ * brief).
  * @param {HTMLImageElement} image
+ * @param {number} width - Target raster width, in actual canvas pixels.
+ * @param {number} height - Target raster height, in actual canvas pixels.
  * @returns {HTMLCanvasElement}
  */
-function recolorGlyphGold(image) {
-  const width = image.naturalWidth || image.width || BILLBOARD_CANVAS_DIM;
-  const height = image.naturalHeight || image.height || BILLBOARD_CANVAS_DIM;
+function recolorGlyphGold(image, width, height) {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -139,19 +185,31 @@ function recolorGlyphGold(image) {
 
 /**
  * Compose one billboard image: a dark halo ring behind the gold-recoloured
- * glyph, centred, at `BILLBOARD_CANVAS_DIM`. Built once per distinct glyph
- * URL (see `requestBillboardGlyph`'s cache below) and reused for every
- * billboard of that type - never rebuilt per site.
+ * glyph, centred, at `BILLBOARD_CANVAS_DIM`. Built once per distinct
+ * (glyph URL, DPR bucket) pair (see `requestBillboardGlyph`'s cache below)
+ * and reused for every billboard of that type - never rebuilt per site.
+ *
+ * `dim` stays the logical, CSS-pixel-equivalent drawing size every
+ * coordinate below is expressed in (unchanged from before the presence-pass
+ * task); the canvas's own `width`/`height` - the actual raster resolution
+ * `BillboardCollection` uploads as a texture - scale by `dpr`, mapped onto
+ * the unchanged geometry via `ctx.scale(dpr, dpr)`. The embedded glyph gets
+ * the same treatment one level down: `recolorGlyphGold` is asked to
+ * rasterise the SOURCE SVG directly at `glyphPx` (the glyph's own on-canvas
+ * footprint, already DPR-scaled), not at some fixed natural size later
+ * stretched - see that function's own doc comment for why.
  * @param {HTMLImageElement} glyphImage - Already-loaded glyph image (black on transparent).
+ * @param {number} dpr - Bucketed devicePixelRatio (see glowSprite.js's `dprBucket`).
  * @returns {HTMLCanvasElement}
  */
-function composeGlyphBillboardCanvas(glyphImage) {
+function composeGlyphBillboardCanvas(glyphImage, dpr) {
   const dim = BILLBOARD_CANVAS_DIM;
   const canvas = document.createElement('canvas');
-  canvas.width = dim;
-  canvas.height = dim;
+  canvas.width = Math.round(dim * dpr);
+  canvas.height = Math.round(dim * dpr);
   const ctx = canvas.getContext('2d');
   if (!ctx) return canvas;
+  ctx.scale(dpr, dpr);
   const centre = dim / 2;
   ctx.beginPath();
   ctx.arc(centre, centre, centre - 2, 0, Math.PI * 2);
@@ -162,8 +220,9 @@ function composeGlyphBillboardCanvas(glyphImage) {
   ctx.stroke();
   const glyphSize = dim * 0.6;
   const offset = (dim - glyphSize) / 2;
+  const glyphPx = Math.round(glyphSize * dpr);
   ctx.drawImage(
-    recolorGlyphGold(glyphImage),
+    recolorGlyphGold(glyphImage, glyphPx, glyphPx),
     offset,
     offset,
     glyphSize,
@@ -175,16 +234,20 @@ function composeGlyphBillboardCanvas(glyphImage) {
 /** Lazily-built halo-only placeholder (a small gold dot in the same dark
  * halo ring) shown for the brief window - if any - between a billboard's
  * first request and its real glyph finishing its (tiny, same-origin, local)
- * fetch. Built once, shared by every type until its own glyph is ready. */
-let fallbackGlyphCanvasEl = null;
-function fallbackGlyphCanvas() {
-  if (fallbackGlyphCanvasEl) return fallbackGlyphCanvasEl;
+ * fetch. Built once per DPR bucket (at most `MAX_COMPOSE_DPR`-many entries -
+ * see glowSprite.js; task: presence pass, retina-sharp composition), shared
+ * by every type until its own glyph is ready. */
+const fallbackGlyphCanvasByDpr = new Map();
+function fallbackGlyphCanvas(dpr) {
+  const cached = fallbackGlyphCanvasByDpr.get(dpr);
+  if (cached) return cached;
   const dim = BILLBOARD_CANVAS_DIM;
   const canvas = document.createElement('canvas');
-  canvas.width = dim;
-  canvas.height = dim;
+  canvas.width = Math.round(dim * dpr);
+  canvas.height = Math.round(dim * dpr);
   const ctx = canvas.getContext('2d');
   if (ctx) {
+    ctx.scale(dpr, dpr);
     const centre = dim / 2;
     ctx.beginPath();
     ctx.arc(centre, centre, centre - 2, 0, Math.PI * 2);
@@ -195,42 +258,54 @@ function fallbackGlyphCanvas() {
     ctx.fillStyle = GOLD;
     ctx.fill();
   }
-  fallbackGlyphCanvasEl = canvas;
-  return fallbackGlyphCanvasEl;
+  fallbackGlyphCanvasByDpr.set(dpr, canvas);
+  return canvas;
 }
 
-/** Composed billboard images, cached per glyph URL (module scope: shared
- * across every renderer instance and every enable/disable cycle, since the
- * shipped glyph SVGs never change while the app is running - "cache per
- * type, never per site"). A failed load is cached too, as the fallback
- * canvas, so the cache also doubles as "do not retry this URL" (see
+/** Composed billboard images, cached per (glyph URL, DPR bucket) pair
+ * (module scope: shared across every renderer instance and every
+ * enable/disable cycle, since the shipped glyph SVGs never change while the
+ * app is running - "cache per type, never per site" - extended by the
+ * presence-pass task with the DPR bucket, since a DPR-1 and a DPR-2 raster
+ * of the same URL are distinct content, see `billboardGlyphImageId` above).
+ * A failed load is cached too, as the fallback canvas, so the cache also
+ * doubles as "do not retry this URL at this DPR" (see
  * `requestBillboardGlyph`'s catch branch below). `billboardGlyphLoading`
- * guards against firing a second fetch for a URL that is already in flight;
- * `billboardGlyphSubscribers` are notified once a fetch settles, so an
- * active renderer can redraw its currently-visible billboards from a
- * placeholder to the real glyph (or, on failure, to the permanent
- * fallback). */
+ * guards against firing a second fetch for a (URL, DPR) pair that is
+ * already in flight; `billboardGlyphSubscribers` are notified once a fetch
+ * settles, so an active renderer can redraw its currently-visible
+ * billboards from a placeholder to the real glyph (or, on failure, to the
+ * permanent fallback). */
 const billboardGlyphCache = new Map();
 const billboardGlyphLoading = new Set();
 const billboardGlyphSubscribers = new Set();
 
 /**
- * The cached composed billboard image for a glyph URL, kicking off a load if
- * this is the first request for it. Returns `null` (caller should use
- * `fallbackGlyphCanvas()` meanwhile) until the load settles. A failed load
- * caches the fallback canvas as the permanent result for that URL, so a
- * single failure ends the chain rather than retrying on every re-render.
+ * The cached composed billboard image for a (glyph URL, DPR bucket) pair,
+ * kicking off a load if this is the first request for it. Returns `null`
+ * (caller should use `fallbackGlyphCanvas(dpr)` meanwhile) until the load
+ * settles. A failed load caches the fallback canvas as the permanent result
+ * for that pair, so a single failure ends the chain rather than retrying on
+ * every re-render.
+ *
+ * `dpr` is the caller's already-resolved DPR bucket (read once per
+ * composition build - task: presence pass, retina-sharp composition),
+ * threaded through here rather than re-read internally so the SAME value
+ * survives into the async `.then`/`.catch` below regardless of when they
+ * settle.
  * @param {string} url
+ * @param {number} dpr
  * @returns {HTMLCanvasElement|null}
  */
-function requestBillboardGlyph(url) {
-  const ready = billboardGlyphCache.get(url);
+function requestBillboardGlyph(url, dpr) {
+  const key = billboardGlyphImageId(url, dpr);
+  const ready = billboardGlyphCache.get(key);
   if (ready) return ready;
-  if (!billboardGlyphLoading.has(url)) {
-    billboardGlyphLoading.add(url);
+  if (!billboardGlyphLoading.has(key)) {
+    billboardGlyphLoading.add(key);
     loadImageElement(url)
       .then((image) => {
-        billboardGlyphCache.set(url, composeGlyphBillboardCanvas(image));
+        billboardGlyphCache.set(key, composeGlyphBillboardCanvas(image, dpr));
       })
       .catch((error) => {
         console.warn(
@@ -238,7 +313,7 @@ function requestBillboardGlyph(url) {
           url,
           error,
         );
-        // Cache the fallback canvas under this URL as a permanent result, not
+        // Cache the fallback canvas under this key as a permanent result, not
         // just a transient placeholder: without this, a failed load left the
         // cache empty, so the next renderSweepSingles() (fired by the notify
         // below, or by the next camera move) called requestBillboardGlyph(url)
@@ -247,10 +322,10 @@ function requestBillboardGlyph(url) {
         // console.warn spam for as long as the camera sat at the closest band
         // over this type. One failure now ends the chain: one warn, no
         // retries.
-        billboardGlyphCache.set(url, fallbackGlyphCanvas());
+        billboardGlyphCache.set(key, fallbackGlyphCanvas(dpr));
       })
       .finally(() => {
-        billboardGlyphLoading.delete(url);
+        billboardGlyphLoading.delete(key);
         for (const notify of billboardGlyphSubscribers) notify();
       });
   }
@@ -422,8 +497,12 @@ export function createAncientRenderer(
   }
   billboardGlyphSubscribers.add(onGlyphReady);
   // Kick every sweep-type glyph's load off now, well before any camera could
-  // plausibly reach the closest band.
-  for (const type of SWEEP_TYPES) requestBillboardGlyph(glyphUrlForType(type));
+  // plausibly reach the closest band. One DPR read for the whole warm-up
+  // burst (task: presence pass, retina-sharp composition): every type below
+  // shares it.
+  const warmDpr = currentDprBucket();
+  for (const type of SWEEP_TYPES)
+    requestBillboardGlyph(glyphUrlForType(type), warmDpr);
 
   function cameraHeight() {
     return (
@@ -453,12 +532,13 @@ export function createAncientRenderer(
 
   function setHeroes(rows) {
     heroPoints.removeAll();
+    const dpr = currentDprBucket();
     for (const r of rows)
       heroPoints.add({
         id: { id: `ancient:${r.id}`, ancientKind: 'hero', ancientId: r.id },
         position: Cesium.Cartesian3.fromDegrees(r.lon, r.lat, 0),
         image: goldGlowImage(HERO_POINT_SIZE_PX),
-        imageId: goldGlowImageId(HERO_POINT_SIZE_PX),
+        imageId: goldGlowImageId(HERO_POINT_SIZE_PX, dpr),
         width: HERO_POINT_SIZE_PX,
         height: HERO_POINT_SIZE_PX,
         color: Cesium.Color.WHITE.withAlpha(0.9),
@@ -480,6 +560,10 @@ export function createAncientRenderer(
     sweepPoints.removeAll();
     sweepBillboards.removeAll();
     const closeBand = currentCellDeg === 0;
+    // Read once for this whole rebuild pass (task: presence pass,
+    // retina-sharp composition), not per single: every billboard added
+    // below shares the same DPR bucket.
+    const dpr = currentDprBucket();
     if (closeBand) {
       for (const single of currentSingles) {
         const i = single.index;
@@ -489,7 +573,7 @@ export function createAncientRenderer(
         // with every single falling back to the default glyph.
         const typeName = sweep.typeName ? sweep.typeName(i) : '';
         const url = glyphUrlForType(typeName);
-        const composed = requestBillboardGlyph(url);
+        const composed = requestBillboardGlyph(url, dpr);
         sweepBillboards.add({
           id: {
             id: `ancient:sweep:${i}`,
@@ -504,8 +588,10 @@ export function createAncientRenderer(
           // See ANCIENT_GLYPH_PLACEHOLDER_IMAGE_ID's own comment above: the
           // placeholder must never share the real glyph's atlas id, or the
           // upgrade on glyph-ready never takes visual effect.
-          image: composed || fallbackGlyphCanvas(),
-          imageId: composed ? url : ANCIENT_GLYPH_PLACEHOLDER_IMAGE_ID,
+          image: composed || fallbackGlyphCanvas(dpr),
+          imageId: composed
+            ? billboardGlyphImageId(url, dpr)
+            : ancientGlyphPlaceholderImageId(dpr),
           width: BILLBOARD_DISPLAY_PX,
           height: BILLBOARD_DISPLAY_PX,
           verticalOrigin: Cesium.VerticalOrigin.CENTER,
@@ -537,7 +623,7 @@ export function createAncientRenderer(
         },
         position: Cesium.Cartesian3.fromDegrees(sweep.lon(i), sweep.lat(i), 0),
         image: goldGlowImage(size),
-        imageId: goldGlowImageId(size),
+        imageId: goldGlowImageId(size, dpr),
         width: size,
         height: size,
         color: Cesium.Color.WHITE.withAlpha(alpha),
@@ -553,6 +639,7 @@ export function createAncientRenderer(
     renderSweepSingles();
     clusterPoints.removeAll();
     clusterLabels.removeAll();
+    const dpr = currentDprBucket();
     currentClusters.forEach((cluster, index) => {
       const position = Cesium.Cartesian3.fromDegrees(
         cluster.lon,
@@ -568,7 +655,7 @@ export function createAncientRenderer(
         id,
         position,
         image: goldGlowImage(CLUSTER_POINT_SIZE_PX),
-        imageId: goldGlowImageId(CLUSTER_POINT_SIZE_PX),
+        imageId: goldGlowImageId(CLUSTER_POINT_SIZE_PX, dpr),
         width: CLUSTER_POINT_SIZE_PX,
         height: CLUSTER_POINT_SIZE_PX,
         color: Cesium.Color.WHITE.withAlpha(0.85),
@@ -778,17 +865,20 @@ export function createAncientRenderer(
   function setTma(rows) {
     if (!LOCAL_TMA_ENABLED || !tmaBillboards) return;
     tmaBillboards.removeAll();
+    const dpr = currentDprBucket();
     for (const r of rows) {
       const url = glyphUrlForTmaCategory(r.category);
-      const composed = requestBillboardGlyph(url);
+      const composed = requestBillboardGlyph(url, dpr);
       tmaBillboards.add({
         id: { id: r.id, ancientKind: 'tma', tmaId: r.id },
         position: Cesium.Cartesian3.fromDegrees(r.lon, r.lat, 0),
         // See ANCIENT_GLYPH_PLACEHOLDER_IMAGE_ID's own comment above: the
         // placeholder must never share the real glyph's atlas id, or the
         // upgrade on glyph-ready never takes visual effect.
-        image: composed || fallbackGlyphCanvas(),
-        imageId: composed ? url : ANCIENT_GLYPH_PLACEHOLDER_IMAGE_ID,
+        image: composed || fallbackGlyphCanvas(dpr),
+        imageId: composed
+          ? billboardGlyphImageId(url, dpr)
+          : ancientGlyphPlaceholderImageId(dpr),
         width: BILLBOARD_DISPLAY_PX,
         height: BILLBOARD_DISPLAY_PX,
         verticalOrigin: Cesium.VerticalOrigin.CENTER,

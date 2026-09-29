@@ -16,6 +16,7 @@ import {
   composeGlowSprite,
   glowCacheKey,
   sizeBucket,
+  currentDprBucket,
 } from '../../ui/glowSprite.js';
 
 // Luminous points (task: luminous pins): every status-hued point is a glow
@@ -31,8 +32,13 @@ import {
 // against the sprite's white core - reproducing pointColor()/pointAlpha()'s
 // output exactly, with no quantisation.
 const GLOW_NEUTRAL_HUE = '#ffffff';
-const glowImageId = (sizePx) =>
-  glowCacheKey(GLOW_NEUTRAL_HUE, sizeBucket(sizePx));
+// `dpr` here must be the same bucket `composeGlowSprite` resolved for
+// `glowImage`'s own call (task: presence pass, retina-sharp composition):
+// both read fresh via `currentDprBucket` in the same synchronous build pass
+// (setRows below), so they always agree without threading a value between
+// them.
+const glowImageId = (sizePx, dpr) =>
+  glowCacheKey(GLOW_NEUTRAL_HUE, sizeBucket(sizePx), dpr);
 const glowImage = (sizePx) =>
   composeGlowSprite({ hue: GLOW_NEUTRAL_HUE, sizePx });
 
@@ -99,13 +105,26 @@ function withAlphaHex(hex, alpha) {
  * composite a solid fill of `hue` so only the glyph's own opaque pixels -
  * and their anti-aliased edges - take the colour, leaving transparent areas
  * untouched.
+ *
+ * Takes explicit `width`/`height` for the intermediate canvas rather than
+ * deriving them from `image.naturalWidth`/`naturalHeight` (task: presence
+ * pass, retina-sharp composition): the shipped glyphs are `viewBox`-only
+ * SVGs with no explicit intrinsic size, so their natural dimensions are an
+ * implementation-dependent default-object-size guess, not something tied to
+ * how large the glyph will actually render. Asking the browser to rasterise
+ * the source SVG directly at the CALLER'S final on-canvas pixel size - see
+ * `composeShapeGlyphCanvas`'s own `glyphPx` below - re-renders the vector
+ * artwork fresh at that resolution (crisp at any DPR); drawing it first into
+ * a small natural-size raster and only then scaling THAT bitmap up would
+ * bake in blur before the DPR multiplier ever gets a chance to help ("scales
+ * the source, not stretches a raster of it" - see the task brief).
  * @param {HTMLImageElement} image
  * @param {string} hue - A `#rrggbb` colour.
+ * @param {number} width - Target raster width, in actual canvas pixels.
+ * @param {number} height - Target raster height, in actual canvas pixels.
  * @returns {HTMLCanvasElement}
  */
-function recolourShapeGlyph(image, hue) {
-  const width = image.naturalWidth || image.width || SHAPE_GLYPH_CANVAS_DIM;
-  const height = image.naturalHeight || image.height || SHAPE_GLYPH_CANVAS_DIM;
+function recolourShapeGlyph(image, hue, width, height) {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -121,23 +140,35 @@ function recolourShapeGlyph(image, hue) {
 /**
  * Compose one shape-glyph billboard image: a dark halo ring, stroked in the
  * same hue at reduced alpha, behind the hue-recoloured glyph, centred at
- * SHAPE_GLYPH_CANVAS_DIM. Built once per distinct (shape, hue) pair (see the
- * cache below) and reused for every billboard of that pair - never rebuilt
- * per row. The billboard's own continuous width/height (the row's
- * pointSize()) then scale this whole fixed-resolution raster, so "how
- * unexplained" still reads as size exactly as it does on the glow-sprite
- * tier.
+ * SHAPE_GLYPH_CANVAS_DIM. Built once per distinct (shape, hue, DPR bucket)
+ * triple (see the cache below) and reused for every billboard of that
+ * triple - never rebuilt per row. The billboard's own continuous
+ * width/height (the row's pointSize()) then scale this whole
+ * fixed-resolution raster, so "how unexplained" still reads as size exactly
+ * as it does on the glow-sprite tier.
+ *
+ * `dim` stays the logical, CSS-pixel-equivalent drawing size every
+ * coordinate below is expressed in (unchanged from before the presence-pass
+ * task); the canvas's own `width`/`height` - the actual raster resolution
+ * `BillboardCollection` uploads as a texture - scale by `dpr`, mapped onto
+ * the unchanged geometry via `ctx.scale(dpr, dpr)`. The embedded glyph gets
+ * the same treatment one level down: `recolourShapeGlyph` is asked to
+ * rasterise the SOURCE SVG directly at `glyphPx` (the glyph's own on-canvas
+ * footprint, already DPR-scaled), not at some fixed natural size later
+ * stretched - see that function's own doc comment for why.
  * @param {HTMLImageElement} glyphImage - Already-loaded glyph image (black on transparent).
  * @param {string} hue - A `#rrggbb` colour.
+ * @param {number} dpr - Bucketed devicePixelRatio (see glowSprite.js's `dprBucket`).
  * @returns {HTMLCanvasElement}
  */
-function composeShapeGlyphCanvas(glyphImage, hue) {
+function composeShapeGlyphCanvas(glyphImage, hue, dpr) {
   const dim = SHAPE_GLYPH_CANVAS_DIM;
   const canvas = document.createElement('canvas');
-  canvas.width = dim;
-  canvas.height = dim;
+  canvas.width = Math.round(dim * dpr);
+  canvas.height = Math.round(dim * dpr);
   const ctx = canvas.getContext('2d');
   if (!ctx) return canvas;
+  ctx.scale(dpr, dpr);
   const centre = dim / 2;
   ctx.beginPath();
   ctx.arc(centre, centre, centre - 2, 0, Math.PI * 2);
@@ -148,8 +179,9 @@ function composeShapeGlyphCanvas(glyphImage, hue) {
   ctx.stroke();
   const glyphSize = dim * 0.6;
   const offset = (dim - glyphSize) / 2;
+  const glyphPx = Math.round(glyphSize * dpr);
   ctx.drawImage(
-    recolourShapeGlyph(glyphImage, hue),
+    recolourShapeGlyph(glyphImage, hue, glyphPx, glyphPx),
     offset,
     offset,
     glyphSize,
@@ -158,22 +190,35 @@ function composeShapeGlyphCanvas(glyphImage, hue) {
   return canvas;
 }
 
+/** `imageId` for the loading-state placeholder canvas below, per DPR bucket
+ * (task: presence pass, retina-sharp composition): keeps the placeholder's
+ * own id namespace distinct from every real glyph's - the d967cd5 rule this
+ * module's own SHAPE_GLYPH_PLACEHOLDER_IMAGE_ID doc comment already names -
+ * while a DPR-1 and a DPR-2 placeholder canvas, now distinct content
+ * themselves, each get their own id too. */
+function shapeGlyphPlaceholderImageId(dpr) {
+  return `${SHAPE_GLYPH_PLACEHOLDER_IMAGE_ID}@${dpr}`;
+}
+
 /** Lazily-built halo-only placeholder (a small ink-grey dot in the same
  * dark halo ring) shown for the brief window - if any - between a
  * billboard's first request and its own (shape, hue) pair finishing its
  * (tiny, same-origin, local) fetch. Carries no status hue of its own (it is
  * a "still loading" state only, never a row's real colour), so it never
- * flashes the wrong hue before the real pair upgrades in. Built once,
+ * flashes the wrong hue before the real pair upgrades in. Built once per DPR
+ * bucket (at most `MAX_COMPOSE_DPR`-many entries - see glowSprite.js),
  * shared by every shape and hue until each pair's own request settles. */
-let shapeGlyphPlaceholderCanvasEl = null;
-function shapeGlyphPlaceholderCanvas() {
-  if (shapeGlyphPlaceholderCanvasEl) return shapeGlyphPlaceholderCanvasEl;
+const shapeGlyphPlaceholderCanvasByDpr = new Map();
+function shapeGlyphPlaceholderCanvas(dpr) {
+  const cached = shapeGlyphPlaceholderCanvasByDpr.get(dpr);
+  if (cached) return cached;
   const dim = SHAPE_GLYPH_CANVAS_DIM;
   const canvas = document.createElement('canvas');
-  canvas.width = dim;
-  canvas.height = dim;
+  canvas.width = Math.round(dim * dpr);
+  canvas.height = Math.round(dim * dpr);
   const ctx = canvas.getContext('2d');
   if (ctx) {
+    ctx.scale(dpr, dpr);
     const centre = dim / 2;
     ctx.beginPath();
     ctx.arc(centre, centre, centre - 2, 0, Math.PI * 2);
@@ -184,24 +229,27 @@ function shapeGlyphPlaceholderCanvas() {
     ctx.fillStyle = PALETTE.dim;
     ctx.fill();
   }
-  shapeGlyphPlaceholderCanvasEl = canvas;
-  return shapeGlyphPlaceholderCanvasEl;
+  shapeGlyphPlaceholderCanvasByDpr.set(dpr, canvas);
+  return canvas;
 }
 
 /** A permanently-failed (shape, hue) pair still needs to carry its hue (hue
  * still means status, even without the shape detail) - a plain hue-coloured
- * dot in the same dark halo, cached per hue (bounded to the four status
- * hues, see model.js's STATUS_HUE), never per shape. */
-const shapeGlyphFallbackByHue = new Map();
-function shapeGlyphFallbackCanvas(hue) {
-  const cached = shapeGlyphFallbackByHue.get(hue);
+ * dot in the same dark halo, cached per (hue, DPR bucket) (bounded to the
+ * four status hues times `MAX_COMPOSE_DPR`, see model.js's STATUS_HUE and
+ * glowSprite.js), never per shape. */
+const shapeGlyphFallbackByKey = new Map();
+function shapeGlyphFallbackCanvas(hue, dpr) {
+  const key = `${hue}@${dpr}`;
+  const cached = shapeGlyphFallbackByKey.get(key);
   if (cached) return cached;
   const dim = SHAPE_GLYPH_CANVAS_DIM;
   const canvas = document.createElement('canvas');
-  canvas.width = dim;
-  canvas.height = dim;
+  canvas.width = Math.round(dim * dpr);
+  canvas.height = Math.round(dim * dpr);
   const ctx = canvas.getContext('2d');
   if (ctx) {
+    ctx.scale(dpr, dpr);
     const centre = dim / 2;
     ctx.beginPath();
     ctx.arc(centre, centre, centre - 2, 0, Math.PI * 2);
@@ -212,33 +260,41 @@ function shapeGlyphFallbackCanvas(hue) {
     ctx.fillStyle = hue;
     ctx.fill();
   }
-  shapeGlyphFallbackByHue.set(hue, canvas);
+  shapeGlyphFallbackByKey.set(key, canvas);
   return canvas;
 }
 
 /**
- * Stable id (and cache key) for a (glyph URL, hue) pair, derived from the
- * URL's own basename rather than the row's raw `craft` string, so it always
- * names the glyph actually rendered even when `glyphUrlForShape` had to fall
- * back (see shapeGlyphs.js). Starts with a distinct `shape:` prefix so a
- * caller (or a qa gate) can tell a shape-glyph billboard's imageId apart
- * from a glow sprite's own `glow:`-prefixed one (glowSprite.js's
- * `glowCacheKey`) at a glance.
+ * Stable id (and cache key) for a (glyph URL, hue, DPR bucket) triple,
+ * derived from the URL's own basename rather than the row's raw `craft`
+ * string, so it always names the glyph actually rendered even when
+ * `glyphUrlForShape` had to fall back (see shapeGlyphs.js). Starts with a
+ * distinct `shape:` prefix so a caller (or a qa gate) can tell a
+ * shape-glyph billboard's imageId apart from a glow sprite's own
+ * `glow:`-prefixed one (glowSprite.js's `glowCacheKey`) at a glance. The DPR
+ * bucket joins hue and shape as a third part (task: presence pass,
+ * retina-sharp composition): a DPR-1 and a DPR-2 raster of the same
+ * (shape, hue) are distinct content, so they need distinct ids, never a
+ * shared one that would let one silently pre-empt the other in the texture
+ * atlas.
  * @param {string} url
  * @param {string} hue
+ * @param {number} dpr
  * @returns {string}
  */
-function shapeGlyphImageId(url, hue) {
+function shapeGlyphImageId(url, hue, dpr) {
   const name = url.slice(url.lastIndexOf('/') + 1).replace(/\.svg$/, '');
-  return `shape:${name}:${hue}`;
+  return `shape:${name}:${hue}@${dpr}`;
 }
 
-/** Composed shape-glyph billboard images, cached per (shape, hue) pair -
- * module scope, shared across every renderer instance, bounded to the
- * shipped shape count times the four status hues (30 x 4 = 120, see
- * shapeGlyphs.js's SHAPE_CATEGORIES and model.js's STATUS_HUE). A failed
- * load caches shapeGlyphFallbackCanvas(hue) as that pair's permanent
- * result too, so the cache doubles as "do not retry this pair" (see the
+/** Composed shape-glyph billboard images, cached per (shape, hue, DPR
+ * bucket) triple - module scope, shared across every renderer instance,
+ * bounded to the shipped shape count times the four status hues times
+ * `MAX_COMPOSE_DPR` (30 x 4 x 2 = 240 at most, see shapeGlyphs.js's
+ * SHAPE_CATEGORIES, model.js's STATUS_HUE and glowSprite.js's
+ * MAX_COMPOSE_DPR). A failed load caches shapeGlyphFallbackCanvas(hue, dpr)
+ * as that triple's permanent result too, so the cache doubles as "do not
+ * retry this pair" (see the
  * catch branch below - mirrors ancientSites/rendering.js's own
  * requestBillboardGlyph, commit f6a62d8). `shapeGlyphLoading` guards
  * against firing a second fetch for a pair already in flight;
@@ -251,23 +307,31 @@ const shapeGlyphLoading = new Set();
 const shapeGlyphSubscribers = new Set();
 
 /**
- * The cached composed billboard image for a (glyph URL, hue) pair, kicking
- * off a load if this is the first request for it. Returns `null` (caller
- * should use `shapeGlyphPlaceholderCanvas()` meanwhile) until the load
- * settles.
+ * The cached composed billboard image for a (glyph URL, hue, DPR bucket)
+ * triple, kicking off a load if this is the first request for it. Returns
+ * `null` (caller should use `shapeGlyphPlaceholderCanvas(dpr)` meanwhile)
+ * until the load settles.
+ *
+ * `dpr` is the caller's already-resolved DPR bucket (read once per
+ * composition build - see `renderShapeGlyphBillboards`'s and setRows's own
+ * `currentDprBucket()` call - task: presence pass, retina-sharp
+ * composition), threaded through here rather than re-read internally so the
+ * SAME value survives into the async `.then`/`.catch` below regardless of
+ * when they settle.
  * @param {string} url
  * @param {string} hue
+ * @param {number} dpr
  * @returns {HTMLCanvasElement|null}
  */
-function requestShapeGlyph(url, hue) {
-  const key = shapeGlyphImageId(url, hue);
+function requestShapeGlyph(url, hue, dpr) {
+  const key = shapeGlyphImageId(url, hue, dpr);
   const ready = shapeGlyphCache.get(key);
   if (ready) return ready;
   if (!shapeGlyphLoading.has(key)) {
     shapeGlyphLoading.add(key);
     loadShapeGlyphImage(url)
       .then((image) => {
-        shapeGlyphCache.set(key, composeShapeGlyphCanvas(image, hue));
+        shapeGlyphCache.set(key, composeShapeGlyphCanvas(image, hue, dpr));
       })
       .catch((error) => {
         console.warn(
@@ -280,7 +344,7 @@ function requestShapeGlyph(url, hue) {
         // failed pair from being re-requested on every subsequent
         // renderShapeGlyphBillboards() call for as long as the camera sits
         // at close range over that shape.
-        shapeGlyphCache.set(key, shapeGlyphFallbackCanvas(hue));
+        shapeGlyphCache.set(key, shapeGlyphFallbackCanvas(hue, dpr));
       })
       .finally(() => {
         shapeGlyphLoading.delete(key);
@@ -656,15 +720,25 @@ export function createAnomalyRenderer(
   const HERO_RING_IMAGE_ID = 'anomaly-hero-ring';
   const HERO_RING_DISPLAY_SCALE = 1.35;
   const HERO_RING_CANVAS_DIM = 48;
-  let heroRingCanvasEl = null;
-  function heroRingImage() {
-    if (heroRingCanvasEl) return heroRingCanvasEl;
+  /** `imageId` for the hero ring canvas at a given DPR bucket (task:
+   * presence pass, retina-sharp composition): a DPR-1 and a DPR-2 ring
+   * raster are distinct content, so each needs its own atlas id. */
+  const heroRingImageId = (dpr) => `${HERO_RING_IMAGE_ID}@${dpr}`;
+  /** Composed once per DPR bucket (at most `MAX_COMPOSE_DPR`-many entries -
+   * see glowSprite.js), not a single canvas: same retina treatment as every
+   * other composer in this module - `dim` stays the logical drawing size,
+   * the canvas's own `width`/`height` scale by `dpr` via `ctx.scale`. */
+  const heroRingCanvasByDpr = new Map();
+  function heroRingImage(dpr) {
+    const cached = heroRingCanvasByDpr.get(dpr);
+    if (cached) return cached;
     const dim = HERO_RING_CANVAS_DIM;
     const canvas = document.createElement('canvas');
-    canvas.width = dim;
-    canvas.height = dim;
+    canvas.width = Math.round(dim * dpr);
+    canvas.height = Math.round(dim * dpr);
     const ctx = canvas.getContext('2d');
     if (ctx) {
+      ctx.scale(dpr, dpr);
       const centre = dim / 2;
       ctx.beginPath();
       ctx.arc(centre, centre, centre * 0.72, 0, Math.PI * 2);
@@ -672,8 +746,8 @@ export function createAnomalyRenderer(
       ctx.strokeStyle = PALETTE.ion;
       ctx.stroke();
     }
-    heroRingCanvasEl = canvas;
-    return heroRingCanvasEl;
+    heroRingCanvasByDpr.set(dpr, canvas);
+    return canvas;
   }
 
   /** Shared `scaleByDistance` for every point-tier billboard (glow sprites
@@ -888,6 +962,11 @@ export function createAnomalyRenderer(
     shapeGlyphRebuildCount += 1;
     shapeGlyphBillboards.removeAll();
     const nextIds = new Set();
+    // Read once for this whole rebuild pass (task: presence pass,
+    // retina-sharp composition), not per candidate: every billboard added
+    // below shares the same DPR bucket, matching composeGlowSprite's own
+    // "one composition, one DPR read" discipline.
+    const dpr = currentDprBucket();
     if (bounds) {
       let candidates = [];
       // heatRows already carries the full row set (see setRows below) - no
@@ -914,7 +993,7 @@ export function createAnomalyRenderer(
         nextIds.add(r.id);
         const hue = statusHue(r.status);
         const url = glyphUrlForShape(r.craft);
-        const composed = requestShapeGlyph(url, hue);
+        const composed = requestShapeGlyph(url, hue, dpr);
         const isFaded =
           state.mode === 'cumulative' &&
           state.year != null &&
@@ -925,10 +1004,10 @@ export function createAnomalyRenderer(
         shapeGlyphBillboards.add({
           id,
           position: Cesium.Cartesian3.fromDegrees(r.lon, r.lat, 0),
-          image: composed || shapeGlyphPlaceholderCanvas(),
+          image: composed || shapeGlyphPlaceholderCanvas(dpr),
           imageId: composed
-            ? shapeGlyphImageId(url, hue)
-            : SHAPE_GLYPH_PLACEHOLDER_IMAGE_ID,
+            ? shapeGlyphImageId(url, hue, dpr)
+            : shapeGlyphPlaceholderImageId(dpr),
           width: size,
           height: size,
           color: Cesium.Color.WHITE.withAlpha(alpha),
@@ -941,8 +1020,8 @@ export function createAnomalyRenderer(
           shapeGlyphBillboards.add({
             id,
             position: Cesium.Cartesian3.fromDegrees(r.lon, r.lat, 0),
-            image: heroRingImage(),
-            imageId: HERO_RING_IMAGE_ID,
+            image: heroRingImage(dpr),
+            imageId: heroRingImageId(dpr),
             width: size * HERO_RING_DISPLAY_SCALE,
             height: size * HERO_RING_DISPLAY_SCALE,
             color: Cesium.Color.WHITE.withAlpha(isFaded ? 0.35 : 0.9),
@@ -985,9 +1064,14 @@ export function createAnomalyRenderer(
     }
   }
   shapeGlyphSubscribers.add(onShapeGlyphReady);
+  // One DPR read for the whole warm-up burst (task: presence pass,
+  // retina-sharp composition): every pair below shares it, matching the
+  // "one composition, one DPR read" discipline used everywhere else in this
+  // module.
+  const warmDpr = currentDprBucket();
   for (const shape of SHAPE_CATEGORIES)
     for (const hue of Object.values(STATUS_HUE))
-      requestShapeGlyph(glyphUrlForShape(shape), hue);
+      requestShapeGlyph(glyphUrlForShape(shape), hue, warmDpr);
 
   /** Recompute now if the camera height is below threshold, otherwise clear
    * the glyph tier back to nothing (restoring the glow sprites, via
@@ -1086,6 +1170,9 @@ export function createAnomalyRenderer(
   function setRows(rows) {
     heatRows = rows;
     clearPoints();
+    // Read once for this whole build pass (task: presence pass, retina-sharp
+    // composition): every billboard added below shares the same DPR bucket.
+    const dpr = currentDprBucket();
     for (const r of rows) {
       const position = Cesium.Cartesian3.fromDegrees(r.lon, r.lat, 0);
       const [red, green, blue] = pointColor(r);
@@ -1099,7 +1186,7 @@ export function createAnomalyRenderer(
           id: { id: `anomaly:${r.id}`, anomalyId: r.id, status: r.status },
           position,
           image: glowImage(size),
-          imageId: glowImageId(size),
+          imageId: glowImageId(size, dpr),
           width: size,
           height: size,
           color: new Cesium.Color(red, green, blue, pointAlpha(r, { current })),
@@ -1116,8 +1203,8 @@ export function createAnomalyRenderer(
           coll.add({
             id: { id: `anomaly:${r.id}`, anomalyId: r.id, status: r.status },
             position,
-            image: heroRingImage(),
-            imageId: HERO_RING_IMAGE_ID,
+            image: heroRingImage(dpr),
+            imageId: heroRingImageId(dpr),
             width: size * HERO_RING_DISPLAY_SCALE,
             height: size * HERO_RING_DISPLAY_SCALE,
             color: Cesium.Color.WHITE.withAlpha(current ? 0.9 : 0.35),

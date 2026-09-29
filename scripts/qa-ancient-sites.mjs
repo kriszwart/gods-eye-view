@@ -911,6 +911,33 @@ try {
     JSON.stringify(carnacZoom),
   );
 
+  // Retina-sharp composition (task: presence pass): every composer's cache
+  // key and imageId carry the DPR bucket (glowSprite.js's `dprBucket`), so a
+  // live glyph billboard's own imageId must end with the "@<dpr>" token this
+  // run actually composed at - proving the wiring reaches a real rendered
+  // billboard, not just the composer functions in isolation. Picked at
+  // screen centre, since the camera above is looking straight down at the
+  // Carnac cluster it just proved renders billboards. Headless Puppeteer
+  // runs at devicePixelRatio 1 unless a page/viewport requests otherwise
+  // (this gate's own setViewport above never sets deviceScaleFactor,
+  // deliberately left alone here rather than risking the other checks in
+  // this gate), so "@1" is the honest bucket to expect - the retina path
+  // itself (deviceScaleFactor 2) is proven separately by the presence-pass
+  // screenshot script.
+  const carnacGlyphImageId = await page.evaluate(() => {
+    const scene = window.__godsEyeView.viewer.scene;
+    const width = scene.canvas.clientWidth;
+    const height = scene.canvas.clientHeight;
+    const picked = scene.pick({ x: width / 2, y: height / 2 }, 12, 12);
+    const primitive = picked?.primitive;
+    return typeof primitive?.image === 'string' ? primitive.image : null;
+  });
+  check(
+    'the picked close-zoom glyph billboard\'s own imageId carries the DPR bucket this run composed at ("@1" under headless Puppeteer, which reports devicePixelRatio 1 unless a page requests otherwise)',
+    typeof carnacGlyphImageId === 'string' && carnacGlyphImageId.endsWith('@1'),
+    JSON.stringify({ carnacGlyphImageId }),
+  );
+
   // Regression: at close range with the camera pitched above the horizon,
   // computeViewRectangle() returns nothing to bound unclustered singles
   // against. Without a fallback this used to render all ~81k sweep sites as

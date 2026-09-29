@@ -41,6 +41,55 @@
  * 2x factor ancientSites/rendering.js's own glyph billboards use). */
 const CANVAS_OVERSAMPLE = 2;
 
+/** Highest devicePixelRatio a composed canvas ever oversamples for (task:
+ * presence pass, retina-sharp composition). Capped, not left unbounded, so
+ * a very high-density external monitor cannot balloon a composed canvas's
+ * memory and GPU texture-upload cost without limit; every caller's own
+ * cache stays at most this many DPR-keyed entries per (hue, size) or
+ * (shape/type) pair - in practice almost always 1 (dpr === 1) or 2
+ * (dpr === 1 and dpr === 2, if a visitor moves the window between a
+ * standard and a retina display in the same session; see `dprBucket`'s own
+ * doc comment for why that coexistence needs no live listener). */
+export const MAX_COMPOSE_DPR = 2;
+
+/**
+ * Clamp a raw devicePixelRatio reading (typically `window.devicePixelRatio`)
+ * to the bucket every canvas composer in the atlas shares: floored at 1
+ * (`|| 1` covers 0, `NaN` and `undefined` alike - none of which is a sane
+ * oversample factor), capped at `MAX_COMPOSE_DPR`. Pure, so it is unit
+ * tested directly with plain numbers, without a DOM environment - unlike
+ * `currentDprBucket` below, which wraps this around the live global.
+ * @param {number} rawDpr
+ * @returns {number}
+ */
+export function dprBucket(rawDpr) {
+  return Math.min(rawDpr || 1, MAX_COMPOSE_DPR);
+}
+
+/**
+ * The current `window.devicePixelRatio`, clamped via `dprBucket`. Read
+ * fresh on every call - never cached at module load or memoised across
+ * calls - so a change (a visitor dragging the window to an external
+ * monitor with a different pixel density mid-session) is picked up
+ * automatically the next time anything recomposes; no live
+ * `resize`/`matchMedia` listener is needed for this, since a stale bucket
+ * only ever means a sprite composed for the OLD density keeps rendering
+ * until the next natural rebuild (a size-bucket miss, a new hue, a fresh
+ * `setRows`/`renderShapeGlyphBillboards` pass) - never a wrong pick or a
+ * crash, just a one-build-cycle staleness window. Every Cesium-side
+ * composer in the atlas (this module's own `composeGlowSprite`, and the
+ * shape/ancient-glyph composers in anomalies/rendering.js and
+ * ancientSites/rendering.js) calls this rather than reading
+ * `window.devicePixelRatio` directly, so the fallback-and-clamp logic
+ * lives in exactly one place. Guarded for non-browser environments the
+ * same way the rest of this DOM-side module implicitly assumes a browser
+ * (see the module doc comment); returns 1 there.
+ * @returns {number}
+ */
+export function currentDprBucket() {
+  return dprBucket(typeof window !== 'undefined' ? window.devicePixelRatio : 1);
+}
+
 /**
  * Fraction of the sprite's radius that stays fully opaque before the
  * gradient begins softening into the halo.
@@ -92,20 +141,25 @@ export function sizeBucket(sizePx) {
 }
 
 /**
- * The sprite cache's key for a given hue and (already-bucketed) size: the
- * `imageId` a billboard must use so `BillboardCollection`'s own texture
- * atlas de-duplicates identical sprites rather than rasterising one per
- * point (the d967cd5 lesson carried over from ancientSites/rendering.js's
- * glyph billboards: a distinct canvas needs a stable, distinct id, and a
- * placeholder must never claim a real sprite's id). Normalises the hue's
- * case so `'#FFF'` and `'#fff'` never open two cache entries for the same
- * colour.
+ * The sprite cache's key for a given hue, (already-bucketed) size and
+ * (already-bucketed) DPR: the `imageId` a billboard must use so
+ * `BillboardCollection`'s own texture atlas de-duplicates identical sprites
+ * rather than rasterising one per point (the d967cd5 lesson carried over
+ * from ancientSites/rendering.js's glyph billboards: a distinct canvas
+ * needs a stable, distinct id, and a placeholder must never claim a real
+ * sprite's id - extended by the presence-pass task: a DPR-1 and a DPR-2
+ * sprite are ALSO distinct content, composed at different physical pixel
+ * dimensions, so the DPR bucket joins the hue and size as a third part of
+ * both the cache key and the imageId, never left implicit). Normalises the
+ * hue's case so `'#FFF'` and `'#fff'` never open two cache entries for the
+ * same colour.
  * @param {string} hue - CSS colour string, for example '#ff2e9a'.
  * @param {number} sizePx - Bucketed display size in px (see `sizeBucket`).
+ * @param {number} dpr - Bucketed devicePixelRatio (see `dprBucket`).
  * @returns {string}
  */
-export function glowCacheKey(hue, sizePx) {
-  return `glow:${String(hue).toLowerCase()}:${sizePx}`;
+export function glowCacheKey(hue, sizePx, dpr) {
+  return `glow:${String(hue).toLowerCase()}:${sizePx}@${dpr}`;
 }
 
 /** [r, g, b] byte components for a '#rrggbb' string. Every hue this module
@@ -141,22 +195,40 @@ const cache = new Map();
  */
 export function composeGlowSprite({ hue, sizePx }) {
   const bucket = sizeBucket(sizePx);
-  const key = glowCacheKey(hue, bucket);
+  // Read fresh, not cached at module load - see currentDprBucket's own doc
+  // comment (task: presence pass, retina-sharp composition).
+  const dpr = currentDprBucket();
+  const key = glowCacheKey(hue, bucket, dpr);
   const cached = cache.get(key);
   if (cached) return cached;
-  const canvas = paintGlowSprite(hue, bucket);
+  const canvas = paintGlowSprite(hue, bucket, dpr);
   cache.set(key, canvas);
   return canvas;
 }
 
-/** Paint one glow sprite canvas at the given hue and (bucketed) size. */
-function paintGlowSprite(hue, sizePx) {
+/**
+ * Paint one glow sprite canvas at the given hue and (bucketed) size, at
+ * `dpr` times that size in actual canvas pixels (task: presence pass,
+ * retina-sharp composition): `dim` stays the logical, CSS-pixel-equivalent
+ * drawing size every coordinate below is expressed in (unchanged from
+ * before this task), while the canvas's own `width`/`height` - the actual
+ * raster resolution `BillboardCollection` uploads as a texture - scale by
+ * `dpr`. `ctx.scale(dpr, dpr)` maps the unchanged logical drawing calls
+ * onto that larger raster, so every physical pixel below is filled at
+ * `dpr` times the density a DPR-1 canvas would carry, without touching the
+ * geometry math itself. The billboard's own `width`/`height` (set by every
+ * caller, unchanged by this task) stay in CSS pixels, so the on-screen size
+ * is identical to before - only the underlying texture is sharper on a
+ * high-density screen.
+ */
+function paintGlowSprite(hue, sizePx, dpr) {
   const dim = Math.round(sizePx * CANVAS_OVERSAMPLE);
   const canvas = document.createElement('canvas');
-  canvas.width = dim;
-  canvas.height = dim;
+  canvas.width = Math.round(dim * dpr);
+  canvas.height = Math.round(dim * dpr);
   const ctx = canvas.getContext('2d');
   if (!ctx) return canvas;
+  ctx.scale(dpr, dpr);
   const centre = dim / 2;
   const [r, g, b] = hexToRgbBytes(hue);
   const rgb = `${r}, ${g}, ${b}`;

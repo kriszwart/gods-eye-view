@@ -515,15 +515,35 @@ export class ShareLinkManager {
     this._scheduleUpdate();
   }
 
+  /**
+   * Build the current view's shareable URL, with a fresh copy-time
+   * timestamp, without touching the clipboard. `copyLink()` below is this
+   * plus a clipboard write; the atlas welcome-pass share button
+   * (src/ui/layerBindings.js) calls this directly so it can offer a
+   * manual-copy fallback with the exact same URL `copyLink()` would have
+   * written, for when the Clipboard API itself is unavailable or refuses
+   * permission (a plain `try/catch` around `navigator.clipboard.writeText`
+   * only tells you the write failed, never what to show instead). Returns
+   * `null` in the one case `copyLink()` already treats as "nothing to
+   * share" (no camera position yet, or the manager is destroyed) rather
+   * than a broken link.
+   * @returns {string|null}
+   */
+  buildShareUrl({ nowMs = Date.now() } = {}) {
+    const params = this._buildHashParams();
+    if (!params) return null;
+    params.set(SHARE_CREATED_AT_PARAM, String(Math.floor(nowMs / 1000)));
+    const url = new URL(window.location.href);
+    url.hash = params.toString();
+    return url.href;
+  }
+
   /** Copy a current-state snapshot with a copy-time timestamp. Returns true on success. */
   async copyLink({ nowMs = Date.now() } = {}) {
-    const params = this._buildHashParams();
-    if (!params) return false;
-    params.set(SHARE_CREATED_AT_PARAM, String(Math.floor(nowMs / 1000)));
-    const copiedUrl = new URL(window.location.href);
-    copiedUrl.hash = params.toString();
+    const href = this.buildShareUrl({ nowMs });
+    if (!href) return false;
     try {
-      await navigator.clipboard.writeText(copiedUrl.href);
+      await navigator.clipboard.writeText(href);
       return true;
     } catch {
       return false;

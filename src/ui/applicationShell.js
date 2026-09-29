@@ -283,6 +283,14 @@ export class StyleManager extends ShellFacade {
       },
       feedback: this._feedback,
       shareRestoration: this._shareRestoration,
+      // `this.shareLinkManager` does not exist yet at this point in the
+      // constructor (it is built further down, alongside the rest of the
+      // share-link wiring) - same lazily-read-through-a-closure idiom as
+      // `readShareLinks` above for PanelChrome and VisualSettings, safe here
+      // for the same reason: nothing calls this before the constructor has
+      // finished and the atlas share button (src/ui/layerBindings.js) has
+      // had its first click.
+      readShareLinks: () => this.shareLinkManager,
     });
 
     this._windowResizeHandler = null;

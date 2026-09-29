@@ -1193,6 +1193,127 @@
   }
 }
 
+/* Share button: same always-present, layer-independent idiom and fixed
+   top-chrome row as .uap-observatory-toggle and .uap-help-toggle above.
+   At 1440px wide it sits just right of the Observatory toggle, in the
+   ~104px gap measured (with Puppeteer, against the fonts this app
+   actually ships) between that button's own right edge (1180px) and
+   #style-indicator's left edge (1284px) - the Help toggle's own corner
+   slot (left of Observatory) has no room left once both buttons and their
+   own gap are accounted for, but this gap does. The wrapper carries the
+   button plus a visually-hidden aria-live status line and a fallback
+   panel (see .uap-share-fallback below); `position: fixed` on the wrapper
+   still establishes the containing block those two `position: absolute`
+   children anchor to, so neither needs its own per-breakpoint placement
+   rule.
+
+   `z-index: 145` (not 100, what the resting button alone would need over
+   the globe canvas) matches .uap-help below: this wrapper establishes its
+   own stacking context, so the fallback panel's height reaching into
+   #left-panel-stack (a sibling elsewhere in the document, also z-index
+   100) at 390px wide is a contest between THIS element's own z-index and
+   that panel's, not the fallback child's - a child's z-index only ranks
+   against its own siblings inside its parent's stacking context, it
+   cannot let the fallback escape a lower-ranked ancestor on its own
+   (confirmed by hand: z-index 145 on the fallback alone, wrapper left at
+   100, still lost that tie). */
+.anomaly-atlas .uap-share {
+  position: fixed;
+  top: 32px;
+  right: 172px;
+  z-index: 145;
+}
+.anomaly-atlas .uap-share-btn {
+  background: var(--glass-bg);
+  border: 1px solid var(--uap-hair, rgba(217, 220, 230, 0.16));
+  padding: 8px 14px;
+  color: var(--uap-dim);
+  font: 400 12px var(--uap-mono);
+  cursor: pointer;
+}
+.anomaly-atlas .uap-share-btn:hover,
+.anomaly-atlas .uap-share-btn:focus-visible {
+  color: var(--uap-ink);
+  border-color: var(--uap-hair-strong, rgba(217, 220, 230, 0.32));
+}
+.anomaly-atlas .uap-share-btn:focus-visible {
+  outline: 2px solid var(--uap-ink);
+  outline-offset: 3px;
+}
+/* Visually hidden, same clip-rect idiom as foundation.css's own
+   .world-overlay-accessibility: present for assistive tech, invisible and
+   out of the flow for everyone else, so it never affects the wrapper's own
+   shrink-to-fit width. */
+.anomaly-atlas .uap-share-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+/* Manual-copy fallback: hidden until the Clipboard API refuses a write
+   (see _handleShareClick in src/ui/layerBindings.js). Anchored under the
+   button's own right edge at 1440px; the 720px rule below re-anchors it
+   under the left edge instead, matching the button's own side swap. At
+   390px wide this panel's own natural height reaches down into
+   #left-panel-stack's own top edge (measured with Puppeteer) - see the
+   wrapper's own z-index comment above for why that is settled there,
+   not with a z-index on this element. */
+.anomaly-atlas .uap-share-fallback {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: min(240px, calc(100vw - 32px));
+  background: var(--uap-dossier-bg, var(--glass-bg));
+  border: 1px solid var(--uap-hair-strong, rgba(217, 220, 230, 0.32));
+  padding: 10px 12px;
+}
+.anomaly-atlas .uap-share-fallback-input {
+  box-sizing: border-box;
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--uap-hair, rgba(217, 220, 230, 0.16));
+  color: var(--uap-ink);
+  font: 400 11px var(--uap-mono);
+  padding: 6px 8px;
+}
+.anomaly-atlas .uap-share-fallback-input:focus-visible {
+  outline: 2px solid var(--uap-ink);
+  outline-offset: 2px;
+}
+.anomaly-atlas .uap-share-fallback-hint {
+  margin: 8px 0 0;
+  color: var(--uap-dim);
+  font: 400 11px/1.4 var(--uap-sans);
+}
+@media (max-width: 720px) {
+  /* The free corridor at 390px wide is not below the Observatory/Help
+     pair (that slot is exhausted - the Help toggle's own bottom edge sits
+     just 6px above the layer panel stack, measured with Puppeteer), but
+     beside it: the Help toggle's own right edge (83px) to
+     #top-center-actions's left edge (162px), a clear 79px gap confirmed
+     empty at this row with Puppeteer's elementsFromPoint (only the globe
+     canvas answers there). Same row as the Help toggle so the three read
+     as one group. */
+  .anomaly-atlas .uap-share {
+    top: 42px;
+    left: 91px;
+    right: auto;
+  }
+  .anomaly-atlas .uap-share-btn {
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+  .anomaly-atlas .uap-share-fallback {
+    right: auto;
+    left: 0;
+  }
+}
+
 /* Observatory: "the atlas at a glance", a layer-independent plate
    summarising every register at once (sky reports, ancient sites, live
    claims) plus a decade histogram. Every other interactive plate already

@@ -61,6 +61,7 @@ export class LayerBindings {
     operations,
     feedback,
     shareRestoration,
+    readShareLinks,
   }) {
     Object.assign(
       this,
@@ -70,6 +71,15 @@ export class LayerBindings {
         readControls,
         _feedback: feedback,
         _shareRestoration: shareRestoration,
+        // Reached lazily by the share button (`_handleShareClick`), never
+        // stored eagerly: `ShareLinkManager` (src/sharelink.js) is built
+        // later in src/ui/applicationShell.js's own constructor than this
+        // class is, so a value captured here would still be undefined.
+        // Optional - a headless unit-test shell (layerBindings.test.mjs's
+        // `makeBindings`) constructs this class with no share-link wiring
+        // at all, and the share button call site already falls back to
+        // `location.href` when this is absent.
+        readShareLinks,
       },
       operations,
     );
@@ -90,6 +100,12 @@ export class LayerBindings {
     this._observatoryAncientStats = null;
     this._help = null;
     this._helpKeydownHandler = null;
+    this._shareWrapperEl = null;
+    this._shareBtnEl = null;
+    this._shareStatusEl = null;
+    this._shareFallbackEl = null;
+    this._shareFallbackInputEl = null;
+    this._shareFlashTimer = null;
     this._welcome = null;
     this._welcomeRevealTimer = null;
     this._welcomeTourInFlight = false;
@@ -146,6 +162,12 @@ export class LayerBindings {
     // any one layer's enabled state either.
     this._helpToggleBtn =
       typeof document !== 'undefined' ? this._createHelpToggle() : null;
+    // Same always-present, layer-independent idiom as the Observatory and
+    // Help toggles just above, built last of the three for the same
+    // reason: the current view is shareable regardless of which register
+    // happens to be on, or whether any is.
+    this._shareWrapperEl =
+      typeof document !== 'undefined' ? this._createShareButton() : null;
   }
   get hud() {
     return this.readControls().hud;
@@ -800,6 +822,180 @@ export class LayerBindings {
   _closeHelp() {
     this._help?.close?.();
     this._helpToggleBtn?.setAttribute('aria-pressed', 'false');
+  }
+
+  /**
+   * Build the share button: a small, always-present control beside the
+   * Observatory and Help toggles (same always-present, layer-independent
+   * idiom as `_createObservatoryToggle` and `_createHelpToggle` - see their
+   * own doc comments), copying the current view's shareable link. Folded
+   * directly into this class rather than a standalone module like
+   * src/app/welcome.js or src/app/helpOverlay.js: unlike those two, this
+   * surface has no dialog to open and close, and its DOM (one button, one
+   * visually-hidden status line, one rarely-shown fallback panel) and
+   * behaviour (see `_handleShareClick`) stay small enough that a separate
+   * module would only add an indirection with nothing else to own.
+   *
+   * The three children:
+   *   - `.uap-share-btn`: the visible button. Its own text is the primary
+   *     signal - "Share" at rest, "Copied" for ~2s after a successful copy
+   *     (`_flashShareCopied`) - so a sighted visitor never needs the status
+   *     line below to know the click landed.
+   *   - `.uap-share-status`: a visually-hidden `role="status"
+   *     aria-live="polite"` paragraph (`_announceShare`) that restates the
+   *     same outcome in words for assistive tech, independent of the
+   *     button's own text flip (a text content change on the button that
+   *     triggered the click is not reliably announced on its own).
+   *   - `.uap-share-fallback`: hidden until `_handleShareClick` needs it - a
+   *     readonly input, pre-filled and pre-selected with the link, plus a
+   *     plain-language hint, for the one path neither of the above can
+   *     cover: the Clipboard API refusing to write at all.
+   * @returns {HTMLElement}
+   */
+  _createShareButton() {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'uap-share';
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'uap-share-btn';
+    btn.textContent = 'Share';
+    btn.addEventListener('click', () => this._handleShareClick());
+
+    const status = document.createElement('p');
+    status.className = 'uap-share-status';
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+
+    const fallback = document.createElement('div');
+    fallback.className = 'uap-share-fallback';
+    fallback.hidden = true;
+    const fallbackInput = document.createElement('input');
+    fallbackInput.type = 'text';
+    fallbackInput.className = 'uap-share-fallback-input';
+    fallbackInput.readOnly = true;
+    fallbackInput.setAttribute('aria-label', 'Share link');
+    const fallbackHint = document.createElement('p');
+    fallbackHint.className = 'uap-share-fallback-hint';
+    fallbackHint.textContent =
+      'Clipboard access is unavailable here. Copy the link above.';
+    fallback.append(fallbackInput, fallbackHint);
+    // Escape closes the fallback the same way it closes every other
+    // dismissible surface in this shell (the welcome plate, the help
+    // overlay), and returns focus to the button that opened it.
+    fallback.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      this._hideShareFallback();
+      btn.focus();
+    });
+
+    wrapper.append(btn, status, fallback);
+    (this.viewer?.container || document.body).appendChild(wrapper);
+
+    this._shareBtnEl = btn;
+    this._shareStatusEl = status;
+    this._shareFallbackEl = fallback;
+    this._shareFallbackInputEl = fallbackInput;
+    return wrapper;
+  }
+
+  /**
+   * Copy the current view's shareable link. Prefers
+   * `ShareLinkManager.buildShareUrl()` (src/sharelink.js, reached lazily
+   * through `readShareLinks` - see the constructor's own comment on that
+   * field), which regenerates the URL fresh from live viewer and layer
+   * state rather than reading `location.href` directly: the manager only
+   * rewrites the URL hash on a 500ms debounce
+   * (`ShareLinkManager._scheduleUpdate`), so `location.href` can briefly
+   * lag a real change such as a layer just switched on. `location.href` is
+   * still the fallback the click handler itself falls back to when the
+   * manager cannot be reached at all (`readShareLinks` absent, or
+   * `buildShareUrl()` itself returning `null` because there is no camera
+   * position yet) - some current-view link is better than none.
+   *
+   * On a successful clipboard write: the button flashes "Copied"
+   * (`_flashShareCopied`) and the status line announces "Link copied"
+   * (`_announceShare`). On failure - no Clipboard API at all, a
+   * non-secure context, or a denied permission - nothing was actually
+   * copied, so the button's own text is left alone; the fallback panel
+   * appears instead with the same link ready to copy by hand
+   * (`_showShareFallback`), and the status line announces that instead.
+   * Every call starts by hiding any fallback left open from a previous
+   * attempt, so a second click never shows two links at once.
+   */
+  async _handleShareClick() {
+    if (!this._shareBtnEl || this._disposed) return;
+    const href =
+      this.readShareLinks?.()?.buildShareUrl?.() ??
+      (typeof window !== 'undefined' ? window.location.href : null);
+    this._hideShareFallback();
+    let copied = false;
+    if (href) {
+      try {
+        if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText)
+          throw new Error('clipboard unavailable');
+        await navigator.clipboard.writeText(href);
+        copied = true;
+      } catch {
+        copied = false;
+      }
+    }
+    if (this._disposed) return;
+    if (copied) {
+      this._flashShareCopied();
+      this._announceShare('Link copied');
+    } else {
+      this._showShareFallback(href);
+      this._announceShare('Clipboard unavailable. Copy the link shown below.');
+    }
+  }
+
+  /**
+   * Flip the share button's own text to "Copied" for ~2s, then back to
+   * "Share". A second click within that window restarts the window rather
+   * than layering a second reverting timer, and `stop()` clears the same
+   * timer so it never fires (and never touches a removed button) past
+   * this instance's own lifetime.
+   */
+  _flashShareCopied() {
+    if (!this._shareBtnEl) return;
+    clearTimeout(this._shareFlashTimer);
+    this._shareBtnEl.textContent = 'Copied';
+    this._shareFlashTimer = setTimeout(() => {
+      this._shareFlashTimer = null;
+      if (this._shareBtnEl) this._shareBtnEl.textContent = 'Share';
+    }, 2000);
+  }
+
+  /**
+   * Write `message` into the share button's visually-hidden `aria-live`
+   * status line. Cleared and reflowed before the new text lands so a
+   * repeated identical message (two successful copies in a row) still
+   * gets announced - some assistive tech does not re-announce a live
+   * region whose content did not change.
+   */
+  _announceShare(message) {
+    if (!this._shareStatusEl) return;
+    this._shareStatusEl.textContent = '';
+    void this._shareStatusEl.offsetWidth;
+    this._shareStatusEl.textContent = message;
+  }
+
+  /** Show the manual-copy fallback with `href`, pre-selected for a single
+   * keyboard copy. Safe to call with a falsy `href` (nothing to show is
+   * left as nothing shown, rather than a panel offering to copy "null"). */
+  _showShareFallback(href) {
+    if (!href || !this._shareFallbackEl || !this._shareFallbackInputEl) return;
+    this._shareFallbackInputEl.value = href;
+    this._shareFallbackEl.hidden = false;
+    this._shareFallbackInputEl.focus();
+    this._shareFallbackInputEl.select();
+  }
+
+  /** Hide the manual-copy fallback if it is showing. Always safe to call
+   * unconditionally, whether or not it was ever shown. */
+  _hideShareFallback() {
+    if (this._shareFallbackEl) this._shareFallbackEl.hidden = true;
   }
 
   /**
@@ -1464,6 +1660,17 @@ export class LayerBindings {
     this._help = null;
     this._helpToggleBtn?.remove();
     this._helpToggleBtn = null;
+    // Share button teardown: clear the "Copied" revert timer before it can
+    // ever fire against a removed button, then remove the whole wrapper
+    // (button, status line and fallback panel together).
+    clearTimeout(this._shareFlashTimer);
+    this._shareFlashTimer = null;
+    this._shareWrapperEl?.remove();
+    this._shareWrapperEl = null;
+    this._shareBtnEl = null;
+    this._shareStatusEl = null;
+    this._shareFallbackEl = null;
+    this._shareFallbackInputEl = null;
     // Orphan close on detach: a shell teardown mid-boot (before the poll
     // above has even settled) must not leave a dangling timer running past
     // this instance's own lifetime, nor a plate on screen with nothing left

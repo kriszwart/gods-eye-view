@@ -15,8 +15,12 @@
  * toggling the overlay, and the welcome and help plates never stack in
  * either ordering: "?" refused while the welcome plate is already showing,
  * and a "?" opened in the race window before the welcome poll settles gets
- * closed the instant the welcome plate reveals itself. Needs the dev server
- * on :4173 (QA_BASE_URL overrides).
+ * closed the instant the welcome plate reveals itself; and the share
+ * button - copies a link carrying the enabled layer's own share token,
+ * flashes "Copied" for about 2s then reverts, announces through a polite
+ * status region, and falls back to a focused, pre-selected readonly input
+ * (dismissible with Escape) when the Clipboard API refuses the write.
+ * Needs the dev server on :4173 (QA_BASE_URL overrides).
  */
 import puppeteer from 'puppeteer';
 import { mkdirSync } from 'node:fs';
@@ -2557,6 +2561,221 @@ try {
       'typing "?" inside the search field types the character and never opens the help overlay',
       searchGuard.inputValue === '?' && searchGuard.overlayOpen === false,
       JSON.stringify(searchGuard),
+    );
+
+    await ctx.close();
+  }
+
+  // Share button (task 3, welcome pass): a small, always-present control
+  // beside the Observatory and Help toggles (src/ui/layerBindings.js's
+  // `_createShareButton`), copying the current view's shareable link
+  // (src/sharelink.js's `ShareLinkManager.buildShareUrl`). The Clipboard
+  // API is stubbed rather than granted via `browserContext.
+  // overridePermissions`: verified by hand against this repo's own
+  // Puppeteer/Chrome build, even a context with `clipboard-write` granted
+  // and the page brought to the front still rejects the write with
+  // "Document is not focused" - a known headless-Chrome limitation, not a
+  // bug in the button. The stub is installed with `evaluateOnNewDocument`
+  // (in the page, before any app script runs, the task's own second
+  // option), and swapped mid-test - still in the same page, no fresh
+  // navigation - to cover the success and the fallback path without a
+  // second browser context and boot.
+  {
+    const ctx = await browser.createBrowserContext();
+    const p = await ctx.newPage();
+    await skipWelcome(p);
+    await p.evaluateOnNewDocument(() => {
+      window.__qaClipboard = { calls: [], resolve: true };
+      const stub = (text) => {
+        window.__qaClipboard.calls.push(text);
+        return window.__qaClipboard.resolve
+          ? Promise.resolve()
+          : Promise.reject(new Error('qa-stub-denied'));
+      };
+      if (navigator.clipboard) navigator.clipboard.writeText = stub;
+      else
+        Object.defineProperty(navigator, 'clipboard', {
+          value: { writeText: stub },
+          configurable: true,
+        });
+    });
+    await p.setViewport({ width: 1440, height: 900 });
+    await p.goto(`${base}/?welcome=0`, { waitUntil: 'domcontentloaded' });
+    await p.waitForFunction(() => window.__godsEyeView?.dataManager, {
+      timeout: 60000,
+    });
+    // Same settled-boot wait the help-overlay block above uses, and for
+    // the same reason: #loading-screen only starts hiding, it does not
+    // finish instantly, and a click landing mid-transition can land on
+    // chrome that has not settled into its final CSS layout yet.
+    await p.waitForFunction(
+      () => {
+        const loadingScreen = document.getElementById('loading-screen');
+        return !loadingScreen || loadingScreen.classList.contains('hidden');
+      },
+      { timeout: 60000 },
+    );
+    await new Promise((r) => setTimeout(r, 900));
+
+    // Enable the anomalies layer first, so its own share token (`l=3`,
+    // see the token-3 restore check above) has genuinely entered the
+    // hash the button copies, not just a bare camera position.
+    await p.evaluate(async () => {
+      await window.__godsEyeView.dataManager.setEnabled('anomalies', true, {
+        origin: 'user',
+      });
+    });
+    // A polled wait for ShareLinkManager's own 500ms debounce
+    // (`_scheduleUpdate`), not a fixed sleep: under this script's own
+    // cumulative load (dozens of prior browser contexts), a flat 700ms
+    // wait was observed to still land before `history.replaceState` had
+    // actually run, leaving `location.hash` (read and compared below)
+    // genuinely behind - exactly the staleness `buildShareUrl()` exists to
+    // route around for the copied string itself, but the comparison below
+    // needs the live hash to have caught up too, or it is not a real
+    // comparison.
+    await p.waitForFunction(() => location.hash.includes('l=3'), {
+      timeout: 10000,
+    });
+
+    // Placement proof, both widths, button visible and at rest (before any
+    // click disturbs its own text) - beside Observatory and Help at 1440,
+    // beside Help alone at 390 (see anomaly-atlas.css's own placement
+    // notes on .uap-share for the measured gaps this sits in).
+    await p.screenshot({ path: resolve(WELCOME_SHOT_DIR, 'share-1440.png') });
+    await p.setViewport({ width: 390, height: 844 });
+    await p.screenshot({ path: resolve(WELCOME_SHOT_DIR, 'share-390.png') });
+    await p.setViewport({ width: 1440, height: 900 });
+
+    await p.click('.uap-share-btn');
+    await new Promise((r) => setTimeout(r, 250));
+    const success = await p.evaluate(() => {
+      const copied = window.__qaClipboard.calls.at(-1) || '';
+      const copiedUrl = copied ? new URL(copied) : null;
+      const copiedParams = new URLSearchParams(copiedUrl?.hash.slice(1) || '');
+      const liveParams = new URLSearchParams(location.hash.slice(1));
+      return {
+        calls: window.__qaClipboard.calls.length,
+        copiedOrigin: copiedUrl ? copiedUrl.origin + copiedUrl.pathname : '',
+        liveOrigin: location.origin + location.pathname,
+        copiedLayerToken: copiedParams.get('l'),
+        liveLayerToken: liveParams.get('l'),
+        copiedHasFreshnessStamp: copiedParams.has('at'),
+        liveHasFreshnessStamp: liveParams.has('at'),
+        btnText: document.querySelector('.uap-share-btn')?.textContent,
+        status: document.querySelector('.uap-share-status')?.textContent,
+        statusRole: document
+          .querySelector('.uap-share-status')
+          ?.getAttribute('role'),
+        statusLive: document
+          .querySelector('.uap-share-status')
+          ?.getAttribute('aria-live'),
+        fallbackHidden: document.querySelector('.uap-share-fallback')?.hidden,
+      };
+    });
+    check(
+      'clicking Share writes exactly one link to the clipboard',
+      success.calls === 1,
+      String(success.calls),
+    );
+    check(
+      "the copied link carries the enabled anomalies layer's share token (l=3), read from location.hash and compared, not assumed",
+      success.copiedLayerToken === '3' &&
+        success.copiedLayerToken === success.liveLayerToken,
+      JSON.stringify({
+        copied: success.copiedLayerToken,
+        live: success.liveLayerToken,
+      }),
+    );
+    check(
+      'the copied link points at the same page as the live view',
+      success.copiedOrigin === success.liveOrigin,
+      JSON.stringify({
+        copied: success.copiedOrigin,
+        live: success.liveOrigin,
+      }),
+    );
+    check(
+      'the copied link carries a fresh copy-time stamp the live URL never does (copy-time metadata stays off the address bar)',
+      success.copiedHasFreshnessStamp === true &&
+        success.liveHasFreshnessStamp === false,
+      JSON.stringify(success),
+    );
+    check(
+      'the share button flashes "Copied" on a successful copy',
+      success.btnText === 'Copied',
+      success.btnText,
+    );
+    check(
+      'the share button announces "Link copied" through a polite status region',
+      success.status === 'Link copied' &&
+        success.statusRole === 'status' &&
+        success.statusLive === 'polite',
+      JSON.stringify(success),
+    );
+    check(
+      'the fallback panel stays hidden on a successful copy',
+      success.fallbackHidden === true,
+      String(success.fallbackHidden),
+    );
+
+    await new Promise((r) => setTimeout(r, 1900));
+    const reverted = await p.evaluate(
+      () => document.querySelector('.uap-share-btn')?.textContent,
+    );
+    check(
+      'the "Copied" flash reverts to "Share" about 2s later',
+      reverted === 'Share',
+      reverted,
+    );
+
+    // The clipboard-unavailable fallback: flip the same stub to reject,
+    // in the same page (no fresh navigation), then click again.
+    await p.evaluate(() => {
+      window.__qaClipboard.resolve = false;
+    });
+    await p.click('.uap-share-btn');
+    await new Promise((r) => setTimeout(r, 250));
+    const failure = await p.evaluate(() => {
+      const input = document.querySelector('.uap-share-fallback-input');
+      return {
+        btnText: document.querySelector('.uap-share-btn')?.textContent,
+        status: document.querySelector('.uap-share-status')?.textContent,
+        fallbackHidden: document.querySelector('.uap-share-fallback')?.hidden,
+        fallbackValue: input?.value,
+        activeIsFallbackInput: document.activeElement === input,
+        selectionLength: input ? input.selectionEnd - input.selectionStart : 0,
+      };
+    });
+    check(
+      'clipboard unavailable: the button text is left alone - nothing was actually copied',
+      failure.btnText === 'Share',
+      failure.btnText,
+    );
+    check(
+      'clipboard unavailable: the fallback panel appears with the same link, focused and pre-selected',
+      failure.fallbackHidden === false &&
+        failure.fallbackValue?.includes('l=3') &&
+        failure.activeIsFallbackInput === true &&
+        failure.selectionLength > 0,
+      JSON.stringify(failure),
+    );
+    check(
+      'clipboard unavailable: the status region announces the fallback rather than "Link copied"',
+      failure.status === 'Clipboard unavailable. Copy the link shown below.',
+      failure.status,
+    );
+
+    await p.keyboard.press('Escape');
+    const afterEscape = await p.evaluate(() => ({
+      fallbackHidden: document.querySelector('.uap-share-fallback')?.hidden,
+      focusedBtn:
+        document.activeElement === document.querySelector('.uap-share-btn'),
+    }));
+    check(
+      'Escape closes the fallback panel and returns focus to the share button',
+      afterEscape.fallbackHidden === true && afterEscape.focusedBtn === true,
+      JSON.stringify(afterEscape),
     );
 
     await ctx.close();

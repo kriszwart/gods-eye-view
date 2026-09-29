@@ -856,6 +856,128 @@ try {
     JSON.stringify(selectionProbe?.closed),
   );
 
+  // Rebuild-race check (presence-pass fix round, finding 1: stale
+  // billboard references across tier rebuilds): renderShapeGlyphBillboards
+  // rebuilds its billboard collection from scratch on a camera-bounds
+  // change, independently of hover state - a rebuild firing mid-hover must
+  // not leave a stale billboard reference in hoveredOriginals
+  // (src/layers/anomalies/rendering.js). Hover hoverSite, force a REAL
+  // rebuild by nudging the camera enough to change the padded view bounds
+  // key while staying well below SHAPE_GLYPH_HEIGHT_THRESHOLD_M (so this
+  // exercises the shape-glyph tier's own rebuild, not the coarser
+  // clear-to-nothing branch), wait past the 250ms shape-glyph recompute
+  // throttle, then assert: a real rebuild happened
+  // (shapeGlyphRebuildCount advanced, proving the race was actually
+  // exercised), hoveredId is unchanged, and hoveredBillboardCount is back
+  // to 1 (the brighten was re-applied to the rebuilt billboard, not
+  // silently dropped). Moving the mouse away afterwards then clears hover
+  // cleanly - proving the eventual restore never wrote to the destroyed
+  // pre-rebuild billboard - with no page error either side.
+  let rebuildRaceProbe = null;
+  if (hoverPoint && hoverSite) {
+    const errorsBefore = pageErrors.length;
+    await page.evaluate(projectAt, hoverSite);
+    await new Promise((r) => setTimeout(r, 700));
+    await page.mouse.move(hoverPoint.x, hoverPoint.y);
+    await new Promise((r) => setTimeout(r, 300));
+    const before = await page.evaluate(() =>
+      window.__godsEyeView.dataManager.layers
+        .get('anomalies')
+        ?.module?.getRenderDiagnostics?.(),
+    );
+    // Nudge the camera off hoverSite's own nadir, still close and below
+    // threshold: shifts the padded view rectangle enough to change its
+    // bounds key without crossing into the "above threshold" band.
+    await page.evaluate((site) => {
+      const viewer = window.__godsEyeView.viewer;
+      const ellipsoid = viewer.scene.globe.ellipsoid;
+      viewer.camera.cancelFlight();
+      viewer.camera.setView({
+        destination: ellipsoid.cartographicToCartesian({
+          longitude: ((site.lon + 0.08) * Math.PI) / 180,
+          latitude: ((site.lat + 0.08) * Math.PI) / 180,
+          height: 20000,
+        }),
+        orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 },
+      });
+    }, hoverSite);
+    // Past the shape-glyph recompute throttle (SHAPE_RECOMPUTE_THROTTLE_MS
+    // = 250ms) with margin for the postRender tick that actually applies it.
+    await new Promise((r) => setTimeout(r, 600));
+    const after = await page.evaluate(() =>
+      window.__godsEyeView.dataManager.layers
+        .get('anomalies')
+        ?.module?.getRenderDiagnostics?.(),
+    );
+    // A pixel that is definitely pick-empty (canvas corners, probed live -
+    // mirrors the away-point search in the hover check above), to move to
+    // afterwards and confirm the eventual restore is clean.
+    const awayPoint = await page.evaluate(() => {
+      const viewer = window.__godsEyeView.viewer;
+      const scene = viewer.scene;
+      const canvas = scene.canvas;
+      const candidates = [
+        { x: 30, y: canvas.clientHeight - 30 },
+        { x: canvas.clientWidth - 30, y: canvas.clientHeight - 30 },
+        { x: canvas.clientWidth - 30, y: 30 },
+        { x: 30, y: 30 },
+      ];
+      for (const p of candidates) {
+        if (document.elementFromPoint(p.x, p.y) !== canvas) continue;
+        if (!scene.pick({ x: p.x, y: p.y }, 12, 12)) return p;
+      }
+      return null;
+    });
+    let afterAway = null;
+    if (awayPoint) {
+      await page.mouse.move(awayPoint.x, awayPoint.y);
+      await new Promise((r) => setTimeout(r, 300));
+      afterAway = await page.evaluate(() =>
+        window.__godsEyeView.dataManager.layers
+          .get('anomalies')
+          ?.module?.getRenderDiagnostics?.(),
+      );
+    }
+    rebuildRaceProbe = {
+      before,
+      after,
+      afterAway,
+      newPageErrors: pageErrors.slice(errorsBefore),
+    };
+  }
+  check(
+    'rebuild-race: a camera nudge past the shape-glyph throttle forces a real rebuild while hovering (shapeGlyphRebuildCount advances)',
+    rebuildRaceProbe != null &&
+      rebuildRaceProbe.before != null &&
+      rebuildRaceProbe.after?.shapeGlyphRebuildCount >
+        rebuildRaceProbe.before.shapeGlyphRebuildCount,
+    JSON.stringify({
+      before: rebuildRaceProbe?.before?.shapeGlyphRebuildCount,
+      after: rebuildRaceProbe?.after?.shapeGlyphRebuildCount,
+    }),
+  );
+  check(
+    'rebuild-race: hover survives the rebuild - hoveredId unchanged, brighten re-applied to the rebuilt billboard, no page errors',
+    rebuildRaceProbe != null &&
+      rebuildRaceProbe.after?.hoveredId != null &&
+      rebuildRaceProbe.after.hoveredId === rebuildRaceProbe.before?.hoveredId &&
+      rebuildRaceProbe.after.hoveredBillboardCount === 1 &&
+      rebuildRaceProbe.newPageErrors.length === 0,
+    JSON.stringify({
+      before: rebuildRaceProbe?.before,
+      after: rebuildRaceProbe?.after,
+      newPageErrors: rebuildRaceProbe?.newPageErrors,
+    }),
+  );
+  check(
+    'rebuild-race: moving away after the rebuild clears hover cleanly - the restore never touches the destroyed pre-rebuild billboard, no page errors',
+    rebuildRaceProbe?.afterAway != null &&
+      rebuildRaceProbe.afterAway.hoveredId == null &&
+      rebuildRaceProbe.afterAway.hoveredBillboardCount === 0 &&
+      rebuildRaceProbe.newPageErrors.length === 0,
+    JSON.stringify(rebuildRaceProbe?.afterAway),
+  );
+
   // Escape during the debounce window must cancel the pending query: no
   // stale render should land even after the 150 ms debounce would have
   // fired had it not been cancelled.

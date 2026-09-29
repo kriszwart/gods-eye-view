@@ -1006,6 +1006,18 @@ export function createAnomalyRenderer(
     lastGlyphRenderSpan = state.span;
     lastGlyphRenderStatuses = state.statuses;
     shapeGlyphRebuildCount += 1;
+    // Presence-pass fix round finding 1: this tier's own billboards are the
+    // brighten TARGETS a live hover may hold references to in
+    // `hoveredOriginals` (see setHovered/forEachAnomalyBillboard above).
+    // `removeAll()` below destroys them, so restore-and-clear FIRST, while
+    // the old billboards are still valid, rather than ever writing to a
+    // destroyed one later. Re-applied by id (never by the old reference)
+    // once the new billboards exist, below - a same-id hover survives the
+    // rebuild with the correct brighten re-applied to the NEW billboard; an
+    // id that no longer renders anywhere (forEachAnomalyBillboard finds
+    // nothing) simply stays un-brightened until it moves back into view,
+    // with no stale state left behind either way.
+    if (hoveredAnomalyId != null) restoreHovered();
     shapeGlyphBillboards.removeAll();
     const nextIds = new Set();
     // Read once for this whole rebuild pass (task: presence pass,
@@ -1088,6 +1100,10 @@ export function createAnomalyRenderer(
     glyphedIds = nextIds;
     syncPointVisibility();
     shapeGlyphBillboards.show = state.visible && glyphedIds.size > 0;
+    // Re-apply the hover brighten by id now the new billboards exist (see
+    // this function's own restore above) - a no-op scan when the hovered id
+    // is not currently shown in any tier.
+    if (hoveredAnomalyId != null) applyHoverBrighten(hoveredAnomalyId);
     requestFrame('anomalies-shape-glyphs');
   }
 
@@ -1132,10 +1148,19 @@ export function createAnomalyRenderer(
     if (!state.visible) return;
     if (cameraHeight() >= SHAPE_GLYPH_HEIGHT_THRESHOLD_M) {
       if (glyphedIds.size || shapeGlyphBillboards.length) {
+        // Presence-pass fix round finding 1: the same stale-billboard-
+        // reference risk as renderShapeGlyphBillboards's own rebuild above -
+        // a threshold crossing clears this tier to nothing independently of
+        // hover state. Restore before removeAll destroys the old
+        // billboards, then re-apply by id after: syncPointVisibility below
+        // hands the row back to the bright/faded glow-sprite tier, so the
+        // re-scan finds and re-brightens it there.
+        if (hoveredAnomalyId != null) restoreHovered();
         shapeGlyphBillboards.removeAll();
         glyphedIds = new Set();
         syncPointVisibility();
         shapeGlyphBillboards.show = false;
+        if (hoveredAnomalyId != null) applyHoverBrighten(hoveredAnomalyId);
         requestFrame('anomalies-shape-glyphs-off');
       }
       // Invalidate renderShapeGlyphBillboards's own nothing-changed guard:
@@ -1444,6 +1469,25 @@ export function createAnomalyRenderer(
     hoveredOriginals = [];
   }
 
+  /** Brighten every currently-shown billboard for `id` and record each
+   * one's original colour into `hoveredOriginals` for the eventual
+   * restore. Assumes `hoveredOriginals` is already empty (callers restore
+   * first). Extracted so both `setHovered` and the shape-glyph rebuild path
+   * (`renderShapeGlyphBillboards`, presence-pass fix round finding 1: stale
+   * billboard references across tier rebuilds) apply the exact same
+   * brighten logic, re-resolving billboards by id via
+   * `forEachAnomalyBillboard` rather than ever trusting a billboard
+   * reference captured before a rebuild.
+   * @param {string} id
+   */
+  function applyHoverBrighten(id) {
+    forEachAnomalyBillboard(id, (billboard) => {
+      const original = billboard.color.clone();
+      hoveredOriginals.push({ billboard, color: original });
+      billboard.color = brightenColor(original, HOVER_BRIGHTEN_FACTOR);
+    });
+  }
+
   /**
    * Hover feedback (task: presence pass, controller ruling): brighten the
    * hovered row's own point billboard by a fixed factor, restoring the
@@ -1460,13 +1504,7 @@ export function createAnomalyRenderer(
     if (id === hoveredAnomalyId) return;
     restoreHovered();
     hoveredAnomalyId = id;
-    if (id != null) {
-      forEachAnomalyBillboard(id, (billboard) => {
-        const original = billboard.color.clone();
-        hoveredOriginals.push({ billboard, color: original });
-        billboard.color = brightenColor(original, HOVER_BRIGHTEN_FACTOR);
-      });
-    }
+    if (id != null) applyHoverBrighten(id);
     requestFrame('anomalies-hover');
   }
 
@@ -1538,6 +1576,14 @@ export function createAnomalyRenderer(
       hoveredId: hoveredAnomalyId,
       selectedId: selectedAnomalyId,
       selectionRingCount: selectionRingBillboards.length,
+      // Presence-pass fix round finding 1 (rebuild-race qa evidence): the
+      // count of billboards currently tracked as the hovered id's own
+      // brighten target(s) - normally 0 (nothing hovered) or 1. A qa gate
+      // forcing a shape-glyph tier rebuild mid-hover reads this right after
+      // the rebuild to prove the brighten was actually re-applied to the
+      // rebuilt billboard (count back to 1), not silently dropped (0) while
+      // hoveredId itself stays non-null.
+      hoveredBillboardCount: hoveredOriginals.length,
     };
   }
 

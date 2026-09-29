@@ -37,6 +37,24 @@
  * just set it to `'pointer'`/`'grab'` on its own listener for the exact
  * same pixel. Tracking "did WE set it" avoids that: this module only ever
  * touches the cursor coming from or going back to its own prior write.
+ *
+ * Leading-edge throttle gap (presence-pass fix round, item 2): `shouldSample`
+ * gates on the LEADING edge of each `HOVER_THROTTLE_MS` window - the first
+ * `mousemove` at or after the window opens is the one sampled. A final,
+ * settling `mousemove` that lands INSIDE an already-open window (i.e. within
+ * 80ms of the last sample) is never itself sampled: nothing schedules a
+ * catch-up pick for it. If the pointer then stops moving altogether, hover
+ * state freezes at wherever the last sampled position was - stale by up to
+ * one throttle window - until the next `mousemove` fires. The pre-existing
+ * cursor-residual note above is a separate, narrower case (another
+ * feature's own cursor write on the same pixel); this is the general
+ * leading-edge-throttle gap itself, present regardless of any other
+ * feature. Not fixed here with a trailing-edge timer: the gap is bounded to
+ * a single throttle window and self-heals on the very next real movement,
+ * and a timer would add scheduling state (a pending timeout to arm, track
+ * and cancel on every register/unregister and teardown) to a module that is
+ * deliberately a plain, stateless-per-tick sampler - not judged worth the
+ * added surface for a sub-80ms staleness window.
  */
 import { resolvePickId, ownerOf } from '../data/pickRegistry.js';
 

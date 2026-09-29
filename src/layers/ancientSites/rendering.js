@@ -860,7 +860,20 @@ export function createAncientRenderer(
     currentClusters = clusters;
     currentSingles = singles;
     currentCellDeg = cellDeg;
+    // Presence-pass fix round finding 1: `renderSweepPrimitives` (via
+    // `renderSweepSingles`) rebuilds the sweep and cluster billboard
+    // collections from scratch, which a live hover may hold stale
+    // `{billboard, color}` references into (`hoveredOriginals`, see
+    // setHovered/forEachAncientBillboard above). Restore-and-clear FIRST,
+    // while the old billboards are still valid, rather than ever writing
+    // to a destroyed one later; re-apply by selector (never by the old
+    // reference) once the new billboards exist. A hero or tma selector is
+    // untouched by this rebuild, so the restore/re-apply pair is a no-op
+    // round trip for those; a selector no longer shown anywhere after the
+    // rebuild simply stays un-brightened, with no stale state left behind.
+    if (hoveredSelector) restoreHoveredAncient();
     renderSweepPrimitives();
+    if (hoveredSelector) applyHoverBrighten(hoveredSelector);
     // Ambient sweep-name labels (task 3, ancient-legibility): notify only on
     // an actual recompute, never per frame - see this function's own
     // nothing-changed guard above and the doc comment on
@@ -1138,6 +1151,25 @@ export function createAncientRenderer(
     hoveredOriginals = [];
   }
 
+  /** Brighten every currently-shown billboard matching `sel` and record
+   * each one's original colour into `hoveredOriginals` for the eventual
+   * restore. Assumes `hoveredOriginals` is already empty (callers restore
+   * first). Extracted so both `setHovered` and the sweep-tier rebuild path
+   * (`recomputeSweep`/`renderSweepPrimitives`, presence-pass fix round
+   * finding 1: stale billboard references across tier rebuilds) apply the
+   * exact same brighten logic, re-resolving billboards by selector via
+   * `forEachAncientBillboard` rather than ever trusting a billboard
+   * reference captured before a rebuild.
+   * @param {{kind: string, id?: string, index?: number}} sel
+   */
+  function applyHoverBrighten(sel) {
+    forEachAncientBillboard(sel, (billboard) => {
+      const original = billboard.color.clone();
+      hoveredOriginals.push({ billboard, color: original });
+      billboard.color = brightenColor(original, HOVER_BRIGHTEN_FACTOR);
+    });
+  }
+
   /**
    * Hover feedback (task: presence pass, controller ruling): brighten every
    * currently-shown billboard matching `sel` (hero, sweep single or cluster
@@ -1154,13 +1186,7 @@ export function createAncientRenderer(
     restoreHoveredAncient();
     hoveredKey = key;
     hoveredSelector = sel ?? null;
-    if (sel) {
-      forEachAncientBillboard(sel, (billboard) => {
-        const original = billboard.color.clone();
-        hoveredOriginals.push({ billboard, color: original });
-        billboard.color = brightenColor(original, HOVER_BRIGHTEN_FACTOR);
-      });
-    }
+    if (sel) applyHoverBrighten(sel);
     requestFrame('ancient-hover');
   }
 

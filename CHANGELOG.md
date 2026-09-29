@@ -61,12 +61,12 @@
   scripts/qa-ancient-sites.mjs` (shared paths, unaffected - the ancient
   register never summons) and `node scripts/qa-perf.mjs` (24 of 24, the
   general render-governor gate) each ran 1 clean run too, all against the
-  controller-managed dev server. `npm run test:track` hit the same
+  controller-managed dev server. `npm run test:track` first hit the same
   pre-existing stale Vite dependency-optimisation cache recorded against
   the live claims register's own entry below (`egm96-universal.js`
-  answering 504 "Outdated Optimize Dep", confirmed persistent on a retry,
-  unrelated to this change); the dev server is controller-managed and was
-  not restarted to clear it.
+  answering 504 "Outdated Optimize Dep"); restarting the dev server with
+  the cache cleared brought it to 109 of 109, confirming the failure was
+  environmental and unrelated to this change.
 
 - Atlas instruments: three additions that let the atlas answer questions
   about itself, all reading the shipped datasets live rather than a fixed

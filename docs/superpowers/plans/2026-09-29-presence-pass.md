@@ -18,7 +18,7 @@
 - Dossier open/close paths: anomalies openDossier/index.js, liveClaims index.js, ancientSites openSweepDossier/hero dossier; cross-register exclusivity via gev:dossier-open; Escape closes.
 - Render governor: holdContinuousRender per ownerId; heroes already hold while visible; a summoned craft is animated content and needs a hold scoped to its lifetime.
 - Reduced motion: matchMedia guards exist in both renderers (pulse precedents); a summoned craft under reduce shows a static pose (activeAnimations not started).
-- Claims rows carry shape|null; GEIPAN rows carry craft (the archetype id) — recon confirms rendering.js:916 uses r.craft for glyphs, so the field exists per row.
+- Claims rows carry shape|null; GEIPAN rows carry craft (the archetype id): recon confirms rendering.js:916 uses r.craft for glyphs, so the field exists per row.
 - qa homes: qa-anomalies (70 checks), qa-claims (39), qa-ancient-sites; qa-perf 24.
 
 ## Global constraints
@@ -36,7 +36,7 @@
 
 **Files:**
 - Modify: `src/ui/glowSprite.js` (compose at min(devicePixelRatio, 2) x size; canvas width/height scale, billboard width/height stay CSS px; DPR bucket in cache key and imageId; the pure key/bucket helpers and tests updated), `src/layers/anomalies/rendering.js` (shape glyph composer same treatment), `src/layers/ancientSites/rendering.js` (ancient glyph composer same), tests
-- qa: extend one existing check per register to assert the imageId carries the DPR bucket (proves the wiring without screenshots); visual screenshots 1440 (a retina capture if the environment allows deviceScaleFactor 2 in Puppeteer — use it) into qa-shots/presence-pass/.
+- qa: extend one existing check per register to assert the imageId carries the DPR bucket (proves the wiring without screenshots); visual screenshots 1440 (a retina capture if the environment allows deviceScaleFactor 2 in Puppeteer, use it) into qa-shots/presence-pass/.
 
 - [ ] Gates; qa-anomalies 3x, qa-ancient-sites 1x, qa-claims 1x, qa-perf 1x.
 - [ ] Commit `feat(atlas): sprites and glyphs compose at retina scale`
@@ -44,7 +44,7 @@
 ### Task 2: hover and selection feedback
 
 **Files:**
-- Modify: the three renderers and their index.js files: (a) cursor: pointer over any owned pickable (a throttled ~80 ms hover pick with the 12 px box on mousemove, shared helper — recon where GEV handles cursor styles; set/clear the canvas cursor); (b) hover brighten: the hovered billboard's color steps up (scale existing alpha/brightness by a fixed factor, restored on leave; no new sprite composition); (c) selection ring: while a dossier is open, its point carries a ring (reuse the hero ion-ring billboard idiom from anomalies rendering.js) cleared on dossier close (all close paths: Escape, Close, cross-register switch, layer disable).
+- Modify: the three renderers and their index.js files: (a) cursor: pointer over any owned pickable (a throttled ~80 ms hover pick with the 12 px box on mousemove, shared helper: recon where GEV handles cursor styles; set/clear the canvas cursor); (b) hover brighten: the hovered billboard's colour steps up (scale existing alpha/brightness by a fixed factor, restored on leave; no new sprite composition); (c) selection ring: while a dossier is open, its point carries a ring (reuse the hero ion-ring billboard idiom from anomalies rendering.js) cleared on dossier close (all close paths: Escape, Close, cross-register switch, layer disable).
 - qa: hover diagnostics (getDiagnostics exposes hoveredId; move the mouse over a known point, assert set and cursor pointer; move off, assert cleared); selection ring present while dossier open, absent after Escape, in all three registers.
 
 - [ ] Hover pick cost measured (the 80 ms throttle bounds it; state the per-pick cost).

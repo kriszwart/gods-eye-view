@@ -100,7 +100,7 @@ test('ownership: unregister removes the predicate', () => {
 });
 
 // ---------------------------------------------------------------------------
-// ownerOf — the shared hover helper's own single-scan owner resolution
+// ownerOf: the shared hover helper's own single-scan owner resolution
 // (task: presence pass): unlike isOwnedByOtherLayer, this includes the
 // caller's own predicates too - it answers "whose pick is this", not
 // "does someone else own it".

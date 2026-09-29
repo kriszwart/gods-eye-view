@@ -1,5 +1,62 @@
 # Changelog
 
+- Welcome pass: three additions that give a new visitor a way in, and give
+  every visitor a way to take the current view with them.
+
+  Welcome plate (`src/app/welcome.js`): a one-time introduction, shown once
+  per browser (`gev:atlas-welcome:v1` in localStorage, following
+  `src/firstRunExperience.js`'s own key convention) after boot completes.
+  It states the atlas name and tagline, summarises the three registers -
+  sky events, ancient sites, and live claims, the last carrying the live
+  claims honesty line verbatim - names the chronometer, and offers "Take
+  the hero tour" (enables the sky register if it is off, then starts its
+  guided tour) or "Explore freely". Escape, Close and Explore freely all
+  dismiss and remember it; the tour button only dismisses once the tour has
+  genuinely started. Ordering ruling: `src/firstRunExperience.js`'s own
+  mission-chooser launcher is not one-shot and already owns the
+  loading-screen-just-hid moment, so it goes first when both would fire;
+  the welcome plate waits for the launcher to be fully out of the DOM
+  before it ever appears, and the two plates never show together in either
+  direction.
+
+  Help overlay (`src/app/helpOverlay.js`): a static plate on the "?" key or
+  its own standalone button, stating the keyboard map, how to read the
+  globe's brightness and hue encoding, and every register's own honesty
+  line - imported from each register's own module rather than retyped, so
+  this copy can never drift from the words the dossiers and status plates
+  already show. A pointer to where sources and credits live closes it out.
+  The search field's own "?" character keeps typing rather than opening
+  the overlay, and the welcome and help plates never stack in either
+  ordering.
+
+  Share button (`src/ui/layerBindings.js`, beside the Observatory and Help
+  toggles): copies the current view's link and flashes "Copied" for about
+  2 seconds before reverting, with a separate `aria-live="polite"`
+  announcement ("Link copied") for assistive tech. `src/sharelink.js`
+  gained `ShareLinkManager.buildShareUrl()`, the same URL `copyLink()`
+  already wrote to the clipboard, now available on its own: it rebuilds
+  the link fresh from live viewer and layer state rather than reading
+  `location.href`, which only catches up on a 500ms debounce. When the
+  Clipboard API itself refuses the write - a non-secure context, or a
+  denied permission - the button's text is left alone (nothing was
+  copied) and a small fallback panel appears instead: a readonly input
+  carrying the same link, focused and pre-selected, with a plain-language
+  hint, dismissible with Escape. Placement was measured with Puppeteer
+  rather than estimated at both widths: at 1440px wide it sits in the
+  ~104px gap between the Observatory toggle and the style indicator; at
+  390px wide, where that corner's own stack is already full, it sits
+  beside the Help toggle in a separately measured 79px gap.
+
+  Gates: `npm run format:check`, `npm test` (5,269 tests, 5,268 passing, 1
+  pre-existing skip, 0 failed), `npm run check:boundaries` and `npm run
+  build` all clean. `node scripts/qa-anomalies.mjs` ran 3 consecutive clean
+  runs, including the share button's clipboard-stubbed success and
+  fallback paths and both plates' own show-once, ordering and stacking
+  assertions; `node scripts/qa-claims.mjs` and `node
+  scripts/qa-ancient-sites.mjs` each ran 1 clean run against the shared
+  paths, unaffected by this pass. All copy is British English, sentence
+  case, with no em dashes.
+
 - Presence pass: three additions that make the atlas feel occupied rather
   than static - sharper composed assets at retina density, the pointer
   answering "what is under it" before a click, and a dossier that summons

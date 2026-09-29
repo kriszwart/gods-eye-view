@@ -1,5 +1,6 @@
 import { decadeBuckets } from './observatoryModel.js';
 import { glyphUrlForType } from '../layers/ancientSites/glyphMap.js';
+import { createSurfaceKeyboard } from '../ui/surfaceKeyboard.js';
 
 /**
  * The observatory plate: "the atlas at a glance", a layer-independent shell
@@ -388,19 +389,31 @@ export function createObservatory({
   function close() {
     if (root.hidden) return;
     root.hidden = true;
+    keyboard.deactivate();
     onClose?.();
   }
   function open() {
     root.hidden = false;
+    keyboard.activate();
     closeBtn.focus();
     refresh();
   }
 
+  // Fix wave (welcome-pass, same class as the three new plates): claim
+  // Escape through the app's own house mechanism
+  // (src/ui/surfaceKeyboard.js) instead of a bare root-level listener. Its
+  // capture-phase document listener stops Escape reaching every OTHER
+  // document-level consumer (src/ui/applicationShortcuts.js's bubble-phase
+  // search dismiss, a tracked layer's own Escape-clears-selection listener)
+  // once this plate has genuinely closed it.
+  const keyboard = createSurfaceKeyboard({
+    root,
+    isActive: () => !root.hidden,
+    onEscape: () => close(),
+  });
+
   root.addEventListener('click', (e) => {
     if (e.target.closest('.uap-close')) close();
-  });
-  root.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') close();
   });
 
   (container || document.body).appendChild(root);
@@ -421,6 +434,7 @@ export function createObservatory({
       return !root.hidden;
     },
     destroy() {
+      keyboard.destroy();
       root.remove();
     },
   };

@@ -1,4 +1,5 @@
 import { HONESTY_LINE } from '../layers/liveClaims/model.js';
+import { createSurfaceKeyboard } from '../ui/surfaceKeyboard.js';
 
 /**
  * Durable "seen the welcome plate" flag, localStorage. Follows
@@ -25,7 +26,7 @@ const REGISTERS = Object.freeze([
   Object.freeze({
     id: 'sky',
     label: 'Sky events',
-    text: 'Every public sighting placed on a year dial from 1940 to today, each case sourced and graded.',
+    text: 'Public sightings placed on a year dial from 1940 to today, each case sourced and graded.',
   }),
   Object.freeze({
     id: 'ancient',
@@ -66,25 +67,21 @@ const CHRONOMETER_LINE =
  *
  * "Take the hero tour" is deliberately NOT one of the self-closing paths:
  * starting the tour means enabling the anomalies layer first, which is
- * asynchronous, so only the caller knows when it is genuinely done and safe
- * to dismiss (see `_handleWelcomeTour` in src/ui/layerBindings.js). The
- * button only calls `onTakeTour`; the caller calls `close()` itself once
- * that work has actually started.
+ * asynchronous, so only the caller can decide when its own attempt has run
+ * its course. The button only calls `onTakeTour`; the caller
+ * (`_handleWelcomeTour` in src/ui/layerBindings.js) calls `close()` from a
+ * `finally` block once that attempt has settled, successfully or not - that
+ * is not the same claim as "the tour has genuinely started", only that the
+ * attempt to start it is over.
  *
  * @param {{
  *   container?: HTMLElement,
  *   onOpenChange?: (open: boolean) => void,
  *   onTakeTour?: () => void,
- *   onExploreFreely?: () => void,
  * }} [deps]
  * @returns {{open: () => void, close: () => void, isOpen: () => boolean, destroy: () => void}}
  */
-export function createWelcome({
-  container,
-  onOpenChange,
-  onTakeTour,
-  onExploreFreely,
-} = {}) {
+export function createWelcome({ container, onOpenChange, onTakeTour } = {}) {
   const root = document.createElement('section');
   root.className = 'uap-welcome';
   root.hidden = true;
@@ -154,6 +151,7 @@ export function createWelcome({
   function close() {
     if (root.hidden) return;
     root.hidden = true;
+    keyboard.deactivate();
     onOpenChange?.(false);
   }
   /** Idempotent in the other direction, for symmetry: calling `open()` on an
@@ -161,20 +159,31 @@ export function createWelcome({
   function open() {
     if (!root.hidden) return;
     root.hidden = false;
+    keyboard.activate();
     tourBtn.focus();
     onOpenChange?.(true);
   }
 
+  // Fix wave (welcome-pass): claim Escape the way the app's own house
+  // mechanism does (src/ui/surfaceKeyboard.js, already used by
+  // src/firstRunExperience.js's launcher and src/keySetup.js) rather than a
+  // bare root-level listener. A capture-phase document listener stops the
+  // key reaching every OTHER document-level Escape consumer (bubble-phase
+  // handlers such as src/ui/applicationShortcuts.js's search dismiss, or a
+  // tracked layer's own Escape-clears-selection listener) once this plate
+  // has genuinely closed it - closing this plate must never also untrack a
+  // flight, dismiss the location search, or fire any other unrelated
+  // Escape handler in the same keypress.
+  const keyboard = createSurfaceKeyboard({
+    root,
+    isActive: () => !root.hidden,
+    onEscape: () => close(),
+  });
+
   root.addEventListener('click', (e) => {
     if (e.target.closest('.uap-close')) close();
   });
-  root.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') close();
-  });
-  exploreBtn.addEventListener('click', () => {
-    onExploreFreely?.();
-    close();
-  });
+  exploreBtn.addEventListener('click', () => close());
   // Not self-closing - see the doc comment above.
   tourBtn.addEventListener('click', () => onTakeTour?.());
 
@@ -187,8 +196,12 @@ export function createWelcome({
     /** Remove the plate outright rather than just hiding it: unlike
      * src/app/observatory.js's persistent plate (rebuilt lazily on the next
      * toggle), this one is genuinely one-shot - once dismissed, or on shell
-     * teardown, there is nothing to reopen it. */
+     * teardown, there is nothing to reopen it. Tears down the surface
+     * keyboard too, in case this is called while the plate is still open
+     * (a shell teardown mid-session), so its capture-phase listener never
+     * outlives the plate it was claiming Escape for. */
     destroy() {
+      keyboard.destroy();
       root.remove();
     },
   };

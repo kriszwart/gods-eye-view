@@ -20,6 +20,12 @@
  * flashes "Copied" for about 2s then reverts, announces through a polite
  * status region, and falls back to a focused, pre-selected readonly input
  * (dismissible with Escape) when the Clipboard API refuses the write.
+ * Also the fix wave: Escape closing the welcome plate, the help overlay or
+ * the share fallback never leaks to any other document-level Escape
+ * consumer (proven against applicationShortcuts.js's own search dismiss);
+ * clicking Share while the welcome plate is showing does nothing; and a
+ * share link or `?welcome=0` both suppress the welcome plate without ever
+ * writing its "seen it" flag.
  * Needs the dev server on :4173 (QA_BASE_URL overrides).
  */
 import puppeteer from 'puppeteer';
@@ -34,6 +40,7 @@ import {
 import { WAVES } from '../src/layers/anomalies/waves.js';
 import { WELCOME_STORAGE_KEY } from '../src/app/welcome.js';
 import { HONESTY_LINE } from '../src/layers/liveClaims/model.js';
+import { FIRST_RUN_STORAGE_KEY } from '../src/firstRunExperience.js';
 const base = process.env.QA_BASE_URL || 'http://localhost:4173';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
@@ -64,6 +71,32 @@ async function skipWelcome(page) {
       /* best-effort, matches the app's own guarded write */
     }
   }, WELCOME_STORAGE_KEY);
+}
+
+/**
+ * Pre-seed the first-run mission launcher's own DURABLE "don't show this
+ * again" flag (src/firstRunExperience.js's `FIRST_RUN_STORAGE_KEY`), so the
+ * launcher stays off the page without touching `?welcome=0` or the welcome
+ * plate's own key. Fix 3 (fix-wave, welcome-pass) made `_revealWelcomeOnce`
+ * step aside on `?welcome=0` too (the same suppressor
+ * `shouldShowFirstRun()` already honours for the launcher), so a check that
+ * genuinely needs the WELCOME PLATE to appear can no longer use
+ * `?welcome=0` to get the launcher out of the way first - it would suppress
+ * the very plate under test. This is the launcher-only equivalent: the
+ * durable branch `shouldShowFirstRun()` checks before ever looking at
+ * `hasShareState` or the URL, so the launcher removes itself immediately
+ * (`initFirstRunExperience`'s own `root.remove()`) while the welcome
+ * plate's own suppression checks (share state, `?welcome=0`) both stay
+ * unmet.
+ */
+async function suppressFirstRunLauncherOnly(page) {
+  await page.evaluateOnNewDocument((key) => {
+    try {
+      localStorage.setItem(key, 'suppressed');
+    } catch {
+      /* best-effort, matches the app's own guarded write */
+    }
+  }, FIRST_RUN_STORAGE_KEY);
 }
 const browser = await puppeteer.launch({
   headless: true,
@@ -2246,7 +2279,21 @@ try {
     const ctx = await browser.createBrowserContext();
     const p = await ctx.newPage();
     await p.setViewport({ width: 1440, height: 900 });
-    await p.goto(`${base}/?welcome=0`, { waitUntil: 'domcontentloaded' });
+    // Fix 3 (fix-wave, welcome-pass): `?welcome=0` now also suppresses the
+    // welcome plate itself, so this block (which needs the plate to
+    // genuinely appear) keeps the launcher out of the way the other way -
+    // see suppressFirstRunLauncherOnly's own doc comment.
+    await suppressFirstRunLauncherOnly(p);
+    // A generous navigation timeout (default 30s elsewhere in this file):
+    // by this point in a long run, many earlier browser contexts have
+    // already churned through WebGL/Cesium-heavy checks, so a loaded host
+    // can occasionally leave a plain goto() waiting past 30s for nothing
+    // more than CPU scheduling - confirmed by hand in isolation (this
+    // exact navigation settles in ~2s on an otherwise idle host).
+    await p.goto(`${base}/`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 90000,
+    });
     await p.waitForFunction(() => window.__godsEyeView?.dataManager, {
       timeout: 60000,
     });
@@ -2353,10 +2400,111 @@ try {
     await ctx.close();
   }
 
+  // Fix 3 (fix-wave, welcome-pass): `_revealWelcomeOnce` steps aside for the
+  // SAME two suppressors `shouldShowFirstRun()` already honours for the
+  // incumbent launcher - a restored share view, and the `?welcome=0` escape
+  // hatch - and neither write the durable "seen it" flag (a visitor turned
+  // away for one of these two reasons has not actually been introduced
+  // yet). Both checks below use a genuinely fresh, wholly unseeded context
+  // (no skipWelcome, no suppressFirstRunLauncherOnly): the launcher itself
+  // is allowed to make its own, independent decision to stay away (it
+  // shares the same two suppressors via `shouldShowFirstRun()`), so a pass
+  // here proves the welcome plate's own suppression, not a launcher that
+  // merely happened to be out of the way already.
   {
     const ctx = await browser.createBrowserContext();
     const p = await ctx.newPage();
-    await p.goto(`${base}/?welcome=0`, { waitUntil: 'domcontentloaded' });
+    // A generous navigation timeout (default 30s elsewhere in this file):
+    // by this point dozens of earlier browser contexts in this same run
+    // have already churned through WebGL/Cesium-heavy checks, so a loaded
+    // host can occasionally leave this one goto() waiting past 30s for
+    // nothing more than CPU scheduling - confirmed by hand in isolation
+    // (this exact navigation settles in ~2s on an otherwise idle host).
+    await p.goto(
+      `${base}/#lat=34.05&lon=-118.24&alt=26000000&pitch=-90&v=2&l=3`,
+      { waitUntil: 'domcontentloaded', timeout: 90000 },
+    );
+    await p.waitForFunction(() => window.__godsEyeView?.dataManager, {
+      timeout: 60000,
+    });
+    await p
+      .waitForFunction(
+        () => window.__godsEyeView.dataManager.isEnabled('anomalies'),
+        { timeout: 30000 },
+      )
+      .catch(() => {});
+    // A settled absence, not just "not yet" - mirrors the reload check
+    // above: wait long enough for the reveal poll to have had every chance
+    // to fire, then confirm it did not.
+    await new Promise((r) => setTimeout(r, 3000));
+    const result = await p.evaluate(
+      (key) => ({
+        present: !!document.querySelector('.uap-welcome'),
+        seenFlag: localStorage.getItem(key),
+      }),
+      WELCOME_STORAGE_KEY,
+    );
+    check(
+      'a fresh context loading a share link (hash with tokens) never shows the welcome plate',
+      result.present === false,
+      JSON.stringify(result),
+    );
+    check(
+      'suppressing the welcome plate for a share view does not write the "seen it" flag - the next plain visit still gets it once',
+      result.seenFlag === null,
+      String(result.seenFlag),
+    );
+    await ctx.close();
+  }
+
+  {
+    const ctx = await browser.createBrowserContext();
+    const p = await ctx.newPage();
+    // Same generous timeout, same reasoning, as the share-link check above.
+    await p.goto(`${base}/?welcome=0`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 90000,
+    });
+    await p.waitForFunction(() => window.__godsEyeView?.dataManager, {
+      timeout: 60000,
+    });
+    await new Promise((r) => setTimeout(r, 3000));
+    const result = await p.evaluate(
+      (key) => ({
+        present: !!document.querySelector('.uap-welcome'),
+        seenFlag: localStorage.getItem(key),
+      }),
+      WELCOME_STORAGE_KEY,
+    );
+    check(
+      'a fresh context with ?welcome=0 never shows the welcome plate',
+      result.present === false,
+      JSON.stringify(result),
+    );
+    check(
+      'suppressing the welcome plate via ?welcome=0 does not write the "seen it" flag - the next plain visit still gets it once',
+      result.seenFlag === null,
+      String(result.seenFlag),
+    );
+    await ctx.close();
+  }
+
+  {
+    const ctx = await browser.createBrowserContext();
+    const p = await ctx.newPage();
+    // Needs the welcome plate itself to appear - see
+    // suppressFirstRunLauncherOnly's own doc comment.
+    await suppressFirstRunLauncherOnly(p);
+    // A generous navigation timeout (default 30s elsewhere in this file):
+    // by this point in a long run, many earlier browser contexts have
+    // already churned through WebGL/Cesium-heavy checks, so a loaded host
+    // can occasionally leave a plain goto() waiting past 30s for nothing
+    // more than CPU scheduling - confirmed by hand in isolation (this
+    // exact navigation settles in ~2s on an otherwise idle host).
+    await p.goto(`${base}/`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 90000,
+    });
     await p.waitForFunction(() => window.__godsEyeView?.dataManager, {
       timeout: 60000,
     });
@@ -2561,6 +2709,49 @@ try {
       'typing "?" inside the search field types the character and never opens the help overlay',
       searchGuard.inputValue === '?' && searchGuard.overlayOpen === false,
       JSON.stringify(searchGuard),
+    );
+
+    // Fix 1 (fix-wave, welcome-pass): the three new plates' Escape handlers
+    // used to neither preventDefault nor stopPropagation, so closing one
+    // ALSO fired every OTHER document-level Escape consumer in the same
+    // keypress - repro: track a flight, press "?", Escape: help closes AND
+    // the flight untracks. The cheapest consumer to reach here is the main
+    // location search's own dismissal
+    // (src/ui/applicationShortcuts.js's bubble-phase document listener,
+    // `dismissSearch`): expand it via its own toggle button and give it a
+    // value, open help with a plain click (so focus leaves the search field
+    // without touching its "expanded" state or value), then press Escape
+    // once. A pass proves BOTH that Escape closes help AND that it never
+    // reaches applicationShortcuts.js's listener underneath it - the
+    // search stays expanded with its value untouched.
+    await p.evaluate(() => {
+      document.getElementById('search-toggle')?.click();
+      const input = document.getElementById('location-search');
+      if (input) input.value = 'gev-qa-untouched';
+    });
+    await p.evaluate(() => document.querySelector('.uap-help-toggle')?.click());
+    await p.waitForFunction(
+      () => {
+        const el = document.querySelector('.uap-help');
+        return !!el && !el.hidden;
+      },
+      { timeout: 5000 },
+    );
+    await p.keyboard.press('Escape');
+    const escapeLeak = await p.evaluate(() => {
+      const search = document.getElementById('location-search');
+      return {
+        helpHidden: document.querySelector('.uap-help')?.hidden,
+        searchExpanded: !!search?.classList.contains('expanded'),
+        searchValue: search?.value,
+      };
+    });
+    check(
+      "Escape closing the help overlay never leaks to applicationShortcuts.js's document-level search dismiss - the location search stays expanded with its value untouched",
+      escapeLeak.helpHidden === true &&
+        escapeLeak.searchExpanded === true &&
+        escapeLeak.searchValue === 'gev-qa-untouched',
+      JSON.stringify(escapeLeak),
     );
 
     await ctx.close();
@@ -2781,20 +2972,103 @@ try {
     await ctx.close();
   }
 
+  // Fix 2 (fix-wave, welcome-pass): the share button had no welcome guard
+  // (unlike `_toggleHelp`'s own): a first-run visitor could click Share
+  // before ever dismissing the welcome plate, and on a clipboard refusal
+  // the fallback panel would then open at z-index 145, under the welcome
+  // plate's own 175 - focus landing in a field the visitor cannot see or
+  // reach at narrow widths. A fresh context with the welcome plate
+  // genuinely showing (suppressFirstRunLauncherOnly, not `?welcome=0` - see
+  // that helper's own doc comment), the clipboard stub set to REJECT every
+  // write, so a successful guard is the only thing that can be keeping the
+  // fallback panel closed and the clipboard untouched.
+  {
+    const ctx = await browser.createBrowserContext();
+    const p = await ctx.newPage();
+    await p.evaluateOnNewDocument(() => {
+      window.__qaClipboard = { calls: [] };
+      const stub = (text) => {
+        window.__qaClipboard.calls.push(text);
+        return Promise.reject(new Error('qa-stub-denied'));
+      };
+      if (navigator.clipboard) navigator.clipboard.writeText = stub;
+      else
+        Object.defineProperty(navigator, 'clipboard', {
+          value: { writeText: stub },
+          configurable: true,
+        });
+    });
+    await suppressFirstRunLauncherOnly(p);
+    // A generous navigation timeout (default 30s elsewhere in this file):
+    // by this point in a long run, many earlier browser contexts have
+    // already churned through WebGL/Cesium-heavy checks, so a loaded host
+    // can occasionally leave a plain goto() waiting past 30s for nothing
+    // more than CPU scheduling - confirmed by hand in isolation (this
+    // exact navigation settles in ~2s on an otherwise idle host).
+    await p.goto(`${base}/`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 90000,
+    });
+    await p.waitForFunction(() => window.__godsEyeView?.dataManager, {
+      timeout: 60000,
+    });
+    await p.waitForFunction(
+      () => {
+        const el = document.querySelector('.uap-welcome');
+        return !!el && !el.hidden;
+      },
+      { timeout: 15000 },
+    );
+    await p.evaluate(() => document.querySelector('.uap-share-btn')?.click());
+    // A settling margin: _handleShareClick is async (clipboard write, then
+    // the fallback path), so give it every chance to have finished before
+    // asserting nothing happened.
+    await new Promise((r) => setTimeout(r, 400));
+    const guarded = await p.evaluate(() => ({
+      welcomeShown: !document.querySelector('.uap-welcome')?.hidden,
+      fallbackHidden: document.querySelector('.uap-share-fallback')?.hidden,
+      calls: window.__qaClipboard.calls.length,
+      btnText: document.querySelector('.uap-share-btn')?.textContent,
+    }));
+    check(
+      'clicking Share while the welcome plate is showing does nothing: no clipboard write, no fallback panel',
+      guarded.welcomeShown === true &&
+        guarded.calls === 0 &&
+        guarded.fallbackHidden === true &&
+        guarded.btnText === 'Share',
+      JSON.stringify(guarded),
+    );
+    await ctx.close();
+  }
+
   // The welcome and help plates must never stack - the other direction:
   // a "?" press landing in the race window BEFORE the welcome plate has
   // appeared at all (the ~200ms `_watchForWelcomeReveal` poll has not yet
   // settled), covered by `_revealWelcomeOnce` calling `_closeHelp()`
   // unconditionally before it ever builds the welcome plate (see that
-  // method's own doc comment in src/ui/layerBindings.js). A fresh,
-  // unseeded context: press "?" the instant the app object exists, well
-  // before the loading screen has hidden or the welcome poll has had any
-  // chance to settle, then wait for the welcome plate to appear and prove
-  // help was closed under it rather than left stacked on top.
+  // method's own doc comment in src/ui/layerBindings.js). A fresh context
+  // with the welcome plate's own key unseeded (only the first-run
+  // launcher's DURABLE suppression is pre-seeded, via
+  // suppressFirstRunLauncherOnly - see its own doc comment for why
+  // `?welcome=0` can no longer stand in for that here): press "?" the
+  // instant the app object exists, well before the loading screen has
+  // hidden or the welcome poll has had any chance to settle, then wait for
+  // the welcome plate to appear and prove help was closed under it rather
+  // than left stacked on top.
   {
     const ctx = await browser.createBrowserContext();
     const p = await ctx.newPage();
-    await p.goto(`${base}/?welcome=0`, { waitUntil: 'domcontentloaded' });
+    await suppressFirstRunLauncherOnly(p);
+    // A generous navigation timeout (default 30s elsewhere in this file):
+    // by this point in a long run, many earlier browser contexts have
+    // already churned through WebGL/Cesium-heavy checks, so a loaded host
+    // can occasionally leave a plain goto() waiting past 30s for nothing
+    // more than CPU scheduling - confirmed by hand in isolation (this
+    // exact navigation settles in ~2s on an otherwise idle host).
+    await p.goto(`${base}/`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 90000,
+    });
     await p.waitForFunction(() => window.__godsEyeView?.dataManager, {
       timeout: 60000,
     });
@@ -2833,13 +3107,26 @@ try {
 
   // The welcome and help plates must never stack (welcome pass ruling - see
   // src/ui/layerBindings.js's own doc comments on `_toggleHelp` and
-  // `_revealWelcomeOnce`). A fresh context with nothing pre-seeded, so the
-  // welcome plate is guaranteed to be showing, proves the "?" key stays
-  // inert against it.
+  // `_revealWelcomeOnce`). A fresh context with only the first-run
+  // launcher's durable suppression pre-seeded (suppressFirstRunLauncherOnly
+  // - not the welcome plate's own key, and not `?welcome=0`, which would
+  // now suppress the very plate this proves stays showing), so the welcome
+  // plate is guaranteed to appear, proves the "?" key stays inert against
+  // it.
   {
     const ctx = await browser.createBrowserContext();
     const p = await ctx.newPage();
-    await p.goto(`${base}/?welcome=0`, { waitUntil: 'domcontentloaded' });
+    await suppressFirstRunLauncherOnly(p);
+    // A generous navigation timeout (default 30s elsewhere in this file):
+    // by this point in a long run, many earlier browser contexts have
+    // already churned through WebGL/Cesium-heavy checks, so a loaded host
+    // can occasionally leave a plain goto() waiting past 30s for nothing
+    // more than CPU scheduling - confirmed by hand in isolation (this
+    // exact navigation settles in ~2s on an otherwise idle host).
+    await p.goto(`${base}/`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 90000,
+    });
     await p.waitForFunction(() => window.__godsEyeView?.dataManager, {
       timeout: 60000,
     });

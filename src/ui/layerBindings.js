@@ -20,6 +20,7 @@ import { rankCandidates } from '../spotter/rank.js';
 import { createObservatory } from '../app/observatory.js';
 import { createHelpOverlay } from '../app/helpOverlay.js';
 import { createWelcome, WELCOME_STORAGE_KEY } from '../app/welcome.js';
+import { createSurfaceKeyboard } from './surfaceKeyboard.js';
 import { createAnomalySource } from '../layers/anomalies/source.js';
 import { createAncientSource } from '../layers/ancientSites/source.js';
 
@@ -105,6 +106,7 @@ export class LayerBindings {
     this._shareStatusEl = null;
     this._shareFallbackEl = null;
     this._shareFallbackInputEl = null;
+    this._shareFallbackKeyboard = null;
     this._shareFlashTimer = null;
     this._welcome = null;
     this._welcomeRevealTimer = null;
@@ -231,13 +233,19 @@ export class LayerBindings {
    * field (a plain `<input type="search">`, see
    * src/layers/anomalies/chronometer.js's `addSearch`) keeps typing a
    * literal "?" character rather than ever toggling this overlay instead.
-   * Escape is NOT handled here: the overlay's own root listens for it
-   * directly (see helpOverlay.js's doc comment), the same self-contained
-   * pattern the Observatory and welcome plates already use, so nothing
-   * here needs to know whether the overlay happens to be open.
+   * Escape is NOT handled here: the overlay claims it itself, through
+   * src/ui/surfaceKeyboard.js (see helpOverlay.js's doc comment), the same
+   * self-contained pattern the Observatory and welcome plates already use,
+   * so nothing here needs to know whether the overlay happens to be open.
    *
    * Bound once, in `observeCamera()` (itself called once - see
    * src/ui/applicationShell.js), and unbound in `stop()`.
+   *
+   * Minor 8 (fix-wave, welcome-pass): `preventDefault` only fires once
+   * `_toggleHelp()` has actually acted - `_toggleHelp()` is itself inert
+   * while the welcome plate is showing (see its own doc comment just
+   * below), and a "?" press that did nothing has no default action worth
+   * suppressing.
    */
   _bindHelpShortcut() {
     if (typeof document === 'undefined' || this._disposed) return;
@@ -247,7 +255,7 @@ export class LayerBindings {
       const tag = active?.tagName;
       const isEditable =
         tag === 'INPUT' || tag === 'TEXTAREA' || !!active?.isContentEditable;
-      if (isEditable) return;
+      if (isEditable || this._welcome?.isOpen?.()) return;
       event.preventDefault();
       this._toggleHelp();
     };
@@ -340,9 +348,31 @@ export class LayerBindings {
    * press can land before this poll ever settles) before this poll's own
    * settle condition was met - by closing it here, unconditionally, before
    * the welcome plate ever appears.
+   *
+   * Fix 3 (fix-wave, welcome-pass): also steps aside for the SAME two
+   * suppressors src/firstRunExperience.js's own `shouldShowFirstRun()`
+   * already honours for the incumbent launcher - a restored share view
+   * (`this._shareRestoration._hasShareState`, the very instance this class
+   * already holds - see the constructor - read the identical way
+   * `initFirstRunExperience` reads it via `styleManager.hasShareState`, so
+   * the two surfaces can never disagree about what counts as a share view)
+   * and the `?welcome=0` escape hatch this file's own qa gate already relies
+   * on to keep the plate out of the way of every other check. A visitor
+   * arriving on a share link is already looking at someone else's chosen
+   * view, not a blank atlas that needs introducing; `welcome=0` is an
+   * explicit ask to skip it. Suppression here deliberately does NOT write
+   * the durable "seen it" flag: a visitor turned away for one of these two
+   * reasons has not actually been introduced yet, so their next plain visit
+   * (no share hash, no `welcome=0`) still gets the welcome plate once.
    */
   _revealWelcomeOnce() {
     if (this._disposed || this._welcome || hasSeenWelcome()) return;
+    if (this._shareRestoration?._hasShareState) return;
+    if (
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location?.search || '').get('welcome') === '0'
+    )
+      return;
     this._closeHelp();
     this._welcome = createWelcome({
       container: document.body,
@@ -791,13 +821,14 @@ export class LayerBindings {
    * idiom as `_toggleObservatory`). Inert while the welcome plate is
    * currently showing: the welcome pass ruling (see `_revealWelcomeOnce`'s
    * own doc comment) is that the two never stack, and unlike
-   * `_revealWelcomeOnce` - which fires once, from a poll, and so can simply
-   * refuse to open over an already-open help overlay (see its own guard
-   * just above its `createWelcome` call) - this method can be invoked at
-   * any moment after boot by a genuine keypress, including the brief window
-   * before the welcome plate has appeared at all. Refusing to open here
-   * whenever the welcome plate is open covers that direction; the
-   * corresponding guard in `_revealWelcomeOnce` covers the other one.
+   * `_revealWelcomeOnce` - which fires once, from a poll, and so simply
+   * closes any help overlay that beat it there before it opens the welcome
+   * plate (see its own `_closeHelp()` call, just before its `createWelcome`
+   * call) - this method can be invoked at any moment after boot by a
+   * genuine keypress, including the brief window before the welcome plate
+   * has appeared at all. Refusing to open here whenever the welcome plate
+   * is open covers that direction; the corresponding close in
+   * `_revealWelcomeOnce` covers the other one.
    * Returns the overlay's new open state, or `false` while inert.
    * @returns {boolean}
    */
@@ -882,11 +913,20 @@ export class LayerBindings {
     fallback.append(fallbackInput, fallbackHint);
     // Escape closes the fallback the same way it closes every other
     // dismissible surface in this shell (the welcome plate, the help
-    // overlay), and returns focus to the button that opened it.
-    fallback.addEventListener('keydown', (e) => {
-      if (e.key !== 'Escape') return;
-      this._hideShareFallback();
-      btn.focus();
+    // overlay), and returns focus to the button that opened it. Fix wave
+    // (welcome-pass): claims Escape through the app's own house mechanism
+    // (src/ui/surfaceKeyboard.js) rather than a bare keydown listener on
+    // `fallback` - a capture-phase document listener, so Escape closing
+    // this panel never also reaches src/ui/applicationShortcuts.js's
+    // bubble-phase search dismiss or a tracked layer's own
+    // Escape-clears-selection listener underneath it.
+    this._shareFallbackKeyboard = createSurfaceKeyboard({
+      root: fallback,
+      isActive: () => !fallback.hidden,
+      onEscape: () => {
+        this._hideShareFallback();
+        btn.focus();
+      },
     });
 
     wrapper.append(btn, status, fallback);
@@ -922,9 +962,20 @@ export class LayerBindings {
    * (`_showShareFallback`), and the status line announces that instead.
    * Every call starts by hiding any fallback left open from a previous
    * attempt, so a second click never shows two links at once.
+   *
+   * Fix 2 (fix-wave, welcome-pass): inert while the welcome plate is
+   * currently showing, mirroring `_toggleHelp`'s own guard just above it -
+   * the button itself has no welcome-aware disabled state (it is always
+   * present, same reasoning as `_createShareButton`'s own doc comment), so
+   * without this guard a first-run visitor could click Share before ever
+   * seeing the welcome plate dismissed; on a clipboard refusal the fallback
+   * panel would then open at z-index 145, under the welcome plate's own
+   * 175, landing keyboard focus in a field the visitor cannot see or reach
+   * at 390px wide.
    */
   async _handleShareClick() {
-    if (!this._shareBtnEl || this._disposed) return;
+    if (!this._shareBtnEl || this._disposed || this._welcome?.isOpen?.())
+      return;
     const href =
       this.readShareLinks?.()?.buildShareUrl?.() ??
       (typeof window !== 'undefined' ? window.location.href : null);
@@ -988,6 +1039,7 @@ export class LayerBindings {
     if (!href || !this._shareFallbackEl || !this._shareFallbackInputEl) return;
     this._shareFallbackInputEl.value = href;
     this._shareFallbackEl.hidden = false;
+    this._shareFallbackKeyboard?.activate();
     this._shareFallbackInputEl.focus();
     this._shareFallbackInputEl.select();
   }
@@ -995,7 +1047,9 @@ export class LayerBindings {
   /** Hide the manual-copy fallback if it is showing. Always safe to call
    * unconditionally, whether or not it was ever shown. */
   _hideShareFallback() {
-    if (this._shareFallbackEl) this._shareFallbackEl.hidden = true;
+    if (!this._shareFallbackEl) return;
+    this._shareFallbackEl.hidden = true;
+    this._shareFallbackKeyboard?.deactivate();
   }
 
   /**
@@ -1665,6 +1719,8 @@ export class LayerBindings {
     // (button, status line and fallback panel together).
     clearTimeout(this._shareFlashTimer);
     this._shareFlashTimer = null;
+    this._shareFallbackKeyboard?.destroy?.();
+    this._shareFallbackKeyboard = null;
     this._shareWrapperEl?.remove();
     this._shareWrapperEl = null;
     this._shareBtnEl = null;

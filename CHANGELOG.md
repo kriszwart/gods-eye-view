@@ -11,9 +11,10 @@
   claims honesty line verbatim - names the chronometer, and offers "Take
   the hero tour" (enables the sky register if it is off, then starts its
   guided tour) or "Explore freely". Escape, Close and Explore freely all
-  dismiss and remember it; the tour button only dismisses once the tour has
-  genuinely started. Ordering ruling: `src/firstRunExperience.js`'s own
-  mission-chooser launcher is not one-shot and already owns the
+  dismiss and remember it; the tour button dismisses once its own attempt
+  to start the tour has settled, successfully or not - not only once the
+  tour has genuinely started. Ordering ruling: `src/firstRunExperience.js`'s
+  own mission-chooser launcher is not one-shot and already owns the
   loading-screen-just-hid moment, so it goes first when both would fire;
   the welcome plate waits for the launcher to be fully out of the DOM
   before it ever appears, and the two plates never show together in either

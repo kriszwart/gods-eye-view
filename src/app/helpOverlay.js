@@ -1,5 +1,6 @@
 import { HONESTY_LINE } from '../layers/liveClaims/model.js';
 import { DENSITY_HONESTY_LINE } from '../layers/anomalies/model.js';
+import { createSurfaceKeyboard } from '../ui/surfaceKeyboard.js';
 
 /**
  * The ancient sites register's undated-sweep honesty line. The sweep bands
@@ -178,20 +179,33 @@ export function createHelpOverlay({ container, onOpenChange } = {}) {
   function close() {
     if (root.hidden) return;
     root.hidden = true;
+    keyboard.deactivate();
     onOpenChange?.(false);
   }
   function open() {
     if (!root.hidden) return;
     root.hidden = false;
+    keyboard.activate();
     closeBtn.focus();
     onOpenChange?.(true);
   }
 
+  // Fix wave (welcome-pass): claim Escape through the app's own house
+  // mechanism (src/ui/surfaceKeyboard.js) instead of a bare root-level
+  // listener. Its capture-phase document listener stops Escape reaching
+  // every OTHER document-level consumer (src/ui/applicationShortcuts.js's
+  // bubble-phase search dismiss, a tracked layer's own Escape-clears-
+  // selection listener) once this overlay has genuinely closed it, so
+  // dismissing help never also collapses the location search or untracks
+  // whatever a visitor happened to be tracking underneath.
+  const keyboard = createSurfaceKeyboard({
+    root,
+    isActive: () => !root.hidden,
+    onEscape: () => close(),
+  });
+
   root.addEventListener('click', (e) => {
     if (e.target.closest('.uap-close')) close();
-  });
-  root.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') close();
   });
 
   (container || document.body).appendChild(root);
@@ -208,6 +222,7 @@ export function createHelpOverlay({ container, onOpenChange } = {}) {
     close,
     isOpen: () => !root.hidden,
     destroy() {
+      keyboard.destroy();
       root.remove();
     },
   };

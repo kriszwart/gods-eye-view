@@ -8,6 +8,7 @@ import {
   describeYear,
   createAnomalyOverlayEntry,
   statusHue,
+  DENSITY_HONESTY_LINE,
 } from './model.js';
 import { yearHistogram } from './records.js';
 import { createAnomalyRenderer } from './rendering.js';
@@ -490,7 +491,7 @@ export function createAnomaliesLayer({
       legend.hidden = true;
       legend.innerHTML = `
         <p>Brighter means less explained</p>
-        <p>Heat shows report density, not credibility</p>
+        <p>${DENSITY_HONESTY_LINE}</p>
         <ul>
           <li><i style="--c: var(--uap-dim)"></i>Explained</li>
           <li><i style="--c: var(--uap-violet)"></i>Too little data</li>

@@ -9,18 +9,24 @@
  * it again, and "Take the hero tour" enables the anomalies layer and starts
  * the tour; and the help overlay - the "?" key and its own standalone
  * button open and close a static plate stating the keyboard map and every
- * register's own honesty line (the live claims line asserted verbatim,
- * imported the same way the overlay itself imports it), the search field's
- * own "?" character keeps typing rather than ever toggling the overlay, and
- * the welcome and help plates never stack. Needs the dev server on :4173
- * (QA_BASE_URL overrides).
+ * register's own honesty line (both the live claims and the sky density
+ * lines asserted verbatim, imported the same way the overlay itself imports
+ * them), the search field's own "?" character keeps typing rather than ever
+ * toggling the overlay, and the welcome and help plates never stack in
+ * either ordering: "?" refused while the welcome plate is already showing,
+ * and a "?" opened in the race window before the welcome poll settles gets
+ * closed the instant the welcome plate reveals itself. Needs the dev server
+ * on :4173 (QA_BASE_URL overrides).
  */
 import puppeteer from 'puppeteer';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SHAPE_GLYPH_URLS } from '../src/layers/anomalies/shapeGlyphs.js';
-import { statusHue } from '../src/layers/anomalies/model.js';
+import {
+  statusHue,
+  DENSITY_HONESTY_LINE,
+} from '../src/layers/anomalies/model.js';
 import { WAVES } from '../src/layers/anomalies/waves.js';
 import { WELCOME_STORAGE_KEY } from '../src/app/welcome.js';
 import { HONESTY_LINE } from '../src/layers/liveClaims/model.js';
@@ -2451,6 +2457,11 @@ try {
       opened.text.includes(HONESTY_LINE),
       opened.text,
     );
+    check(
+      'the help overlay states the sky register density honesty line verbatim (imported from anomalies/model.js, not retyped)',
+      opened.text.includes(DENSITY_HONESTY_LINE),
+      opened.text,
+    );
 
     await p.screenshot({ path: resolve(WELCOME_SHOT_DIR, 'help-1440.png') });
     await p.setViewport({ width: 390, height: 844 });
@@ -2548,6 +2559,56 @@ try {
       JSON.stringify(searchGuard),
     );
 
+    await ctx.close();
+  }
+
+  // The welcome and help plates must never stack - the other direction:
+  // a "?" press landing in the race window BEFORE the welcome plate has
+  // appeared at all (the ~200ms `_watchForWelcomeReveal` poll has not yet
+  // settled), covered by `_revealWelcomeOnce` calling `_closeHelp()`
+  // unconditionally before it ever builds the welcome plate (see that
+  // method's own doc comment in src/ui/layerBindings.js). A fresh,
+  // unseeded context: press "?" the instant the app object exists, well
+  // before the loading screen has hidden or the welcome poll has had any
+  // chance to settle, then wait for the welcome plate to appear and prove
+  // help was closed under it rather than left stacked on top.
+  {
+    const ctx = await browser.createBrowserContext();
+    const p = await ctx.newPage();
+    await p.goto(`${base}/?welcome=0`, { waitUntil: 'domcontentloaded' });
+    await p.waitForFunction(() => window.__godsEyeView?.dataManager, {
+      timeout: 60000,
+    });
+    await p.keyboard.press('?');
+    const immediate = await p.evaluate(() => {
+      const el = document.querySelector('.uap-help');
+      return { present: !!el, hidden: el?.hidden };
+    });
+    check(
+      '"?" pressed in the race window (before the welcome poll settles) opens the help overlay',
+      immediate.present === true && immediate.hidden === false,
+      JSON.stringify(immediate),
+    );
+    await p.waitForFunction(
+      () => {
+        const el = document.querySelector('.uap-welcome');
+        return !!el && !el.hidden;
+      },
+      { timeout: 15000 },
+    );
+    const afterWelcome = await p.evaluate(() => {
+      const help = document.querySelector('.uap-help');
+      const welcome = document.querySelector('.uap-welcome');
+      return {
+        helpHidden: help?.hidden,
+        welcomeShown: !!welcome && !welcome.hidden,
+      };
+    });
+    check(
+      'once the welcome plate reveals itself, `_revealWelcomeOnce` has closed the help overlay opened in the race window - only the welcome plate shows',
+      afterWelcome.helpHidden === true && afterWelcome.welcomeShown === true,
+      JSON.stringify(afterWelcome),
+    );
     await ctx.close();
   }
 

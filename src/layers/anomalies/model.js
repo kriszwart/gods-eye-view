@@ -11,6 +11,13 @@ export const YEAR_MIN = 1940;
 export const YEAR_MAX = 2026;
 export const TIME_MODES = Object.freeze(['cumulative', 'window', 'all']);
 
+/** The register's standing honesty line for the heat encoding: shown in
+ * this layer's own on-globe legend (index.js) and, imported verbatim,
+ * in the help overlay (src/app/helpOverlay.js). No trailing period, to
+ * match its sibling legend line's style. */
+export const DENSITY_HONESTY_LINE =
+  'Heat shows report density, not credibility';
+
 export const PALETTE = Object.freeze({
   void: '#070812',
   ink: '#D9DCE6',

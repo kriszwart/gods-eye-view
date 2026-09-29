@@ -628,6 +628,7 @@
       "src/app/welcome.js",
       "src/app/helpOverlay.js",
       "src/layers/liveClaims/model.js",
+      "src/layers/anomalies/model.js",
       "src/layers/anomalies/source.js",
       "src/layers/anomalies/records.js",
       "src/layers/ancientSites/source.js",

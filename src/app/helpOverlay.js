@@ -1,4 +1,5 @@
 import { HONESTY_LINE } from '../layers/liveClaims/model.js';
+import { DENSITY_HONESTY_LINE } from '../layers/anomalies/model.js';
 
 /**
  * The ancient sites register's undated-sweep honesty line. The sweep bands
@@ -15,16 +16,6 @@ const ANCIENT_TYPOLOGICAL_LINE =
   "Undated sites are placed by their type's typical period, not their own dating.";
 
 /**
- * The sky register's own "brightness and heat encode unexplainedness and
- * density, never credibility" honesty line. `src/layers/anomalies/index.js`
- * already states this in its own on-globe legend, but only inline inside a
- * template literal - never assigned to an exported constant - for the same
- * reason as the ancient line above: restated once here rather than
- * imported.
- */
-const DENSITY_HONESTY_LINE = 'Heat shows report density, not credibility.';
-
-/**
  * The keyboard map, in display order. Every row here is a control that
  * genuinely exists elsewhere in the app today (recon'd against
  * src/layers/anomalies/chronometer.js's own keydown handlers and its
@@ -34,7 +25,7 @@ const DENSITY_HONESTY_LINE = 'Heat shows report density, not credibility.';
  * clicking it, or tabbing to it) rather than behind a shortcut of its own.
  */
 const KEYBOARD_ROWS = Object.freeze([
-  ['Arrow keys', "Step the dial's year by one, when the dial has focus."],
+  ['Arrow keys', 'Step the dial, when the dial has focus.'],
   ['Home / End', "Jump the dial to its scale's earliest or latest year."],
   ['Escape', 'Close whichever plate is open.'],
   [
@@ -65,8 +56,8 @@ const READING_ROWS = Object.freeze([
 
 /**
  * The three registers' own standing honesty lines, verbatim where a real
- * exported constant exists (live claims) and restated once above where it
- * does not (sky, ancient) - see this module's own top-of-file constants and
+ * exported constant exists (sky, live claims) and restated once above where
+ * it does not (ancient) - see this module's own top-of-file constants and
  * their doc comments for which is which.
  */
 const HONESTY_LINES = Object.freeze([
@@ -88,7 +79,7 @@ const HONESTY_LINES = Object.freeze([
  * where the plate lives instead of reaching for it.
  */
 const SOURCES_POINTER_TEXT =
-  'Sources and credits sits in the dial panel, under Sources, once sky events is on.';
+  'The sources and credits panel sits in the dial panel, under Sources, once sky events is on.';
 
 /**
  * Build the help overlay: a static plate explaining the keyboard map, how

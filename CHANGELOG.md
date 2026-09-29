@@ -1,5 +1,70 @@
 # Changelog
 
+- Presence pass: three additions that make the atlas feel occupied rather
+  than static - sharper composed assets at retina density, the pointer
+  answering "what is under it" before a click, and a dossier that summons
+  its own reported craft.
+
+  Retina-sharp composition: every composed sprite and glyph (the neutral
+  glow sprite, the close-range shape-glyph tier, the hero ring, ancient
+  sites' gold glyph billboards, live claims' glow sprite) now rasterises at
+  up to 2x device pixel ratio, through `src/ui/glowSprite.js`'s new
+  `currentDprBucket()`, shared by all three composers rather than
+  duplicated. Cache keys and imageIds carry the DPR bucket so a composed
+  asset never mixes buckets, and SVG glyphs rasterise at their real
+  on-canvas target size rather than a naturalWidth/Height guess. Honest
+  caveat: GEV's Cesium viewer never sets `resolutionScale` or
+  `useBrowserRecommendedResolution: false`, so the WebGL framebuffer itself
+  stays sized in CSS pixels, not true device pixels - composing textures at
+  DPR sharpens texture sampling within that constraint (visibly less
+  aliasing at glyph edges) but cannot by itself deliver full native pixel
+  density. A `resolutionScale` change would be a real performance
+  trade-off (full native rendering on a 3x phone screen is expensive) that
+  neither the build plan nor this task calls for, so it was left for a
+  future call rather than made unilaterally.
+
+  Hover and selection: a shared hover-pick helper (`src/ui/hoverPick.js`)
+  installs one throttled (80ms) pointer listener per canvas across all
+  three registers, resolving hover ownership through the pick registry and
+  brightening the hovered point (1.4x, restored on leave), the pointer
+  cursor following suit. Opening a dossier now also draws a selection ring
+  around its point - ion for sky events and live claims, gold for ancient
+  sites - cleared on every close path: the Close button, Escape, a
+  different register's dossier taking over the shared on-screen slot, and
+  layer disable. Heroes' own permanent ring is never doubled.
+
+  Summoned archetypes: opening a non-hero, shaped case's dossier now
+  summons its reported craft - a small animated model from the 30-craft
+  library, appearing at the case's own location, mirroring the hero craft
+  loader's own placement (650 m height offset, minimum pixel size 56,
+  maximum scale 40,000). Exactly one craft is summoned globally at a time
+  (`src/app/craftSummon.js`, new): opening a shaped dossier in either
+  register despawns whatever was summoned before, and a hero case never
+  summons at all - it already carries its own permanent animated craft, so
+  summoning here would double it. The render governor holds continuous
+  render only while a craft is up and its animations are meant to run;
+  prefers-reduced-motion spawns a static pose instead - no continuous
+  hold, just the one-shot render already due on spawn and despawn. A load
+  failure warns once and leaves the dossier working without the craft,
+  never blocking it. The craft stay generic archetypes throughout: the
+  dossier's existing "Reported as" line is the only claim made about a
+  case's shape, unchanged by any of this.
+
+  Gates: `npm run format:check` (1,154 files clean), `npm test` (5,269
+  tests, 5,268 passing, 1 pre-existing skip, 0 failed), `npm run
+  check:boundaries` and `npm run build` all clean. `node
+  scripts/qa-anomalies.mjs` ran 3 consecutive clean runs; `node
+  scripts/qa-claims.mjs`, `node scripts/qa-ancient-sites.mjs` (shared
+  paths, unaffected - the ancient register never summons) and `node
+  scripts/qa-perf.mjs` (24 of 24 - the summon's own render-governor hold
+  releases cleanly) each ran 1 clean run, all against the
+  controller-managed dev server. `npm run test:track` hit the same
+  pre-existing stale Vite dependency-optimisation cache recorded against
+  the live claims register's own entry below (`egm96-universal.js`
+  answering 504 "Outdated Optimize Dep", confirmed persistent on a retry,
+  unrelated to this change); the dev server is controller-managed and was
+  not restarted to clear it.
+
 - Atlas instruments: three additions that let the atlas answer questions
   about itself, all reading the shipped datasets live rather than a fixed
   sample.

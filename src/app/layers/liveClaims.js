@@ -15,6 +15,7 @@ import {
   releaseContinuousRender,
   governorRequestRender,
 } from '../../renderGovernor.js';
+import { summon, getSummonDiagnostics } from '../craftSummon.js';
 
 /** Wire the live claims register to the application's pick registry and
  * render governor. The layer builds its own source (GET /api/claims, a
@@ -39,6 +40,11 @@ export function createApplicationLiveClaims(options = {}) {
       releaseContinuousRender,
       governorRequestRender,
     },
+    craftSummon: { summon, getSummonDiagnostics },
+    // No craft library of its own (task: presence pass): every summoned
+    // craft's GLB lives under the anomalies register's own asset base, the
+    // same one `anomalySource` above already points at.
+    craftAssetBase: anomaliesBase,
     ...options,
   });
 }

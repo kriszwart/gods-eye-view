@@ -531,11 +531,29 @@ try {
         { timeout: 8000 },
       )
       .catch(() => {});
-    const opened = await page.evaluate(() =>
-      window.__godsEyeView.dataManager.layers
+    // Presence pass (summoned craft): the New York fixture claim always
+    // carries a shape (see this file's own doc comment), so this same
+    // click also summons its reported archetype. Poll for `animating`
+    // specifically - by construction (craftSummon.js) that also proves the
+    // model is in the scene and the governor hold is already engaged.
+    await page
+      .waitForFunction(
+        () =>
+          window.__godsEyeView.dataManager.layers
+            .get('live-claims')
+            ?.module?.getCraftSummonDiagnostics?.()?.animating === true,
+        { timeout: 5000 },
+      )
+      .catch(() => {});
+    const opened = await page.evaluate(() => ({
+      diagnostics: window.__godsEyeView.dataManager.layers
         .get('live-claims')
         ?.module?.getDiagnostics?.(),
-    );
+      craft: window.__godsEyeView.dataManager.layers
+        .get('live-claims')
+        ?.module?.getCraftSummonDiagnostics?.(),
+      holds: window.__godsEyeView.getRenderGovernorDiagnostics?.()?.holds ?? [],
+    }));
     await page.screenshot({
       path: resolve(PRESENCE_SHOT_DIR, 'live-claims-selection-1440.png'),
     });
@@ -546,24 +564,47 @@ try {
           new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
         );
     });
-    const closedState = await page.evaluate(() =>
-      window.__godsEyeView.dataManager.layers
+    const closedState = await page.evaluate(() => ({
+      diagnostics: window.__godsEyeView.dataManager.layers
         .get('live-claims')
         ?.module?.getDiagnostics?.(),
-    );
+      craft: window.__godsEyeView.dataManager.layers
+        .get('live-claims')
+        ?.module?.getCraftSummonDiagnostics?.(),
+      holds: window.__godsEyeView.getRenderGovernorDiagnostics?.()?.holds ?? [],
+    }));
     selectionProbe = { opened, closedState };
   }
   check(
     "opening the New York claim's dossier sets selectedId and adds a selection-ring billboard",
-    selectionProbe?.opened.selectedId != null &&
-      selectionProbe?.opened.selectionRingCount === 1,
-    JSON.stringify(selectionProbe?.opened),
+    selectionProbe?.opened.diagnostics.selectedId != null &&
+      selectionProbe?.opened.diagnostics.selectionRingCount === 1,
+    JSON.stringify(selectionProbe?.opened.diagnostics),
   );
   check(
     'Escape closes the dossier and clears selectedId and the selection ring',
-    selectionProbe?.closedState.selectedId == null &&
-      selectionProbe?.closedState.selectionRingCount === 0,
-    JSON.stringify(selectionProbe?.closedState),
+    selectionProbe?.closedState.diagnostics.selectedId == null &&
+      selectionProbe?.closedState.diagnostics.selectionRingCount === 0,
+    JSON.stringify(selectionProbe?.closedState.diagnostics),
+  );
+  check(
+    "opening the shaped New York claim's dossier summons its reported archetype: a Model primitive appears, its animations run and the render governor holds continuous render under its own owner id",
+    selectionProbe?.opened.craft?.active === true &&
+      selectionProbe?.opened.craft?.holding === true &&
+      selectionProbe?.opened.craft?.animating === true &&
+      selectionProbe?.opened.holds.includes('craft-summon'),
+    JSON.stringify(selectionProbe?.opened.craft) +
+      ' holds=' +
+      JSON.stringify(selectionProbe?.opened.holds),
+  );
+  check(
+    'closing the claim dossier despawns the summoned craft and releases the governor hold',
+    selectionProbe?.closedState.craft?.active === false &&
+      selectionProbe?.closedState.craft?.holding === false &&
+      !selectionProbe?.closedState.holds.includes('craft-summon'),
+    JSON.stringify(selectionProbe?.closedState.craft) +
+      ' holds=' +
+      JSON.stringify(selectionProbe?.closedState.holds),
   );
 
   // A shapeless fixture claim (shape: null - "the classifier could not
@@ -592,15 +633,24 @@ try {
         { timeout: 8000 },
       )
       .catch(() => {});
+    // Presence pass (summoned craft): a shapeless claim has nothing for
+    // craftSummon.js to load, so there is no async craft state to wait
+    // out - a short settle margin is still worth the small cost, so a
+    // regression that DID start a summon here would not slip past on
+    // timing alone.
+    await new Promise((r) => setTimeout(r, 300));
     shapelessDossier = await page.evaluate(() => {
       const d = document.querySelector('.uap-dossier.claims');
       const found = !!d && !d.hidden;
       const preview = d?.querySelector('.uap-craft-preview') ?? null;
       const shapeText = d?.querySelector('dl')?.textContent || '';
+      const craft = window.__godsEyeView.dataManager.layers
+        .get('live-claims')
+        ?.module?.getCraftSummonDiagnostics?.();
       d?.dispatchEvent(
         new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
       );
-      return { found, previewFound: !!preview, shapeText };
+      return { found, previewFound: !!preview, shapeText, craft };
     });
   }
   check(
@@ -611,6 +661,11 @@ try {
       shapelessDossier.previewFound === false &&
       /Not stated/.test(shapelessDossier.shapeText),
     JSON.stringify({ shapelessTarget, shapelessDossier }),
+  );
+  check(
+    'a shapeless fixture claim never summons a craft (nothing for craftSummon.js to load)',
+    shapelessDossier.craft?.active === false,
+    JSON.stringify(shapelessDossier.craft),
   );
 
   // Reduced motion: the preview's drift and sheen are pure CSS keyframes

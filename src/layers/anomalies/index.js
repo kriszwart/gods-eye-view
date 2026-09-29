@@ -116,6 +116,7 @@ export function createAnomaliesLayer({
   picking,
   hoverPick,
   render,
+  craftSummon,
   assetBase = '/anomalies/',
   container,
   atmosphere = true,
@@ -126,6 +127,16 @@ export function createAnomaliesLayer({
   let renderer = null;
   let chrono = null;
   let dossier = null;
+  // Presence pass: the reported-archetype craft summoned for whichever
+  // non-hero dossier is currently open, or null. Cleared through
+  // despawnCraft() on every dossier-close path AND re-asserted at the top
+  // of every openDossier call (same-register switch without an
+  // intervening close). craftSummon.js itself is a global one-at-a-time
+  // singleton (module state), so despawning THIS register's own stale
+  // handle is always safe even when it was already replaced by a summon
+  // from another register - despawn() is idempotent on an already-gone
+  // state.
+  let craftHandle = null;
   let rows = [];
   let enabled = false;
   let loaded = false;
@@ -218,9 +229,37 @@ export function createAnomaliesLayer({
     });
   };
 
+  /** Despawn whatever craft this register itself last summoned (task:
+   * presence pass), if any. Safe to call unconditionally - a no-op both
+   * when nothing was summoned and when craftHandle already points at a
+   * state some later summon (this register or another) has since
+   * replaced. */
+  function despawnCraft() {
+    craftHandle?.despawn();
+    craftHandle = null;
+  }
+
   async function openDossier(id) {
     const row = rows.find((r) => r.id === id);
     if (!row || !dossier) return;
+    // Presence pass: every dossier open first drops whatever craft THIS
+    // register last summoned (a same-register switch between two open
+    // dossiers never goes through closeDossier), then summons afresh for a
+    // non-hero row - a hero already carries its own permanent animated
+    // craft, so summoning here would double it. Every row carries a craft
+    // archetype (records.js defaults a missing one to 'orb'), so the only
+    // gate is row.hero.
+    despawnCraft();
+    if (!row.hero && craftSummon?.summon) {
+      craftHandle = craftSummon.summon({
+        viewer,
+        shape: row.craft,
+        lat: row.lat,
+        lon: row.lon,
+        render,
+        assetBase,
+      });
+    }
     let detail = null;
     try {
       detail = (await source.getCases?.())?.get(id) || null;
@@ -280,6 +319,7 @@ export function createAnomaliesLayer({
   function closeDossier() {
     if (dossier) dossier.hidden = true;
     renderer?.setSelected(null);
+    despawnCraft();
   }
 
   /** Open the Sources and credits plate, syncing its toggle button. */
@@ -717,6 +757,23 @@ export function createAnomaliesLayer({
      * its billboard count and the composed-glyph cache size. */
     getRenderDiagnostics() {
       return renderer?.getDiagnostics() ?? null;
+    },
+
+    /** Summoned-craft diagnostics for the qa gate (task: presence pass):
+     * whether a reported-archetype craft is currently up, its shape, and
+     * whether it is holding continuous render / actually animating. The
+     * underlying state is a module-level singleton in craftSummon.js
+     * (shared across every register), so this reads the same answer
+     * regardless of which register's own dossier asked for it. */
+    getCraftSummonDiagnostics() {
+      return (
+        craftSummon?.getSummonDiagnostics?.() ?? {
+          active: false,
+          shape: null,
+          holding: false,
+          animating: false,
+        }
+      );
     },
 
     /** Voice and UI hooks. */

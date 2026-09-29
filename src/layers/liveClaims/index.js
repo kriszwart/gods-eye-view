@@ -92,7 +92,8 @@ function prefersReducedMotion() {
  * means that block stays absent - no error.
  *
  * @param {{source: object, anomalySource?: object, picking?: object,
- *   render?: object, container?: Element}} options
+ *   render?: object, craftSummon?: object, craftAssetBase?: string,
+ *   container?: Element}} options
  */
 export function createLiveClaimsLayer({
   source,
@@ -100,6 +101,11 @@ export function createLiveClaimsLayer({
   picking,
   hoverPick,
   render,
+  craftSummon,
+  // This register ships no craft library of its own (task: presence pass):
+  // every summoned craft's GLB lives under the anomalies register's own
+  // asset base, matching src/app/layers/liveClaims.js's own wiring.
+  craftAssetBase = '/anomalies/',
   container,
 } = {}) {
   if (typeof source?.getSnapshot !== 'function')
@@ -107,6 +113,13 @@ export function createLiveClaimsLayer({
   let viewer = null;
   let renderer = null;
   let dossier = null;
+  // Presence pass: the reported-archetype craft summoned for whichever
+  // shaped dossier is currently open, or null. Mirrors
+  // src/layers/anomalies/index.js's own craftHandle exactly - see its
+  // doc comment for the idempotent-despawn reasoning (craftSummon.js is a
+  // global one-at-a-time singleton, so despawning a stale handle here is
+  // always safe even after another register has already replaced it).
+  let craftHandle = null;
   let statusPlate = null;
   let statusText = null;
   let streamToggle = null;
@@ -221,9 +234,34 @@ export function createLiveClaimsLayer({
     anchor.before(block);
   }
 
+  /** Despawn whatever craft this register itself last summoned (task:
+   * presence pass), if any. Safe to call unconditionally - see the matching
+   * comment on src/layers/anomalies/index.js's own despawnCraft(). */
+  function despawnCraft() {
+    craftHandle?.despawn();
+    craftHandle = null;
+  }
+
   function openDossier(id) {
     const row = claims.find((r) => r.id === id);
     if (!row || !dossier) return;
+    // Presence pass: every dossier open first drops whatever craft THIS
+    // register last summoned (a same-register switch between two open
+    // dossiers never goes through closeDossier), then summons afresh when
+    // the claim states a shape. Unlike anomalies, a claim's shape is
+    // frequently null (the post never stated one - see formatShape's own
+    // "Not stated" fallback above), and an unshaped claim never summons.
+    despawnCraft();
+    if (row.shape && craftSummon?.summon) {
+      craftHandle = craftSummon.summon({
+        viewer,
+        shape: row.shape,
+        lat: row.lat,
+        lon: row.lon,
+        render,
+        assetBase: craftAssetBase,
+      });
+    }
     const token = ++openToken;
     const sourceUrl = safeSourceUrl(row.url);
     dossier.innerHTML = `
@@ -271,6 +309,7 @@ export function createLiveClaimsLayer({
   function closeDossier() {
     if (dossier) dossier.hidden = true;
     renderer?.setSelected(null);
+    despawnCraft();
   }
 
   /** Refresh the always-visible status plate: the honesty line, plus either
@@ -652,6 +691,21 @@ export function createLiveClaimsLayer({
           hoveredId: null,
           selectedId: null,
           selectionRingCount: 0,
+        }
+      );
+    },
+
+    /** Summoned-craft diagnostics for the qa gate (task: presence pass); see
+     * the matching method on src/layers/anomalies/index.js's own layer
+     * object - the underlying state is the same module-level singleton in
+     * craftSummon.js regardless of which register asks. */
+    getCraftSummonDiagnostics() {
+      return (
+        craftSummon?.getSummonDiagnostics?.() ?? {
+          active: false,
+          shape: null,
+          holding: false,
+          animating: false,
         }
       );
     },

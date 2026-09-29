@@ -821,11 +821,30 @@ try {
         { timeout: 8000 },
       )
       .catch(() => {});
-    const opened = await page.evaluate(() =>
-      window.__godsEyeView.dataManager.layers
+    // Presence pass (summoned craft): hoverSite is a real, non-hero row, so
+    // this same click also summons its reported archetype. Poll for
+    // `animating` specifically, not merely `active` - by construction
+    // (craftSummon.js) that also proves the model is in the scene AND the
+    // governor hold is already engaged, so one wait covers all three
+    // without any fixed-delay guessing.
+    await page
+      .waitForFunction(
+        () =>
+          window.__godsEyeView.dataManager.layers
+            .get('anomalies')
+            ?.module?.getCraftSummonDiagnostics?.()?.animating === true,
+        { timeout: 5000 },
+      )
+      .catch(() => {});
+    const opened = await page.evaluate(() => ({
+      diagnostics: window.__godsEyeView.dataManager.layers
         .get('anomalies')
         ?.module?.getRenderDiagnostics?.(),
-    );
+      craft: window.__godsEyeView.dataManager.layers
+        .get('anomalies')
+        ?.module?.getCraftSummonDiagnostics?.(),
+      holds: window.__godsEyeView.getRenderGovernorDiagnostics?.()?.holds ?? [],
+    }));
     await page.screenshot({
       path: resolve(PRESENCE_SHOT_DIR, 'anomalies-selection-1440.png'),
     });
@@ -836,24 +855,143 @@ try {
           new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
         );
     });
-    const closed = await page.evaluate(() =>
-      window.__godsEyeView.dataManager.layers
+    const closed = await page.evaluate(() => ({
+      diagnostics: window.__godsEyeView.dataManager.layers
         .get('anomalies')
         ?.module?.getRenderDiagnostics?.(),
-    );
+      craft: window.__godsEyeView.dataManager.layers
+        .get('anomalies')
+        ?.module?.getCraftSummonDiagnostics?.(),
+      holds: window.__godsEyeView.getRenderGovernorDiagnostics?.()?.holds ?? [],
+    }));
     selectionProbe = { opened, closed };
   }
   check(
     "opening a non-hero point's dossier sets selectedId and adds a selection-ring billboard",
-    selectionProbe?.opened.selectedId != null &&
-      selectionProbe?.opened.selectionRingCount === 1,
-    JSON.stringify(selectionProbe?.opened),
+    selectionProbe?.opened.diagnostics.selectedId != null &&
+      selectionProbe?.opened.diagnostics.selectionRingCount === 1,
+    JSON.stringify(selectionProbe?.opened.diagnostics),
   );
   check(
     'Escape closes the dossier and clears selectedId and the selection ring',
-    selectionProbe?.closed.selectedId == null &&
-      selectionProbe?.closed.selectionRingCount === 0,
-    JSON.stringify(selectionProbe?.closed),
+    selectionProbe?.closed.diagnostics.selectedId == null &&
+      selectionProbe?.closed.diagnostics.selectionRingCount === 0,
+    JSON.stringify(selectionProbe?.closed.diagnostics),
+  );
+  check(
+    "opening a non-hero point's dossier summons its reported archetype: a Model primitive appears, its animations run and the render governor holds continuous render under its own owner id",
+    selectionProbe?.opened.craft?.active === true &&
+      selectionProbe?.opened.craft?.holding === true &&
+      selectionProbe?.opened.craft?.animating === true &&
+      selectionProbe?.opened.holds.includes('craft-summon'),
+    JSON.stringify(selectionProbe?.opened.craft) +
+      ' holds=' +
+      JSON.stringify(selectionProbe?.opened.holds),
+  );
+  check(
+    'closing the dossier despawns the summoned craft and releases the governor hold',
+    selectionProbe?.closed.craft?.active === false &&
+      selectionProbe?.closed.craft?.holding === false &&
+      !selectionProbe?.closed.holds.includes('craft-summon'),
+    JSON.stringify(selectionProbe?.closed.craft) +
+      ' holds=' +
+      JSON.stringify(selectionProbe?.closed.holds),
+  );
+
+  // Presence pass (summoned craft): reduced motion and a HERO dossier each
+  // need their own isolated page - prefers-reduced-motion is set once at
+  // page creation (mirrors craftPreviewAnimationNames above), and a hero
+  // dossier's own summon-diagnostics answer should never depend on
+  // whatever the shared `page` above just summoned and despawned.
+  async function craftSummonProbe({ reduceMotion = false, hero = false } = {}) {
+    const ctx = await browser.createBrowserContext();
+    const p = await ctx.newPage();
+    if (reduceMotion) {
+      await p.emulateMediaFeatures([
+        { name: 'prefers-reduced-motion', value: 'reduce' },
+      ]);
+    }
+    await p.goto(`${base}/?welcome=0`, { waitUntil: 'domcontentloaded' });
+    await p.waitForFunction(() => window.__godsEyeView?.dataManager, {
+      timeout: 60000,
+    });
+    await p.evaluate(() =>
+      window.__godsEyeView.dataManager.setEnabled('anomalies', true, {
+        origin: 'user',
+      }),
+    );
+    await p.waitForFunction(
+      () =>
+        (window.__godsEyeView.dataManager.layers
+          .get('anomalies')
+          ?.module?.getStats?.().count ?? 0) > 0,
+      { timeout: 30000 },
+    );
+    const targetId = await p.evaluate(async (wantHero) => {
+      const r = await fetch('/anomalies/anomalies.v1.json');
+      const json = await r.json();
+      const cols = json.columns;
+      for (let i = 0; i < cols.id.length; i++) {
+        if (Boolean(cols.hero[i]) === wantHero) return cols.id[i];
+      }
+      return null;
+    }, hero);
+    if (!targetId) {
+      await ctx.close();
+      return null;
+    }
+    await p.evaluate(
+      (id) =>
+        window.__godsEyeView.dataManager.layers
+          .get('anomalies')
+          .module.focusCase(id),
+      targetId,
+    );
+    await p
+      .waitForFunction(
+        (wantHero, wantReduced) => {
+          // A hero dossier never summons at all (nothing to poll for
+          // beyond the dossier itself, already awaited by focusCase
+          // above); a reduced-motion summon settles on `active` alone,
+          // since it never animates by design.
+          if (wantHero) return true;
+          const diag = window.__godsEyeView.dataManager.layers
+            .get('anomalies')
+            ?.module?.getCraftSummonDiagnostics?.();
+          return wantReduced ? diag?.active === true : diag?.animating === true;
+        },
+        { timeout: 5000 },
+        hero,
+        reduceMotion,
+      )
+      .catch(() => {});
+    // A settling margin for whichever branch above had nothing left to
+    // poll for.
+    await new Promise((r) => setTimeout(r, 400));
+    const result = await p.evaluate(() => ({
+      craft: window.__godsEyeView.dataManager.layers
+        .get('anomalies')
+        ?.module?.getCraftSummonDiagnostics?.(),
+      holds: window.__godsEyeView.getRenderGovernorDiagnostics?.()?.holds ?? [],
+    }));
+    await ctx.close();
+    return result;
+  }
+  const reducedMotionSummon = await craftSummonProbe({ reduceMotion: true });
+  check(
+    'reduced motion: a non-hero dossier still summons a static-pose craft - the model is present, its animations never start and no continuous hold is taken',
+    reducedMotionSummon?.craft?.active === true &&
+      reducedMotionSummon.craft.animating === false &&
+      reducedMotionSummon.craft.holding === false &&
+      !reducedMotionSummon.holds.includes('craft-summon'),
+    JSON.stringify(reducedMotionSummon),
+  );
+  const heroSummon = await craftSummonProbe({ hero: true });
+  check(
+    "opening a HERO case's dossier never summons a craft - it already carries its own permanent animated craft, and summoning here would double it",
+    heroSummon?.craft?.active === false &&
+      !heroSummon.holds.includes('craft-summon'),
+    JSON.stringify(heroSummon),
   );
 
   // Rebuild-race check (presence-pass fix round, finding 1: stale

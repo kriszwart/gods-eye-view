@@ -3,8 +3,11 @@
  * Browser proof of the anomalies layer acceptance: registration, sample data,
  * chronometer ring and band layouts, keyboard year control, dossier open and
  * close, an off/on re-enable with hero overlay labels surviving, and
- * share-link restore via token 3. Needs the dev server on :4173 (QA_BASE_URL
- * overrides).
+ * share-link restore via token 3. Also the welcome pass: the one-time atlas
+ * introduction plate shows once after boot on a fresh context, Escape
+ * dismisses and remembers it, a reload or a pre-seeded context never shows
+ * it again, and "Take the hero tour" enables the anomalies layer and starts
+ * the tour. Needs the dev server on :4173 (QA_BASE_URL overrides).
  */
 import puppeteer from 'puppeteer';
 import { mkdirSync } from 'node:fs';
@@ -13,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { SHAPE_GLYPH_URLS } from '../src/layers/anomalies/shapeGlyphs.js';
 import { statusHue } from '../src/layers/anomalies/model.js';
 import { WAVES } from '../src/layers/anomalies/waves.js';
+import { WELCOME_STORAGE_KEY } from '../src/app/welcome.js';
 const base = process.env.QA_BASE_URL || 'http://localhost:4173';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
@@ -20,6 +24,30 @@ const REPO_ROOT = resolve(__dirname, '..');
 // each writes its own distinctly-named files into this one directory.
 const PRESENCE_SHOT_DIR = resolve(REPO_ROOT, 'qa-shots/presence-pass');
 mkdirSync(PRESENCE_SHOT_DIR, { recursive: true });
+// Shared with qa-claims.mjs and qa-ancient-sites.mjs (welcome pass): each
+// writes its own distinctly-named files into this one directory.
+const WELCOME_SHOT_DIR = resolve(REPO_ROOT, 'qa-shots/welcome-pass');
+mkdirSync(WELCOME_SHOT_DIR, { recursive: true });
+
+/**
+ * Pre-seed the welcome plate's durable "seen it" flag via
+ * evaluateOnNewDocument, so it is already set before ANY app script runs on
+ * the page's first navigation. Every check in this file other than the
+ * welcome-plate checks themselves (below) needs this: the plate
+ * (src/app/welcome.js, wired in src/ui/layerBindings.js) is a one-time
+ * overlay that would otherwise appear over a freshly-created context and
+ * intercept its first click - exactly the trap the welcome-pass plan called
+ * out. Call this on every new page/context before its first `.goto()`.
+ */
+async function skipWelcome(page) {
+  await page.evaluateOnNewDocument((key) => {
+    try {
+      localStorage.setItem(key, 'seen');
+    } catch {
+      /* best-effort, matches the app's own guarded write */
+    }
+  }, WELCOME_STORAGE_KEY);
+}
 const browser = await puppeteer.launch({
   headless: true,
   args: [
@@ -89,6 +117,7 @@ try {
   await page.setViewport({ width: 1440, height: 900 });
   const pageErrors = [];
   page.on('pageerror', (e) => pageErrors.push(e.message));
+  await skipWelcome(page);
   await page.goto(`${base}/?welcome=0`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__godsEyeView?.dataManager, {
     timeout: 60000,
@@ -492,6 +521,7 @@ try {
         { name: 'prefers-reduced-motion', value: 'reduce' },
       ]);
     }
+    await skipWelcome(p);
     await p.goto(`${base}/?welcome=0`, { waitUntil: 'domcontentloaded' });
     await p.waitForFunction(() => window.__godsEyeView?.dataManager, {
       timeout: 60000,
@@ -911,6 +941,7 @@ try {
         { name: 'prefers-reduced-motion', value: 'reduce' },
       ]);
     }
+    await skipWelcome(p);
     await p.goto(`${base}/?welcome=0`, { waitUntil: 'domcontentloaded' });
     await p.waitForFunction(() => window.__godsEyeView?.dataManager, {
       timeout: 60000,
@@ -2169,6 +2200,7 @@ try {
 
   const fresh = await browser.createBrowserContext();
   const share = await fresh.newPage();
+  await skipWelcome(share);
   await share.goto(
     `${base}/?welcome=0#lat=34.05&lon=-118.24&alt=26000000&pitch=-90&v=2&l=3`,
     { waitUntil: 'domcontentloaded' },
@@ -2186,6 +2218,175 @@ try {
     window.__godsEyeView.dataManager.isEnabled('anomalies'),
   );
   check('share link with token 3 restores the layer', restored === true);
+
+  // Welcome pass: the one-time atlas introduction (src/app/welcome.js,
+  // wired in src/ui/layerBindings.js). Its own localStorage key is
+  // pre-seeded for every other check in this file (skipWelcome, above) so
+  // the plate never intercepts them; these are the only checks that
+  // exercise the plate itself, each against its own fresh context so the
+  // "shows once" behaviour is genuinely proven rather than assumed.
+  {
+    const ctx = await browser.createBrowserContext();
+    const p = await ctx.newPage();
+    await p.setViewport({ width: 1440, height: 900 });
+    await p.goto(`${base}/?welcome=0`, { waitUntil: 'domcontentloaded' });
+    await p.waitForFunction(() => window.__godsEyeView?.dataManager, {
+      timeout: 60000,
+    });
+    await p.waitForFunction(
+      () => {
+        const el = document.querySelector('.uap-welcome');
+        return !!el && !el.hidden;
+      },
+      { timeout: 15000 },
+    );
+    const shown = await p.evaluate((key) => {
+      const el = document.querySelector('.uap-welcome');
+      return {
+        present: !!el,
+        title: el?.querySelector('.uap-welcome-head h2')?.textContent,
+        registers: [...el.querySelectorAll('.uap-welcome-register')].map(
+          (li) => li.dataset.register,
+        ),
+        seenFlag: localStorage.getItem(key),
+      };
+    }, WELCOME_STORAGE_KEY);
+    check(
+      'welcome plate appears once after boot, on a fresh context',
+      shown.present &&
+        shown.title === 'Phenomena' &&
+        shown.registers.join(',') === 'sky,ancient,live',
+      JSON.stringify(shown),
+    );
+    check(
+      'welcome plate has not written its "seen it" flag before any dismissal',
+      shown.seenFlag === null,
+      String(shown.seenFlag),
+    );
+
+    // The plate's own entrance fade (anomaly-atlas.css's uap-welcome-in,
+    // 260ms) is still running the instant `!el.hidden` becomes true - wait
+    // it out so both screenshots capture the settled, fully-opaque plate
+    // rather than a mid-fade frame.
+    await new Promise((r) => setTimeout(r, 400));
+    await p.screenshot({
+      path: resolve(WELCOME_SHOT_DIR, 'welcome-1440.png'),
+    });
+    await p.setViewport({ width: 390, height: 844 });
+    await p.screenshot({
+      path: resolve(WELCOME_SHOT_DIR, 'welcome-390.png'),
+    });
+    await p.setViewport({ width: 1440, height: 900 });
+
+    await p.evaluate(() => {
+      document
+        .querySelector('.uap-welcome')
+        .dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+        );
+    });
+    const afterEscape = await p.evaluate((key) => {
+      // Dismissal tears the plate down entirely (src/ui/layerBindings.js's
+      // onOpenChange), not just hides it - a genuine one-shot has nothing
+      // left worth reopening, so absence from the DOM is the real signal.
+      return {
+        gone: !document.querySelector('.uap-welcome'),
+        seenFlag: localStorage.getItem(key),
+      };
+    }, WELCOME_STORAGE_KEY);
+    check(
+      'Escape dismisses the welcome plate and remembers it (localStorage)',
+      afterEscape.gone === true && afterEscape.seenFlag === 'seen',
+      JSON.stringify(afterEscape),
+    );
+
+    await p.reload({ waitUntil: 'domcontentloaded' });
+    await p.waitForFunction(() => window.__godsEyeView?.dataManager, {
+      timeout: 60000,
+    });
+    // A settled absence, not just "not yet": wait long enough for the
+    // reveal poll to have had every chance to fire, then confirm it did not.
+    await new Promise((r) => setTimeout(r, 3000));
+    const afterReload = await p.evaluate(
+      () => !document.querySelector('.uap-welcome'),
+    );
+    check(
+      'reloading the same context (localStorage held) does not show the welcome plate again',
+      afterReload === true,
+    );
+    await ctx.close();
+  }
+
+  {
+    const ctx = await browser.createBrowserContext();
+    const p = await ctx.newPage();
+    await skipWelcome(p);
+    await p.goto(`${base}/?welcome=0`, { waitUntil: 'domcontentloaded' });
+    await p.waitForFunction(() => window.__godsEyeView?.dataManager, {
+      timeout: 60000,
+    });
+    await new Promise((r) => setTimeout(r, 3000));
+    const present = await p.evaluate(
+      () => !!document.querySelector('.uap-welcome'),
+    );
+    check(
+      'a second fresh context with the welcome key pre-seeded never shows the plate',
+      present === false,
+    );
+    await ctx.close();
+  }
+
+  {
+    const ctx = await browser.createBrowserContext();
+    const p = await ctx.newPage();
+    await p.goto(`${base}/?welcome=0`, { waitUntil: 'domcontentloaded' });
+    await p.waitForFunction(() => window.__godsEyeView?.dataManager, {
+      timeout: 60000,
+    });
+    await p.waitForFunction(
+      () => {
+        const el = document.querySelector('.uap-welcome');
+        return !!el && !el.hidden;
+      },
+      { timeout: 15000 },
+    );
+    const enabledBefore = await p.evaluate(() =>
+      window.__godsEyeView.dataManager.isEnabled('anomalies'),
+    );
+    await p.evaluate(() => {
+      document.querySelector('.uap-welcome-tour').click();
+    });
+    await p.waitForFunction(
+      () => window.__godsEyeView.dataManager.isEnabled('anomalies'),
+      { timeout: 30000 },
+    );
+    // The chronometer's own tour button flips to this label synchronously,
+    // before playTour()'s first await (src/layers/anomalies/index.js:399) -
+    // the cheapest proof the tour genuinely started, not just that the
+    // layer turned on.
+    await p.waitForFunction(
+      () =>
+        [...document.querySelectorAll('.uap-chrono-panel button')].some(
+          (b) => b.textContent === 'Stop tour',
+        ),
+      { timeout: 20000 },
+    );
+    const afterTour = await p.evaluate(() => ({
+      enabled: window.__godsEyeView.dataManager.isEnabled('anomalies'),
+      welcomeGone: !document.querySelector('.uap-welcome'),
+    }));
+    check(
+      '"Take the hero tour" enables the anomalies layer from off',
+      enabledBefore === false && afterTour.enabled === true,
+      JSON.stringify({ enabledBefore, afterTour }),
+    );
+    check(
+      '"Take the hero tour" dismisses the welcome plate once the tour starts',
+      afterTour.welcomeGone === true,
+      JSON.stringify(afterTour),
+    );
+    await ctx.close();
+  }
 } finally {
   await browser.close();
 }

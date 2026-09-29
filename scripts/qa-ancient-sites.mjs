@@ -52,7 +52,27 @@
 import puppeteer from 'puppeteer';
 import path from 'node:path';
 import { mkdirSync } from 'node:fs';
+import { WELCOME_STORAGE_KEY } from '../src/app/welcome.js';
 const base = process.env.QA_BASE_URL || 'http://localhost:4173';
+
+/**
+ * Pre-seed the welcome plate's durable "seen it" flag (src/app/welcome.js,
+ * wired in src/ui/layerBindings.js) before any app script runs on a fresh
+ * context's first navigation. This file's own checks click through the
+ * ancient-sites layer on a freshly-created context in several places; the
+ * one-time welcome plate would otherwise appear over them and intercept
+ * the first click - see scripts/qa-anomalies.mjs's own copy of this helper
+ * for the welcome pass's full rationale.
+ */
+async function skipWelcome(page) {
+  await page.evaluateOnNewDocument((key) => {
+    try {
+      localStorage.setItem(key, 'seen');
+    } catch {
+      /* best-effort, matches the app's own guarded write */
+    }
+  }, WELCOME_STORAGE_KEY);
+}
 // Shared with qa-anomalies.mjs and qa-claims.mjs (task: presence pass):
 // each writes its own distinctly-named files into this one directory.
 const PRESENCE_SHOT_DIR = path.resolve(
@@ -90,6 +110,7 @@ try {
   page.on('request', (req) => {
     if (req.url().includes('/local-tma/')) tmaRequests.push(req.url());
   });
+  await skipWelcome(page);
   await page.goto(`${base}/?welcome=0`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__godsEyeView?.dataManager, {
     timeout: 60000,
@@ -1498,6 +1519,7 @@ try {
 
   const fresh = await browser.createBrowserContext();
   const share = await fresh.newPage();
+  await skipWelcome(share);
   await share.goto(
     `${base}/?welcome=0#lat=37.22&lon=38.92&alt=26000000&pitch=-90&v=2&l=4`,
     { waitUntil: 'domcontentloaded' },
@@ -1518,6 +1540,7 @@ try {
 
   const freshBoth = await browser.createBrowserContext();
   const both = await freshBoth.newPage();
+  await skipWelcome(both);
   await both.goto(
     `${base}/?welcome=0#lat=37.22&lon=38.92&alt=26000000&pitch=-90&v=2&l=3.4`,
     { waitUntil: 'domcontentloaded' },

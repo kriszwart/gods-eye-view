@@ -45,6 +45,26 @@ import {
 import { normalizeAnomalySnapshot } from '../src/layers/anomalies/records.js';
 import { SHAPE_GLYPH_URLS } from '../src/layers/anomalies/shapeGlyphs.js';
 import { PALETTE } from '../src/layers/liveClaims/model.js';
+import { WELCOME_STORAGE_KEY } from '../src/app/welcome.js';
+
+/**
+ * Pre-seed the welcome plate's durable "seen it" flag (src/app/welcome.js,
+ * wired in src/ui/layerBindings.js) before any app script runs on a fresh
+ * context's first navigation. This file's own checks click through the
+ * live-claims register on a freshly-created context in several places; the
+ * one-time welcome plate would otherwise appear over them and intercept
+ * the first click - see scripts/qa-anomalies.mjs's own copy of this helper
+ * for the welcome pass's full rationale.
+ */
+async function skipWelcome(page) {
+  await page.evaluateOnNewDocument((key) => {
+    try {
+      localStorage.setItem(key, 'seen');
+    } catch {
+      /* best-effort, matches the app's own guarded write */
+    }
+  }, WELCOME_STORAGE_KEY);
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
@@ -146,6 +166,7 @@ try {
   await page.setViewport({ width: 1440, height: 900 });
   const pageErrors = [];
   page.on('pageerror', (e) => pageErrors.push(e.message));
+  await skipWelcome(page);
   await page.goto(`${fixtureBase}/?welcome=0`, {
     waitUntil: 'domcontentloaded',
   });
@@ -683,6 +704,7 @@ try {
         { name: 'prefers-reduced-motion', value: 'reduce' },
       ]);
     }
+    await skipWelcome(p);
     await p.goto(`${fixtureBase}/?welcome=0`, {
       waitUntil: 'domcontentloaded',
     });
@@ -1185,6 +1207,7 @@ try {
         { name: 'prefers-reduced-motion', value: 'reduce' },
       ]);
     }
+    await skipWelcome(p);
     await p.goto(`${fixtureBase}/?welcome=0`, {
       waitUntil: 'domcontentloaded',
     });
@@ -1254,6 +1277,7 @@ try {
         { name: 'prefers-reduced-motion', value: 'reduce' },
       ]);
     }
+    await skipWelcome(p);
     await p.goto(`${fixtureBase}/?welcome=0`, {
       waitUntil: 'domcontentloaded',
     });
@@ -1351,6 +1375,7 @@ try {
   const mobile = await browser.createBrowserContext();
   const mobilePage = await mobile.newPage();
   await mobilePage.setViewport({ width: 390, height: 844 });
+  await skipWelcome(mobilePage);
   await mobilePage.goto(`${fixtureBase}/?welcome=0`, {
     waitUntil: 'domcontentloaded',
   });
@@ -1408,6 +1433,7 @@ try {
   // Share link with token 5.
   const fresh = await browser.createBrowserContext();
   const share = await fresh.newPage();
+  await skipWelcome(share);
   await share.goto(
     `${fixtureBase}/?welcome=0#lat=40.71&lon=-74.01&alt=26000000&pitch=-90&v=2&l=5`,
     { waitUntil: 'domcontentloaded' },
@@ -1435,6 +1461,7 @@ try {
   const keylessBase = `http://localhost:${KEYLESS_PORT}`;
   const keylessCtx = await browser.createBrowserContext();
   const keylessPage = await keylessCtx.newPage();
+  await skipWelcome(keylessPage);
   await keylessPage.goto(`${keylessBase}/?welcome=0`, {
     waitUntil: 'domcontentloaded',
   });

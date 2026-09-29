@@ -18,8 +18,39 @@ import {
 import { createSpotter } from '../app/spotter.js';
 import { rankCandidates } from '../spotter/rank.js';
 import { createObservatory } from '../app/observatory.js';
+import { createWelcome, WELCOME_STORAGE_KEY } from '../app/welcome.js';
 import { createAnomalySource } from '../layers/anomalies/source.js';
 import { createAncientSource } from '../layers/ancientSites/source.js';
+
+/**
+ * Read the welcome plate's durable "seen it" flag, best-effort: a blocked or
+ * hostile Storage getter (Safari private mode, some enterprise policies)
+ * must read as "not yet seen" and never throw, mirroring
+ * src/firstRunExperience.js's own guarded storage helpers. Storage is
+ * resolved lazily, inside the try, for the same reason that module resolves
+ * it lazily rather than as a default parameter: `globalThis.localStorage`
+ * is a getter that can itself throw.
+ * @returns {boolean}
+ */
+function hasSeenWelcome() {
+  try {
+    return globalThis.localStorage?.getItem?.(WELCOME_STORAGE_KEY) === 'seen';
+  } catch {
+    return false;
+  }
+}
+
+/** Write the welcome plate's durable "seen it" flag, best-effort; never
+ * throws. A blocked store just means the welcome returns on the visitor's
+ * next visit, the same fail-open shape firstRunExperience.js's own
+ * writeStored() takes. */
+function rememberWelcomeSeen() {
+  try {
+    globalThis.localStorage?.setItem?.(WELCOME_STORAGE_KEY, 'seen');
+  } catch {
+    /* best-effort */
+  }
+}
 /** Own manager subscriptions and the camera-entry events that outlive controls. */
 export class LayerBindings {
   constructor({
@@ -56,6 +87,9 @@ export class LayerBindings {
     this._observatory = null;
     this._observatorySkyStats = null;
     this._observatoryAncientStats = null;
+    this._welcome = null;
+    this._welcomeRevealTimer = null;
+    this._welcomeTourInFlight = false;
     this._cctvRequestFocusHandler = null;
     this._removeCctvRequestFocusListener = null;
     this._worldRequestFocusHandler = null;
@@ -152,7 +186,139 @@ export class LayerBindings {
             event?.detail?.cancelPendingSelection !== false,
         });
       });
+    this._watchForWelcomeReveal();
   }
+
+  /**
+   * WELCOME PASS ORDERING RULING. Two independent "first thing you see"
+   * surfaces both want the visitor's first moment on a fresh browser:
+   *
+   *   - src/firstRunExperience.js's own launcher (#first-run-launcher) is
+   *     the incumbent mission chooser. It is NOT one-shot: unless durably
+   *     suppressed, it returns every fresh session. src/app/startupChrome.js
+   *     reveals it right after #loading-screen finishes hiding.
+   *   - The Phenomena welcome plate (src/app/welcome.js) introduces the
+   *     three registers and IS a true one-shot: a single localStorage key,
+   *     once per browser, gone for good after the first dismissal.
+   *
+   * RULING: the two never show together, and the launcher goes first when
+   * both would fire this load - it is the more actionable of the two
+   * (mission tiles vs. an explainer) and it already owns the "loading
+   * screen just hid" trigger. The welcome instead waits for the launcher to
+   * be completely OUT OF THE WAY: gone from the DOM, whether because it
+   * decided not to show at all (durably suppressed, a share link, or
+   * `?welcome=0`) or because the visitor opened and dismissed it. Reading
+   * the DOM this way, rather than re-deriving firstRunExperience.js's own
+   * `shouldShowFirstRun()` decision here, keeps this class decoupled from
+   * that module's internals and correct even if its rules change.
+   *
+   * A poll (not a MutationObserver) checks this on an interval and clears
+   * itself the instant both conditions are satisfied: the launcher's own
+   * dismiss path removes itself asynchronously (a `transitionend` or a
+   * 400ms fallback timer - see initFirstRunExperience's `dismiss()`), so
+   * nothing shorter than that window is worth watching more eagerly, and a
+   * poll never risks missing a mutation the way an under-scoped observer
+   * could. This never blocks or delays boot itself: `observeCamera()` (the
+   * caller) has already returned by the time anything here settles.
+   */
+  _watchForWelcomeReveal() {
+    if (typeof document === 'undefined' || this._disposed) return;
+    const loadingScreen = document.getElementById('loading-screen');
+    const settled = () => {
+      // Still booting: #loading-screen has not even started its hide
+      // transition, so first-run has not been given the chance to decide
+      // whether it is showing yet either.
+      if (loadingScreen && !loadingScreen.classList.contains('hidden'))
+        return false;
+      const launcher = document.getElementById('first-run-launcher');
+      return !launcher || !launcher.isConnected;
+    };
+    const attempt = () => {
+      if (this._disposed) {
+        this._clearWelcomeRevealTimer();
+        return;
+      }
+      if (!settled()) return;
+      this._clearWelcomeRevealTimer();
+      this._revealWelcomeOnce();
+    };
+    if (settled()) {
+      this._revealWelcomeOnce();
+      return;
+    }
+    this._welcomeRevealTimer = setInterval(attempt, 200);
+  }
+
+  _clearWelcomeRevealTimer() {
+    if (this._welcomeRevealTimer) {
+      clearInterval(this._welcomeRevealTimer);
+      this._welcomeRevealTimer = null;
+    }
+  }
+
+  /**
+   * Build and open the welcome plate, exactly once: guarded on both "already
+   * built" (a second settle of the poll above must never build a second
+   * plate) and the durable "seen it" flag. `onOpenChange` is the plate's own
+   * single shared close path (see createWelcome's doc comment) - the only
+   * place this class remembers the plate has been seen and tears it down,
+   * so every dismissal (Escape, Close, Explore freely, or the tour once it
+   * has started) does both exactly once, the same way. Destroying here
+   * (rather than leaving the plate merely hidden) matches welcome.js's own
+   * one-shot framing: once genuinely dismissed there is nothing left to
+   * reopen it, so there is nothing worth keeping in the DOM either.
+   */
+  _revealWelcomeOnce() {
+    if (this._disposed || this._welcome || hasSeenWelcome()) return;
+    this._welcome = createWelcome({
+      container: document.body,
+      onOpenChange: (open) => {
+        if (open) return;
+        rememberWelcomeSeen();
+        this._welcome?.destroy?.();
+        this._welcome = null;
+      },
+      onTakeTour: () => this._handleWelcomeTour(),
+    });
+    this._welcome.open();
+  }
+
+  /**
+   * "Take the hero tour": enable the anomalies layer through the same
+   * manager channel `_connectAnomaliesShell` already uses
+   * (`manager.setEnabled(id, on, {origin: 'user'})` - a real click enabling
+   * a real register, same as clicking its panel row), then reach the
+   * layer's own `playTour()` through the same module-lookup idiom
+   * `_connectLiveClaimsShell`'s `focusAnomalyCase` already uses
+   * (`manager.layers.get('anomalies').module`), and only THEN close the
+   * plate - not before, so a visitor who declines to wait still sees the
+   * tour genuinely under way rather than a dismissed plate that silently
+   * failed to start anything. `setEnabled`'s promise resolves only after
+   * the layer's first data fetch settles (src/data/lifecycle.js), so
+   * `playTour()` always has real hero cases to fly through by the time it
+   * is called; it is not itself awaited to completion (it runs for minutes,
+   * flying through every hero case in turn) - only kicked off.
+   */
+  async _handleWelcomeTour() {
+    if (this._welcomeTourInFlight) return;
+    this._welcomeTourInFlight = true;
+    try {
+      const manager = this._dataManager;
+      if (manager) {
+        if (!manager.isEnabled?.('anomalies')) {
+          await manager
+            .setEnabled?.('anomalies', true, { origin: 'user' })
+            .catch(() => false);
+        }
+        const mod = manager.layers?.get('anomalies')?.module;
+        mod?.playTour?.();
+      }
+    } finally {
+      this._welcomeTourInFlight = false;
+      this._welcome?.close();
+    }
+  }
+
   _connectDirectionsCamera() {
     if (!this._dataManager) {
       // Detaching: the layer outlives this shell, so it must not keep calling
@@ -1168,6 +1334,13 @@ export class LayerBindings {
     this._observatory = null;
     this._observatoryToggleBtn?.remove();
     this._observatoryToggleBtn = null;
+    // Orphan close on detach: a shell teardown mid-boot (before the poll
+    // above has even settled) must not leave a dangling timer running past
+    // this instance's own lifetime, nor a plate on screen with nothing left
+    // to answer its buttons.
+    this._clearWelcomeRevealTimer();
+    this._welcome?.destroy?.();
+    this._welcome = null;
   }
   disconnect() {
     this._dataManagerUnsubscribe?.();

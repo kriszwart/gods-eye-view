@@ -7,7 +7,13 @@
  * introduction plate shows once after boot on a fresh context, Escape
  * dismisses and remembers it, a reload or a pre-seeded context never shows
  * it again, and "Take the hero tour" enables the anomalies layer and starts
- * the tour. Needs the dev server on :4173 (QA_BASE_URL overrides).
+ * the tour; and the help overlay - the "?" key and its own standalone
+ * button open and close a static plate stating the keyboard map and every
+ * register's own honesty line (the live claims line asserted verbatim,
+ * imported the same way the overlay itself imports it), the search field's
+ * own "?" character keeps typing rather than ever toggling the overlay, and
+ * the welcome and help plates never stack. Needs the dev server on :4173
+ * (QA_BASE_URL overrides).
  */
 import puppeteer from 'puppeteer';
 import { mkdirSync } from 'node:fs';
@@ -17,6 +23,7 @@ import { SHAPE_GLYPH_URLS } from '../src/layers/anomalies/shapeGlyphs.js';
 import { statusHue } from '../src/layers/anomalies/model.js';
 import { WAVES } from '../src/layers/anomalies/waves.js';
 import { WELCOME_STORAGE_KEY } from '../src/app/welcome.js';
+import { HONESTY_LINE } from '../src/layers/liveClaims/model.js';
 const base = process.env.QA_BASE_URL || 'http://localhost:4173';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
@@ -2384,6 +2391,198 @@ try {
       '"Take the hero tour" dismisses the welcome plate once the tour starts',
       afterTour.welcomeGone === true,
       JSON.stringify(afterTour),
+    );
+    await ctx.close();
+  }
+
+  // Help overlay (src/app/helpOverlay.js, wired in src/ui/layerBindings.js):
+  // the "?" key and its own standalone button, each opening and closing a
+  // static plate stating the keyboard map, how to read the globe (with
+  // every register's own honesty line), and where sources and credits
+  // live. A fresh context, with the welcome plate pre-seeded away (as with
+  // every other check in this file bar the welcome-pass block above), so
+  // it never intercepts these.
+  {
+    const ctx = await browser.createBrowserContext();
+    const p = await ctx.newPage();
+    await p.setViewport({ width: 1440, height: 900 });
+    await skipWelcome(p);
+    await p.goto(`${base}/?welcome=0`, { waitUntil: 'domcontentloaded' });
+    await p.waitForFunction(() => window.__godsEyeView?.dataManager, {
+      timeout: 60000,
+    });
+    // #loading-screen sits at z-index 1000, well above the overlay's own
+    // 145 (anomaly-atlas.css): press "?" only once it has genuinely hidden,
+    // the same settled condition `_watchForWelcomeReveal` waits on, so the
+    // screenshot below shows the overlay itself rather than the boot loader
+    // still covering it. The `.hidden` class lands well before the loader
+    // is actually invisible - it only starts an 0.8s opacity/visibility
+    // transition (anomaly-atlas.css) - so the class alone is not enough;
+    // wait it out the same way the welcome plate's own entrance fade is
+    // waited out below, with margin.
+    await p.waitForFunction(
+      () => {
+        const loadingScreen = document.getElementById('loading-screen');
+        return !loadingScreen || loadingScreen.classList.contains('hidden');
+      },
+      { timeout: 60000 },
+    );
+    await new Promise((r) => setTimeout(r, 900));
+
+    await p.keyboard.press('?');
+    const opened = await p.evaluate(() => {
+      const el = document.querySelector('.uap-help');
+      return {
+        present: !!el,
+        hidden: el?.hidden,
+        text: el?.textContent || '',
+      };
+    });
+    check(
+      'pressing "?" opens the help overlay, stating the keyboard map and "Reading the atlas"',
+      opened.present &&
+        opened.hidden === false &&
+        opened.text.includes('Keyboard') &&
+        opened.text.includes('Reading the atlas'),
+      JSON.stringify({ present: opened.present, hidden: opened.hidden }),
+    );
+    check(
+      'the help overlay states the live claims honesty line verbatim (imported from its own module, not retyped)',
+      opened.text.includes(HONESTY_LINE),
+      opened.text,
+    );
+
+    await p.screenshot({ path: resolve(WELCOME_SHOT_DIR, 'help-1440.png') });
+    await p.setViewport({ width: 390, height: 844 });
+    await p.screenshot({ path: resolve(WELCOME_SHOT_DIR, 'help-390.png') });
+    await p.setViewport({ width: 1440, height: 900 });
+
+    await p.keyboard.press('?');
+    const closedByKey = await p.evaluate(() => {
+      const el = document.querySelector('.uap-help');
+      return !!el && el.hidden === true;
+    });
+    check('pressing "?" again closes the help overlay', closedByKey === true);
+
+    await p.keyboard.press('?');
+    await p.waitForFunction(
+      () => {
+        const el = document.querySelector('.uap-help');
+        return !!el && !el.hidden;
+      },
+      { timeout: 5000 },
+    );
+    await p.keyboard.press('Escape');
+    const closedByEscape = await p.evaluate(() => {
+      const el = document.querySelector('.uap-help');
+      return !!el && el.hidden === true;
+    });
+    check('Escape closes the help overlay', closedByEscape === true);
+
+    // The standalone "?" button's own click path, and aria-pressed synced
+    // both ways: open (true) and close (false).
+    const btnToggle = await p.evaluate(() => {
+      const btn = document.querySelector('.uap-help-toggle');
+      btn?.click();
+      const afterOpen = {
+        pressed: btn?.getAttribute('aria-pressed'),
+        plateHidden: document.querySelector('.uap-help')?.hidden,
+      };
+      btn?.click();
+      const afterClose = {
+        pressed: btn?.getAttribute('aria-pressed'),
+        plateHidden: document.querySelector('.uap-help')?.hidden,
+      };
+      return { afterOpen, afterClose };
+    });
+    check(
+      'the "?" button opens the overlay and sets aria-pressed="true"',
+      btnToggle.afterOpen.pressed === 'true' &&
+        btnToggle.afterOpen.plateHidden === false,
+      JSON.stringify(btnToggle.afterOpen),
+    );
+    check(
+      'the "?" button closes the overlay and resets aria-pressed="false"',
+      btnToggle.afterClose.pressed === 'false' &&
+        btnToggle.afterClose.plateHidden === true,
+      JSON.stringify(btnToggle.afterClose),
+    );
+
+    // The other direction: opening via the "?" keydown shortcut alone
+    // (never touching the button's own click handler) must still flip its
+    // aria-pressed - proof the sync genuinely runs through helpOverlay.js's
+    // own onOpenChange, not only the button's click handler.
+    await p.keyboard.press('?');
+    const pressedAfterKeyOpen = await p.evaluate(() =>
+      document.querySelector('.uap-help-toggle')?.getAttribute('aria-pressed'),
+    );
+    check(
+      'aria-pressed syncs to "true" when the overlay is opened by the "?" key alone',
+      pressedAfterKeyOpen === 'true',
+      String(pressedAfterKeyOpen),
+    );
+    await p.keyboard.press('Escape');
+
+    // The search field's own "?" character (src/layers/anomalies/
+    // chronometer.js's addSearch, a plain <input type="search">) must keep
+    // typing normally: enable the sky register so the dial's search field
+    // exists, focus it, and prove "?" both lands in the field and leaves
+    // the overlay untouched.
+    await p.evaluate(async () => {
+      await window.__godsEyeView.dataManager.setEnabled('anomalies', true, {
+        origin: 'user',
+      });
+    });
+    await p.waitForFunction(() => document.querySelector('.uap-search'), {
+      timeout: 20000,
+    });
+    await p.focus('.uap-search');
+    await p.keyboard.press('?');
+    const searchGuard = await p.evaluate(() => ({
+      inputValue: document.querySelector('.uap-search')?.value,
+      overlayOpen: !document.querySelector('.uap-help')?.hidden,
+    }));
+    check(
+      'typing "?" inside the search field types the character and never opens the help overlay',
+      searchGuard.inputValue === '?' && searchGuard.overlayOpen === false,
+      JSON.stringify(searchGuard),
+    );
+
+    await ctx.close();
+  }
+
+  // The welcome and help plates must never stack (welcome pass ruling - see
+  // src/ui/layerBindings.js's own doc comments on `_toggleHelp` and
+  // `_revealWelcomeOnce`). A fresh context with nothing pre-seeded, so the
+  // welcome plate is guaranteed to be showing, proves the "?" key stays
+  // inert against it.
+  {
+    const ctx = await browser.createBrowserContext();
+    const p = await ctx.newPage();
+    await p.goto(`${base}/?welcome=0`, { waitUntil: 'domcontentloaded' });
+    await p.waitForFunction(() => window.__godsEyeView?.dataManager, {
+      timeout: 60000,
+    });
+    await p.waitForFunction(
+      () => {
+        const el = document.querySelector('.uap-welcome');
+        return !!el && !el.hidden;
+      },
+      { timeout: 15000 },
+    );
+    await p.keyboard.press('?');
+    const stacked = await p.evaluate(() => {
+      const welcome = document.querySelector('.uap-welcome');
+      const help = document.querySelector('.uap-help');
+      return {
+        welcomeOpen: !!welcome && !welcome.hidden,
+        helpOpen: !!help && !help.hidden,
+      };
+    });
+    check(
+      'the "?" key is inert while the welcome plate is showing - the two never stack',
+      stacked.welcomeOpen === true && stacked.helpOpen === false,
+      JSON.stringify(stacked),
     );
     await ctx.close();
   }

@@ -18,6 +18,7 @@ import {
 import { createSpotter } from '../app/spotter.js';
 import { rankCandidates } from '../spotter/rank.js';
 import { createObservatory } from '../app/observatory.js';
+import { createHelpOverlay } from '../app/helpOverlay.js';
 import { createWelcome, WELCOME_STORAGE_KEY } from '../app/welcome.js';
 import { createAnomalySource } from '../layers/anomalies/source.js';
 import { createAncientSource } from '../layers/ancientSites/source.js';
@@ -87,6 +88,8 @@ export class LayerBindings {
     this._observatory = null;
     this._observatorySkyStats = null;
     this._observatoryAncientStats = null;
+    this._help = null;
+    this._helpKeydownHandler = null;
     this._welcome = null;
     this._welcomeRevealTimer = null;
     this._welcomeTourInFlight = false;
@@ -136,6 +139,13 @@ export class LayerBindings {
     // otherwise require one.
     this._observatoryToggleBtn =
       typeof document !== 'undefined' ? this._createObservatoryToggle() : null;
+    // Same always-present, layer-independent idiom as the Observatory
+    // toggle just above (see `_createObservatoryToggle`'s doc comment) and
+    // built right after it for the same reason: the help overlay explains
+    // every register at once, so its own reachability must not depend on
+    // any one layer's enabled state either.
+    this._helpToggleBtn =
+      typeof document !== 'undefined' ? this._createHelpToggle() : null;
   }
   get hud() {
     return this.readControls().hud;
@@ -187,6 +197,39 @@ export class LayerBindings {
         });
       });
     this._watchForWelcomeReveal();
+    this._bindHelpShortcut();
+  }
+
+  /**
+   * Bind the document-level "?" shortcut that toggles the help overlay.
+   * Guarded on `document.activeElement` being neither an input nor a
+   * textarea nor a `contenteditable` element - mirroring
+   * src/ui/applicationShortcuts.js's own `isFormControl` guard for its
+   * bubbling shortcuts - so the sky register's own case-and-site search
+   * field (a plain `<input type="search">`, see
+   * src/layers/anomalies/chronometer.js's `addSearch`) keeps typing a
+   * literal "?" character rather than ever toggling this overlay instead.
+   * Escape is NOT handled here: the overlay's own root listens for it
+   * directly (see helpOverlay.js's doc comment), the same self-contained
+   * pattern the Observatory and welcome plates already use, so nothing
+   * here needs to know whether the overlay happens to be open.
+   *
+   * Bound once, in `observeCamera()` (itself called once - see
+   * src/ui/applicationShell.js), and unbound in `stop()`.
+   */
+  _bindHelpShortcut() {
+    if (typeof document === 'undefined' || this._disposed) return;
+    this._helpKeydownHandler = (event) => {
+      if (event.key !== '?') return;
+      const active = document.activeElement;
+      const tag = active?.tagName;
+      const isEditable =
+        tag === 'INPUT' || tag === 'TEXTAREA' || !!active?.isContentEditable;
+      if (isEditable) return;
+      event.preventDefault();
+      this._toggleHelp();
+    };
+    document.addEventListener('keydown', this._helpKeydownHandler);
   }
 
   /**
@@ -267,9 +310,18 @@ export class LayerBindings {
    * (rather than leaving the plate merely hidden) matches welcome.js's own
    * one-shot framing: once genuinely dismissed there is nothing left to
    * reopen it, so there is nothing worth keeping in the DOM either.
+   *
+   * The welcome and help plates must never stack (welcome pass ruling): the
+   * help overlay's own `_toggleHelp` already refuses to open while the
+   * welcome plate is up, covering a "?" press arriving first; this method
+   * covers the reverse ordering - the help overlay opened (a genuine "?"
+   * press can land before this poll ever settles) before this poll's own
+   * settle condition was met - by closing it here, unconditionally, before
+   * the welcome plate ever appears.
    */
   _revealWelcomeOnce() {
     if (this._disposed || this._welcome || hasSeenWelcome()) return;
+    this._closeHelp();
     this._welcome = createWelcome({
       container: document.body,
       onOpenChange: (open) => {
@@ -682,6 +734,72 @@ export class LayerBindings {
   _closeObservatory() {
     this._observatory?.close?.();
     this._observatoryToggleBtn?.setAttribute('aria-pressed', 'false');
+  }
+
+  /**
+   * Build the help overlay's own open control: a small, always-present "?"
+   * button, appended directly to the viewer container right beside the
+   * Observatory toggle (`_createObservatoryToggle`), same always-present,
+   * layer-independent reasoning as that button. Unlike the Observatory
+   * toggle, this button's own click handler does not set `aria-pressed`
+   * from `_toggleHelp`'s return value itself - it does not need to,
+   * because `_toggleHelp` always builds the overlay with an `onOpenChange`
+   * that already syncs it on every genuine open and close, including the
+   * ones this button's own click causes. That is the one genuine
+   * behavioural difference from the Observatory toggle: the help overlay
+   * can also be opened by the "?" keydown shortcut below, never going
+   * through this button's click handler at all, so `aria-pressed` can only
+   * ever be kept correct by listening from inside the overlay itself.
+   * @returns {HTMLButtonElement}
+   */
+  _createHelpToggle() {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'uap-help-toggle';
+    btn.textContent = '?';
+    btn.setAttribute('aria-label', 'Help');
+    btn.setAttribute('aria-pressed', 'false');
+    btn.addEventListener('click', () => this._toggleHelp());
+    (this.viewer?.container || document.body).appendChild(btn);
+    return btn;
+  }
+
+  /**
+   * Show or hide the help overlay, building it on first use (same lazy-build
+   * idiom as `_toggleObservatory`). Inert while the welcome plate is
+   * currently showing: the welcome pass ruling (see `_revealWelcomeOnce`'s
+   * own doc comment) is that the two never stack, and unlike
+   * `_revealWelcomeOnce` - which fires once, from a poll, and so can simply
+   * refuse to open over an already-open help overlay (see its own guard
+   * just above its `createWelcome` call) - this method can be invoked at
+   * any moment after boot by a genuine keypress, including the brief window
+   * before the welcome plate has appeared at all. Refusing to open here
+   * whenever the welcome plate is open covers that direction; the
+   * corresponding guard in `_revealWelcomeOnce` covers the other one.
+   * Returns the overlay's new open state, or `false` while inert.
+   * @returns {boolean}
+   */
+  _toggleHelp() {
+    if (this._welcome?.isOpen?.()) return false;
+    this._help ||= createHelpOverlay({
+      container: this.viewer?.container,
+      onOpenChange: (open) => {
+        this._helpToggleBtn?.setAttribute('aria-pressed', String(open));
+        if (!open) this._helpToggleBtn?.focus?.();
+      },
+    });
+    return this._help.toggle();
+  }
+
+  /**
+   * Close the help overlay if one has been built, and reset its own
+   * standalone toggle's `aria-pressed` directly - same shape as
+   * `_closeObservatory`, and for the same orphan-close reason: always safe
+   * to call unconditionally, whether or not the overlay exists or is open.
+   */
+  _closeHelp() {
+    this._help?.close?.();
+    this._helpToggleBtn?.setAttribute('aria-pressed', 'false');
   }
 
   /**
@@ -1334,6 +1452,18 @@ export class LayerBindings {
     this._observatory = null;
     this._observatoryToggleBtn?.remove();
     this._observatoryToggleBtn = null;
+    // Orphan close on detach, same reasoning as the Observatory plate just
+    // above: a shell teardown must not leave the help overlay on screen
+    // with nothing left to answer its buttons, nor its document-level "?"
+    // listener still bound past this instance's own lifetime.
+    if (this._helpKeydownHandler) {
+      document.removeEventListener('keydown', this._helpKeydownHandler);
+      this._helpKeydownHandler = null;
+    }
+    this._help?.destroy?.();
+    this._help = null;
+    this._helpToggleBtn?.remove();
+    this._helpToggleBtn = null;
     // Orphan close on detach: a shell teardown mid-boot (before the poll
     // above has even settled) must not leave a dangling timer running past
     // this instance's own lifetime, nor a plate on screen with nothing left
